@@ -52,14 +52,12 @@ test('a registered local document source is stored with the project it was regis
   assert.equal(local('s-unset').projectId, null);
 });
 
-test('Talents-owned fields (tasks, artifacts, developer machine) are kept', () => {
+test('Talents-owned fields (tasks, artifacts) are kept', () => {
   const saved = roundTrip(client => {
     client.tasks.unshift({ id: 't-new', cap: 'traj', sources: ['s-sessions'], sessions: ['3f2a9c41d7e0'] });
-    client.dev.applied['a-docidx'] = { version: 2 };
     client.role = 'dev';
   });
   assert.equal(saved.tasks[0].id, 't-new');
-  assert.deepEqual(saved.dev.applied['a-docidx'], { version: 2 });
   assert.equal(saved.role, 'dev');
 });
 

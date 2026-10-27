@@ -6,7 +6,7 @@ import { minerFiles } from './content.ts';
 import type { TalentsState } from './model.ts';
 
 /** Bump when the seed changes shape or content; a stored state from another seed version is replaced. */
-export const SEED_VERSION = 11;
+export const SEED_VERSION = 12;
 
 export const PROJECT_ID = 'carddemo';
 /** Source ids derived from the Teams snapshot (see teams-data.ts): repository id, and one document set per project. */
@@ -128,7 +128,7 @@ export function seedState(): TalentsState {
         specs: MINER_SPECS, files: minerFiles(MINER_SPECS), skills: ['find-reference-spec'], usage: '开发新需求或修改现有功能前，用 find-reference-spec 查找可参考的范式',
         published: { version: 2, at: '2026-10-27 18:50', note: '新增 5 个代码片段挖掘的开发范式，保留「统一错误码与异常处理」', delivery: 'local', specs: MINER_SPECS, files: minerFiles(MINER_SPECS) },
         history: [{ version: 1, specs: ['统一错误码与异常处理'] }], draft: null },
-      // A diagnosis is not published: its suggestions are applied one by one (src/demo/suggestions.ts).
+      // A diagnosis is not published: its suggestions are submitted as PRs one by one (server/pull-requests.ts).
       { id: 'a-traj', projectId: PROJECT_ID, cap: 'traj', name: '会话轨迹诊断：CardDemo 迁移与扩建（19 轮）', desc: '6 条问题链，3 条优化建议。', sources: ['s-sessions'], kind: 'diagnosis',
         sessions: [TRAJ_SESSION], topic: 'carddemo-19', files: ['trajectory/carddemo-19/轨迹诊断报告.html'],
         suggestions: ['change-01', 'change-02', 'change-03'].map(id => ({ id, status: 'pending' })),
@@ -136,20 +136,7 @@ export function seedState(): TalentsState {
     ],
     // Diagnosis reports in content/trajectory/<topic>/, each for the session it analysed.
     trajTopics: { 'carddemo-19': { title: 'CardDemo 迁移与扩建（19 轮）', session: TRAJ_SESSION } },
-    // New versions of project skills written by applying diagnosis suggestions.
+    // Project skill versions written directly by earlier demo builds; suggestions now go through PRs.
     skillVersions: [],
-    // The developer's own machine.
-    dev: {
-      applied: {
-        'a-cg-java': { version: 3, scope: { kind: 'agent', agents: ['Code'] }, at: '2026-10-20 11:20' },
-        'a-std': { version: 1, scope: { kind: 'agent', agents: ['Code', 'Reviewer'] }, at: '2026-10-18 15:00' },
-        'a-miner': { version: 2, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-27 18:55' },
-        'a-biz': { version: 1, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-26 15:10' },
-      },
-      local: [
-        { id: 'l-java', type: 'repo', name: 'carddemo-java-1025', path: '~/code/carddemo-java-1025', repo: REPO_ID, index: { at: '2026-10-26 09:02', files: '1,291' }, applied: true },
-        { id: 'l-notes', type: 'docs', name: '个人开发笔记', path: '~/notes/carddemo', index: null, applied: false },
-      ],
-    },
   };
 }

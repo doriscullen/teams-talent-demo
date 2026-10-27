@@ -31,7 +31,7 @@ export function buildExport(state: TalentsState, dir = contentDir, exportedAt = 
   const artifacts: PublishedArtifact[] = [];
   for (const a of withCodegraph(state).artifacts) {
     const p = a.published;
-    if (!p || a.kind === 'diagnosis') continue;
+    if (!p || a.kind === 'diagnosis' || a.submission) continue;
     const cap = caps.get(a.cap);
     const list: ExportedFile[] = [];
     if (a.kind !== 'index') for (const path of p.files ?? a.files ?? []) {

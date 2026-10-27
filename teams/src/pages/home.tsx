@@ -12,7 +12,6 @@ import '../operations.css';
 import { TeamsPageIntro, TeamsQuickEntries, TeamsWorkRow } from '../components/teams-reuse.js';
 
 export function nextStep(state: ReturnType<typeof useDemo>['state']) {
-  if (!state.knowledge) return { title: '在 Talents 挖掘并发布项目知识', note: 'Talents 读取项目已对接的代码仓与设计文档，审阅后发布到项目知识。', href: talentLink('knowledge', { role: 'owner' }), role: '项目 Owner' };
   if (!state.assigned) return { title: '确认并分配信用卡消费返现需求', note: '明确范围与验收标准，选择需求交付人。', href: '#/projects?tab=management', role: '项目 Owner' };
   if (!state.context) return { title: '准备 iCode 作业上下文', note: '查看需求背景，选用知识和业务 Skill，再进入开发。', href: '#/projects?tab=delivery&node=prepare', role: '项目成员' };
   if (state.stage === 'assigned') return { title: '进入 iCode 开发作业', note: '启动或恢复 iCode，读取本次作业上下文。', href: '#/projects?tab=delivery&node=develop', role: '项目成员' };
@@ -82,7 +81,7 @@ export function Home() {
         <FrameworkCard title={owner ? '最新开发进展' : '我的执行与反馈'}>{state.stage === 'returned' && <div className="ops-feedback"><strong>Owner 要求补充</strong><p>{state.returnReason}</p></div>}{timeline.length ? <div className="ops-feed">{timeline.slice(-3).reverse().map(item => <div key={item.id}><span className="activity-dot" /><div><strong>{displayText(item.text)}</strong><small>陈晨 · {new Date(item.at).toLocaleString('zh-CN')} · 开发节点</small></div></div>)}</div> : <p className="muted">开发进度同步后，会在这里汇集。</p>}<Space wrap><Button onClick={() => navigate('projects?tab=delivery&node=develop')}>查看开发节点</Button><Button onClick={() => navigate('trace')}>查看执行记录</Button></Space></FrameworkCard>
       </>} auxiliary={<>
         <FrameworkCard title="当前用量" action={<Origin kind="simulated" />}><div className="ops-total"><strong>{formatTokens(tokens)}</strong><span>{owner ? '当前筛选范围' : '本人'} · {period === 'today' ? '今日' : '近 7 日'} Token</span></div><Button type="link" onClick={() => navigate('home?tab=tokens')}>查看用量分析 <ArrowRightOutlined /></Button></FrameworkCard>
-        <FrameworkCard title="常用入口"><TeamsQuickEntries entries={[{href:'#/agent',title:'Agent 管理',note:'打开本机 Agent'},{href:'#/projects?tab=content',title:state.workspace.project.name,note:'进入项目空间'},{href:'#/resources',title:'资源市场',note:'发现共享资源'},{href:talentLink('knowledge'),title:'Talents',note:'知识、分析与演进'}]} /></FrameworkCard>
+        <FrameworkCard title="常用入口"><TeamsQuickEntries entries={[{href:'#/agent',title:'Agent 管理',note:'打开本机 Agent'},{href:'#/projects?tab=content',title:state.workspace.project.name,note:'进入项目空间'},{href:'#/resources',title:'资源市场',note:'发现共享资源'},...(role === 'owner' ? [{href:talentLink('knowledge'),title:'Talents',note:'知识挖掘与改进 PR'}] : [])]} /></FrameworkCard>
         <FrameworkCard title="最近协作"><div className="ops-feed">{state.audit.slice(-3).reverse().map(item => <div key={item.id}><span className="activity-dot" /><div><strong>{displayText(item.action)}</strong><small>{item.system} · {item.role === 'owner' ? '林悦' : '陈晨'}</small></div></div>)}</div>{!state.audit.length && <p className="muted">准备项目知识后，开始本次交付。</p>}</FrameworkCard>
       </>} />
       {owner && <FrameworkCard title="成员使用情况" action={<Button onClick={() => navigate('home?tab=tools')}>查看工具使用</Button>}>{usageTable}<p className="ops-subnote">任务状态随协作进展更新。本机实际连接状态可在 Agent 管理中核验。</p></FrameworkCard>}

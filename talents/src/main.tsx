@@ -10,27 +10,24 @@ import { teamsTheme, type UiThemeMode } from './vendor/teams/theme.ts';
 import { designSystemCss } from './vendor/teams/design-system.ts';
 import { frameworkCss } from './vendor/teams/framework-styles.ts';
 import { bootstrap, type Boot } from './api.ts';
-import { home, levelHash, pages, roleLabel } from './navigation.ts';
+import { home, levelHash, pages } from './navigation.ts';
 import { TalentsProvider, useTalents } from './store.tsx';
 import { artifact, member, project } from './demo/model.ts';
 import type { Role } from './types.ts';
 import { Projects, Team } from './pages/level.tsx';
 import { Capabilities } from './pages/capabilities.tsx';
-import { DevKnowledge } from './pages/dev-knowledge.tsx';
-import { DevLocal } from './pages/dev-local.tsx';
 import './shell.css';
 import './talents.css';
 const css = document.createElement('style'); css.textContent = designSystemCss + frameworkCss; document.head.prepend(css);
 
 const content: Record<string, () => ReactNode> = {
-  team: Team, projects: Projects, capabilities: Capabilities, knowledge: DevKnowledge, local: DevLocal,
+  team: Team, projects: Projects, capabilities: Capabilities,
 };
 
 function Shell({ mode, onToggleTheme }: { mode: UiThemeMode; onToggleTheme(): void }) {
   const { state: st, teams, route, role, go, reset, toast, teamsLink } = useTalents();
   const [width, setWidth] = useState(220);
   useEffect(() => { if (teams.from === 'none') toast('还没有读取到 iCode Teams 的数据，请先启动 Teams'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // 管理员端 is the Teams owner; 开发者端 is a Teams member.
   const person = (r: Role) => member(st, r === 'admin' ? st.team.admin : st.team.me)?.name ?? '未读取到 Teams 成员';
   const page = route.page, Page = content[page.id];
   // The level shown (a project, or the team) and the artifact open in its review tab.
@@ -57,9 +54,8 @@ function Shell({ mode, onToggleTheme }: { mode: UiThemeMode; onToggleTheme(): vo
               {c.href ? <a className="breadcrumb-parent" href={c.href}>{c.label}</a> : <strong aria-current="page" title={c.label}>{c.label}</strong>}</Fragment>)}
           </nav>
           <div className="topbar-right">
-            <Select className="compact-role-switch" aria-label="切换入口" size="small" value={role} popupMatchSelectWidth={210} onChange={(value: Role) => go('#/' + home[value])}
-              options={(['admin', 'dev'] as const).map(r => ({ value: r, label: person(r) + ' · ' + roleLabel[r] }))} />
-            <Popconfirm title="重置数据？" description="新登记的本地文档来源、任务、修订、发布和应用记录会被清除，恢复到初始状态。团队、成员和项目来自 iCode Teams，不受影响。" okText="重置" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={resetDemo}>
+            <span className="caption">{person('admin')} · 管理员</span>
+            <Popconfirm title="重置数据？" description="新登记的本地文档来源、任务、修订和提交记录会被清除，恢复到初始状态。团队、成员和项目来自 iCode Teams，不受影响。" okText="重置" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={resetDemo}>
               <Button type="text" size="small" aria-label="重置数据" title="重置数据" icon={<ReloadOutlined />}><span className="compact-action-label">重置数据</span></Button>
             </Popconfirm>
           </div>
@@ -76,9 +72,7 @@ function Main() {
   useEffect(() => { document.documentElement.dataset.theme = mode; localStorage.setItem('carddemo-theme', mode); }, [mode]);
   useEffect(() => {
     bootstrap().then(b => {
-      const role = new URLSearchParams(location.search).get('role');
-      const entry: Role | null = role === 'owner' ? 'admin' : role === 'member' ? 'dev' : null;
-      if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/' + home[entry ?? b.state.role]);
+      if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/projects');
       setBoot(b);
     }, e => setFatal((e as Error).message));
   }, []);

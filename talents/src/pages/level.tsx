@@ -61,7 +61,7 @@ function ProjectList() {
   const card = (p: Project) => {
     const list = levelSources(st, p.id), w = waiting(st, p.id), open = () => go(levelHash(p.id));
     return <ItemCard key={p.id} icon={<SourceIcon type="project" />} title={p.name} onClick={open}
-      extra={<>{w.review > 0 && <Tag color="processing">{w.review} 个待审阅</Tag>}{w.suggestions > 0 && <Tag color="warning">{w.suggestions} 条建议待应用</Tag>}</>}
+      extra={<>{w.review > 0 && <Tag color="processing">{w.review} 个待审阅</Tag>}{w.suggestions > 0 && <Tag color="warning">{w.suggestions} 条建议待提交</Tag>}</>}
       actions={<Button type="link" size="small" onClick={open}>进入</Button>}>
       <Fields rows={[['代码仓', names(list.filter(s => s.type === 'repo'))], ['文档集', names(list.filter(s => s.type === 'docs'))]]} />
     </ItemCard>;

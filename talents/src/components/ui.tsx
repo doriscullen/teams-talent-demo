@@ -35,11 +35,11 @@ export const EmptyState = ({ title, children }: { title?: ReactNode; children?: 
   <Empty className="talents-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={<>{title && <b>{title}</b>}{children && <span>{children}</span>}</>} />;
 
 export function ArtifactStatus({ a }: { a: Artifact }) {
-  if (isDiagnosis(a)) return pendingCount(a) ? <Tag color="warning">待应用</Tag> : <Tag color="success">建议已处理</Tag>;
+  if (isDiagnosis(a)) return pendingCount(a) ? <Tag color="warning">待提交</Tag> : <Tag color="success">建议已处理</Tag>;
   const st = status(a);
   if (st === 'draft') return <Tag color="warning">待审阅</Tag>;
   if (st === 'update') return <Tag color="warning">新版本待审阅</Tag>;
-  return <Tag color="success">已发布 v{a.published!.version}</Tag>;
+  return <Tag color="success">{a.kind === 'index' ? '远端索引' : a.submission ? 'PR 已创建' : '已有版本'} · v{a.published!.version}</Tag>;
 }
 /** 新 / 改 / 删 markers next to file names. */
 export const FileMark = ({ kind }: { kind: 'new' | 'mod' | 'del' }) =>

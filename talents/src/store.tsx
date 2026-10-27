@@ -1,7 +1,7 @@
 // The page state, its saving, hash routing and the simulated task clock.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { App } from 'antd';
-import { ApiError, resetState, saveState, type Boot } from './api.ts';
+import { ApiError, resetState, saveState, submitPullRequest, type Boot, type SubmitRequest } from './api.ts';
 import { home, parseHash, type Route } from './navigation.ts';
 import { project, taskName } from './demo/model.ts';
 import { finishRun, runProgress } from './demo/runs.ts';
@@ -16,6 +16,7 @@ export interface Talents {
   /** Changes a copy of the state, shows it and saves it; returns what the recipe returns. */
   update<T>(recipe: (draft: TalentsState) => T): T;
   reset(): Promise<void>;
+  submit(request: SubmitRequest): Promise<void>;
   go(hash: string): void;
   /** Rewrites the current hash without adding a history entry (e.g. to drop ?new=1 once handled). */
   replace(hash: string): void;
@@ -70,6 +71,12 @@ export function TalentsProvider({ boot, children }: { boot: Boot; children: Reac
     saver.current.revision = fresh.revision;
     stateRef.current = fresh.state; setState(fresh.state); setTeams(fresh.teams);
   }, []);
+  const submit = useCallback(async (request: SubmitRequest) => {
+    await saver.current.saving;
+    const fresh = await submitPullRequest(request);
+    saver.current.revision = fresh.revision;
+    stateRef.current = fresh.state; setState(fresh.state);
+  }, []);
 
   // Routing: hash changes and go() both parse the hash, so a role switch and its page change render together.
   const go = useCallback((hash: string) => {
@@ -91,7 +98,7 @@ export function TalentsProvider({ boot, children }: { boot: Boot; children: Reac
     history.replaceState(null, '', location.pathname + location.search + '#/' + route.page.id);
   }, [route]);
   useEffect(() => { if (route.params.project && project(state, route.params.project)) setFocusProject(route.params.project); }, [route, state]);
-  // The page decides the entry: 管理员端 pages are the owner's, 开发者端 pages the member's.
+  // Every page belongs to the owner's workspace.
   const role = route.page.role;
   useEffect(() => { if (stateRef.current.role !== role) update(s => { s.role = role; }); }, [role, update]);
   useEffect(() => { document.title = route.page.title + ' · iCode Talents'; }, [route]);
@@ -118,7 +125,7 @@ export function TalentsProvider({ boot, children }: { boot: Boot; children: Reac
     return url.toString();
   }, [focusProject, role, teams.origin]);
 
-  const value = useMemo<Talents>(() => ({ state, teams, route, role, focusProject, clock, update, reset, go, replace, toast, teamsLink }),
-    [state, teams, route, role, focusProject, clock, update, reset, go, replace, toast, teamsLink]);
+  const value = useMemo<Talents>(() => ({ state, teams, route, role, focusProject, clock, update, reset, submit, go, replace, toast, teamsLink }),
+    [state, teams, route, role, focusProject, clock, update, reset, submit, go, replace, toast, teamsLink]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

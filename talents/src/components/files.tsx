@@ -1,6 +1,6 @@
 // Artifact files: markdown, the trajectory report, PR records, diffs, the file list and the read-only preview.
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { Modal, Tag } from 'antd';
+import { Modal } from 'antd';
 import { marked } from 'marked';
 import type { Artifact, TalentsState } from '../types.ts';
 import { content, skillTree } from '../content.ts';
@@ -127,12 +127,4 @@ export function ArtifactPreview({ st, a, which = 'published', onClose }: { st: T
       </div>
     </div>
   </Modal>;
-}
-
-/** What applying writes on the developer's machine, file by file; added lines are highlighted. */
-export function ChangeList({ changes }: { changes: K.FileChange[] }) {
-  return <div className="change-list">{changes.map(f => <div className="change" key={f.path}>
-    <div className="change-head"><Tag color={f.verb === '新增' ? 'success' : 'processing'}>{f.verb}</Tag><span className="path">{f.path}</span></div>
-    <pre>{f.lines.map((l, i) => <span key={i} className={/^\+/.test(l) ? 'add' : undefined}>{l}{'\n'}</span>)}</pre>
-  </div>)}</div>;
 }

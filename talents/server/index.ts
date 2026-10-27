@@ -10,8 +10,10 @@ import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.
 import { KnowledgeExporter } from './export.ts';
 import { readContent } from './content.ts';
 import { codegraphSnapshot, withCodegraph } from './codegraph.ts';
+import { submitPullRequest } from './pull-requests.ts';
 
 const store = new Store(); await store.init();
+const submissions = new Set<string>();
 const exporter = new KnowledgeExporter(sharedDir);
 await exporter.export(store.state, true);
 const exportKnowledge = () => exporter.export(store.state).catch(error => console.error('Talents 知识导出失败：' + error.message));
@@ -90,6 +92,33 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
         await store.reset();
         await exportKnowledge();
         json(200, await bootstrap()); return;
+      }
+      if (method === 'POST' && path === '/api/pull-requests') {
+        const body = await bodyJson(request);
+        const key = body.artifactId + '/' + (body.suggestionId ?? '');
+        if (submissions.has(key)) throw new HttpError('正在提交，请稍候', 409);
+        const artifact = store.state.artifacts.find(a => a.id === body.artifactId);
+        if (!artifact) throw new HttpError('产物不存在', 404);
+        const existing = body.suggestionId ? artifact.suggestions?.find(s => s.id === body.suggestionId)?.submission : !artifact.draft && artifact.submission;
+        if (existing) { json(200, await bootstrap()); return; }
+        submissions.add(key);
+        try {
+          const submitted = await submitPullRequest(structuredClone(artifact), { repository: body.repository, base: body.base, note: body.note, skillDirectory: body.skillDirectory }, body.suggestionId);
+          await store.mutate(null, previous => {
+            const next = structuredClone(previous), a = next.artifacts.find(a => a.id === body.artifactId)!;
+            if (body.suggestionId) {
+              a.suggestions = [...(a.suggestions ?? []).filter(s => s.id !== body.suggestionId), { id: body.suggestionId, status: 'submitted', submission: submitted, at: submitted.at }];
+            } else {
+              a.submission = submitted;
+              a.published = { version: submitted.version, at: submitted.at, note: body.note, delivery: 'local', files: a.files, specs: a.specs,
+                over: Object.fromEntries((a.files ?? []).map((key, i) => [key, { text: submitted.files[i].text }])), basis: a.draft?.basis as any };
+              a.draft = null;
+            }
+            return next;
+          });
+          json(200, await bootstrap());
+        } finally { submissions.delete(key); }
+        return;
       }
       throw new HttpError('接口不存在', 404);
     }

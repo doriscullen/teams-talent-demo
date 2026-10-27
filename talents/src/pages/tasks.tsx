@@ -66,7 +66,7 @@ export function LevelTasks({ pid, toolbar }: { pid: string | null; toolbar: Tool
   const list = tab === 'current' ? current : history;
   const produced = (t: Task) => {
     const a = artifact(st, t.produced ?? t.artifact);
-    return a && ['产出', <><a onClick={e => { e.stopPropagation(); go(levelHash(pid, 'review', { id: a.id })); }}>{a.name}</a>（{isDiagnosis(a) ? (pendingCount(a) ? pendingCount(a) + ' 条建议待应用' : '建议已处理') : a.draft ? '待审阅' : '已发布 v' + a.published!.version}）</>] as [string, ReactNode];
+    return a && ['产出', <><a onClick={e => { e.stopPropagation(); go(levelHash(pid, 'review', { id: a.id })); }}>{a.name}</a>（{isDiagnosis(a) ? (pendingCount(a) ? pendingCount(a) + ' 条建议待提交' : '建议已处理') : a.draft ? '待审阅' : '已生成 v' + a.published!.version}）</>] as [string, ReactNode];
   };
   return <>
     {toolbar(<Button type="primary" icon={<PlusOutlined />} onClick={() => setForm({})}>新建任务</Button>)}
@@ -98,8 +98,8 @@ function TaskDetail({ id, onClose, onRun }: { id: string; onClose(): void; onRun
   const p = running ? runProgress(t, clock) : null;
   const a = artifact(st, t.produced ?? t.artifact);
   useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight; });
-  const outcome = a && (isDiagnosis(a) ? '诊断完成，' + (a.suggestions ?? []).length + ' 条优化建议，' + pendingCount(a) + ' 条待应用' : !a.draft ? (t.unchanged ? '来源没有变化，保持 v' + a.published!.version : (a.published!.auto ? '已自动发布 v' : '已发布 v') + a.published!.version)
-    : a.published ? '原产物的新版本，等待审阅后发布' : '新产物，等待审阅后发布');
+  const outcome = a && (isDiagnosis(a) ? '诊断完成，' + (a.suggestions ?? []).length + ' 条优化建议，' + pendingCount(a) + ' 条待提交' : !a.draft ? (t.unchanged ? '来源没有变化，保持 v' + a.published!.version : (a.published!.auto ? '远端索引已更新 v' : '已生成 v') + a.published!.version)
+    : a.published ? '原产物的新版本，等待审阅后提交' : '新产物，等待审阅后提交');
   return <Drawer open width={560} onClose={onClose} title={<div><div className="caption">{cap.name}</div>{taskName(st, t)}</div>}
     footer={<div className="drawer-foot">{running ? <span className="ui-note">可以关闭此面板，任务会继续运行。</span> : <>
       <span className="spacer" /><Button onClick={onRun}>立即运行</Button>{a?.draft && <Button type="primary" onClick={() => { onClose(); go(levelHash(a.projectId, 'review', { id: a.id })); }}>{isDiagnosis(a) ? '查看建议' : '去审阅'}</Button>}</>}</div>}>

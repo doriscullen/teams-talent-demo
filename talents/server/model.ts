@@ -27,6 +27,10 @@ export interface Source {
 }
 
 export type Over = string | { text: string };
+export interface Submission {
+  url: string; repository: string; base: string; branch: string; at: string;
+  version: number; suggestionId?: string; files: { path: string; text: string }[];
+}
 export interface Published {
   version: number; at: string; note: string; delivery: 'local' | 'cloud';
   /** Ids of the agents the knowledge is meant for; absent: every agent. */
@@ -41,6 +45,8 @@ export interface Artifact {
   /** A project's AGENTS.md rules (see src/types.ts); its published text is generated from them. */
   rules?: { text: string; version: number }[];
   published: Published | null; draft: Draft | null; [key: string]: unknown;
+  submission?: Submission;
+  suggestions?: { id: string; status: string; submission?: Submission; [key: string]: unknown }[];
 }
 export interface Capability { id: string; cat: string; name: string; [key: string]: unknown }
 /** A new version of a project skill written by applying a trajectory diagnosis suggestion (see src/types.ts). */
@@ -63,9 +69,8 @@ export interface TalentsState {
   artifacts: Artifact[];
   trajTopics: Record<string, { title: string; session: string }>;
   skillVersions: SkillVersion[];
-  dev: { applied: Record<string, unknown>; local: Record<string, unknown>[] };
 }
 /** Keys of TalentsState the front-end may change through PUT /api/state, taken as they come. */
-export const CLIENT_OWNED_KEYS = ['role', 'agents', 'categories', 'capabilities', 'prs', 'tasks', 'artifacts', 'trajTopics', 'skillVersions', 'dev'] as const;
+export const CLIENT_OWNED_KEYS = ['role', 'agents', 'categories', 'capabilities', 'prs', 'tasks', 'artifacts', 'trajTopics', 'skillVersions'] as const;
 
 export class HttpError extends Error { constructor(message: string, readonly status = 400) { super(message); } }

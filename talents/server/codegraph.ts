@@ -24,6 +24,6 @@ export function withCodegraph(state: TalentsState): TalentsState {
   const m = codegraphSnapshot().metadata;
   return { ...state, artifacts: state.artifacts.map(a => a.id !== 'a-cg-java' ? a : {
     ...a, stats: [['文件', m.files.toLocaleString('en-US')], ['节点', m.nodes.toLocaleString('en-US')], ['关系', m.edges.toLocaleString('en-US')]],
-    ...(a.published ? { published: { ...a.published, at: m.indexedAt, note: `本地真实索引 · ${m.snapshotId}`, basis: { commit: m.revision } } } : {}),
+    ...(a.published ? { published: { ...a.published, at: m.indexedAt, note: `远端图谱快照 · ${m.snapshotId}`, basis: { commit: m.revision } } } : {}),
   }) };
 }

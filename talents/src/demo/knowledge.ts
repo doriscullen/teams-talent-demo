@@ -1,21 +1,10 @@
-// Knowledge artifacts: versions (published / original draft / current revision), file contents, diff,
-// and what applying to iCode would write on the developer's machine.
-import type { Artifact, Scope, TalentsState } from '../types.ts';
-import { content, skillTree } from '../content.ts';
-import { agent, levelName, projectRepos, source } from './model.ts';
+// Knowledge artifacts: versions (published / original draft / current revision), file contents and diff.
+import type { Artifact } from '../types.ts';
+import { content } from '../content.ts';
 import { RULES_FILE, rulesAt, rulesMarkdown } from './suggestions.ts';
-
-const TALENTS_HOME = '~/.icode-talents';
-const SKILL_DIRS = { chrys: '~/.chrys/skills', agents: '~/.agents/skills' };
-const TEAM_MCP = 'talents-team';
 
 export type Which = 'published' | 'original' | 'current';
 export const isIndex = (a: Artifact) => a.kind === 'index';
-export const kind = (a: Artifact) => a.kind === 'index' ? 'mcp' : a.cap === 'traj' ? 'memory' : 'skill';
-export const kindLabel = { mcp: '在线查询（MCP）', skill: 'Skill', memory: '项目规则' };
-export const deliveryLabel = { local: '同步到本地', cloud: '云端查询' };
-/** The agents published knowledge is meant for (Published.agents). */
-export const audienceText = (st: TalentsState, agents?: string[]) => agents ? agents.map(id => agent(st, id)?.name ?? id).join('、') : '全部智能体';
 export function status(a: Artifact) {
   if (a.published && a.draft) return 'update';
   if (a.published) return 'published';
@@ -88,105 +77,4 @@ export function diffLines(oldText: string | null, newText: string | null): DiffO
   while (i < n) ops.push(['-', a[i++]]);
   while (j < m) ops.push(['+', b[j++]]);
   return ops;
-}
-
-// ---------- Applying on the developer's machine ----------
-/** Local clones of this artifact's project code repositories; none for team-level knowledge. */
-export function localRepos(st: TalentsState, a: Artifact) {
-  const repoIds = a.projectId ? projectRepos(st, a.projectId).map(r => r.id) : [];
-  return st.dev.local.filter(l => l.type === 'repo' && l.repo && repoIds.includes(l.repo));
-}
-/** Why a scope kind is unavailable for this artifact; empty when it can be chosen. */
-export function scopeOptions(st: TalentsState, a: Artifact) {
-  const k = kind(a);
-  return {
-    repo: k === 'mcp' ? '索引通过智能体的在线查询使用，只能应用到指定智能体' : (localRepos(st, a).length ? '' : '本机还没有这个项目的代码仓'),
-    global: k === 'mcp' ? '索引通过智能体的在线查询使用，只能应用到指定智能体' : k === 'memory' ? '项目规则只能写入代码仓或指定智能体' : '',
-    agent: '',
-  };
-}
-/** Where one-click apply puts the knowledge: the agents the admin meant it for; otherwise the project's local
- *  repositories, falling back to every agent (team knowledge has no repositories). */
-export function defaultScope(st: TalentsState, a: Artifact): Scope {
-  const k = kind(a), meant = a.published?.agents, every = st.agents.map(g => g.id);
-  if (meant) return { kind: 'agent', agents: meant };
-  if (k === 'mcp') return { kind: 'agent', agents: every };
-  const repos = localRepos(st, a);
-  if (repos.length) return { kind: 'repo', repos: repos.map(r => r.repo!) };
-  return k === 'memory' ? { kind: 'agent', agents: every } : { kind: 'global', dir: 'chrys' };
-}
-function localPath(st: TalentsState, repoId: string) {
-  return st.dev.local.find(x => x.repo === repoId)?.path ?? source(st, repoId)?.path ?? repoId;
-}
-export function scopeText(st: TalentsState, scope: Scope) {
-  if (scope.kind === 'repo') return scope.repos.map(id => source(st, id)?.name ?? id).join('、');
-  if (scope.kind === 'global') return '所有智能体';
-  return scope.agents.map(id => agent(st, id)?.name ?? id).join('、');
-}
-export function sentence(st: TalentsState, a: Artifact, scope: Scope) {
-  const k = kind(a), target = scopeText(st, scope);
-  if (k === 'mcp') return '在 ' + target + ' 中可以在线查询「' + a.name + '」。';
-  if (k === 'memory') return '把 ' + rulesAt(a, a.published?.version).length + ' 条项目规则写入 ' + target + (scope.kind === 'repo' ? ' 的 AGENTS.md。' : ' 的记忆。');
-  const how = a.published?.delivery === 'cloud' ? '在线查询' : '同步到本机';
-  return '「' + a.name + '」' + how + '，在 ' + target + ' 中可用' + (a.skills ? '，配套 Skill「' + a.skills.join('、') + '」' : '') + '。';
-}
-const block = (title: string, lines: string[]) =>
-  ['<!-- icode-talents:begin -->', '## ' + title + '（由 iCode Talents 维护）', ...lines, '<!-- icode-talents:end -->'].map(l => '+ ' + l);
-const mcpLines = () => ['tools:', '  mcp:', '+   - name: ' + TEAM_MCP, '+     transport: http', '+     url: https://talents.bank.local/mcp', '+     headers:', '+       Authorization: "Bearer {{TALENTS_TOKEN}}"'];
-function specLines(a: Artifact) {
-  if (a.folder !== 'miner') return files(a, 'published').map(f => f.split('/').slice(-2).join('/'));
-  return ['index.md', ...(specsOf(a, 'published') ?? []).map(n => n + '/（范式总结、代码分析报告、PR 资料）')];
-}
-export interface FileChange { path: string; verb: '新增' | '更新'; lines: string[] }
-/** The files applying the artifact with this scope writes; lines starting with + are added. */
-export function changes(st: TalentsState, a: Artifact, scope: Scope): FileChange[] {
-  const out = new Map<string, FileChange>();
-  const add = (path: string, verb: FileChange['verb'], lines: string[] = []) => {
-    const f = out.get(path) ?? { path, verb, lines: [] };
-    f.lines = f.lines.concat(lines);
-    out.set(path, f);
-  };
-  let knowledgeDir = TALENTS_HOME + '/knowledge/' + levelName(st, a.projectId) + '/' + (a.folder ?? '') + '/';
-  const cloud = !a.published || a.published.delivery === 'cloud' || isIndex(a);
-  const agents = scope.kind === 'agent' ? scope.agents : st.agents.map(g => g.id);
-  const k = kind(a);
-  const where = cloud ? '通过 MCP 工具 `' + TEAM_MCP + '.search` 查询（知识：' + a.name + '）' : '`' + knowledgeDir + '`';
-  let line = '- ' + a.name + '：' + where + '。' + (a.usage ?? a.desc) + (a.skills ? '；配套 Skill ' + a.skills.join('、') + '。' : '');
-
-  if (cloud) agents.forEach(g => add('~/.chrys/agents/' + g + '.yaml', '更新', mcpLines()));
-  const inRepo = a.folder === 'miner' && scope.kind === 'repo';
-  if (inRepo) {
-    knowledgeDir = '<代码仓>/.icode-knowledge/miner/';
-    line = '- ' + a.name + '：`.icode-knowledge/miner/`（先读 index.md）。' + (a.usage ?? a.desc) + '。';
-  }
-  if (!cloud && k !== 'memory' && !inRepo) add(knowledgeDir, '新增', specLines(a));
-
-  if (k === 'memory') {
-    const ruleLines = rulesAt(a, a.published?.version).map(r => '- ' + r.text);
-    if (scope.kind === 'repo') scope.repos.forEach(rid => add(localPath(st, rid) + '/AGENTS.md', '更新', block('项目规则', ruleLines)));
-    else {
-      add(TALENTS_HOME + '/memory/项目规则.md', '新增', ruleLines.map(l => '+ ' + l));
-      agents.forEach(g => add('~/.chrys/agents/' + g + '.yaml', '更新', ['memory:', '  files:', '+   - ' + TALENTS_HOME + '/memory/项目规则.md']));
-    }
-  } else if (scope.kind === 'repo') {
-    scope.repos.forEach(rid => {
-      const root = localPath(st, rid);
-      if (inRepo && !cloud) add(root + '/.icode-knowledge/miner/', '新增', specLines(a));
-      (a.skills ?? []).forEach(sk => add(root + '/.agents/skills/' + sk + '/', '新增', ['Skill，' + skillTree(sk).length + ' 个文件']));
-      add(root + '/AGENTS.md', '更新', block('项目知识', [line]));
-    });
-  } else {
-    const skillRoot = scope.kind === 'global' ? SKILL_DIRS[scope.dir] : TALENTS_HOME + '/skills';
-    (a.skills ?? []).forEach(sk => add(skillRoot + '/' + sk + '/', '新增', ['Skill，' + skillTree(sk).length + ' 个文件']));
-    add(TALENTS_HOME + '/knowledge-index.md', '更新', ['+ ' + line]);
-    agents.forEach(g => {
-      let lines: string[] = [];
-      if (scope.kind === 'agent' && a.skills) lines = lines.concat(['skills:', '  paths:'], a.skills.map(sk => '+   - ' + skillRoot + '/' + sk));
-      lines = lines.concat(['memory:', '  files:', '+   - ' + TALENTS_HOME + '/knowledge-index.md']);
-      add('~/.chrys/agents/' + g + '.yaml', '更新', lines);
-    });
-  }
-  // Agent configs collect lines from several steps; keep each line once.
-  for (const f of out.values()) if (/\.yaml$/.test(f.path)) f.lines = [...new Set(f.lines)];
-  return [...out.values()];
 }

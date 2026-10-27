@@ -15,7 +15,7 @@ Windows 可运行仓库 start-demo.cmd；macOS 可运行仓库启动/停止 comm
 
 ## 操作顺序
 
-Owner 在项目概览关联资产，在任务管理中分配需求。成员进入任务交付页后，Teams 自动读取该任务的需求与 Skill，以及 Talents 已发布的项目知识（共享目录中没有已发布知识时为空）；成员确认上下文并启动 iCode，开发、检查结果和进度通过 Teams CLI 回传。Owner 验收通过后，Teams 自动归集前面节点关联的一个或多个会话，写入共享目录 shared/data/teams/task-sessions 供 Talents 读取；页面分别展示验收状态和共享回执。Talents 读取这些会话做轨迹诊断尚未接入，不作为本次任务完成条件。项目知识由 Talents 发布，Teams 在项目知识中展示。
+Owner 在项目概览关联资产，在任务管理中分配需求。成员进入任务交付页后，Teams 自动读取该任务的需求与 Skill，以及共享目录中 Talents 写入的项目知识（没有时为空，不阻止准备）；成员确认上下文并启动 iCode，开发、检查结果和进度通过 Teams CLI 回传。Owner 验收通过后，Teams 自动归集前面节点关联的一个或多个会话，写入共享目录 shared/data/teams/task-sessions 供 Talents 读取；页面分别展示验收状态和共享回执。Talents 读取这些会话做轨迹诊断尚未接入，不作为本次任务完成条件。Talents 只对 Owner 开放：远端索引写入共享目录，Teams 在项目知识中展示；文件类知识和改进建议由 Talents 以 PR 提交到代码仓。
 
 UI 沿产品页面操作，不会发生真实支付。用户确认独立需求的 iCode 作业后，将调用本机 iCode 和当前配置的模型执行任务；普通页面访问不会启动模型。检查记录区分实际执行与预置结果，生产安全状态未验证。
 

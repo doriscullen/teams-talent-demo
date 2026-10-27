@@ -145,7 +145,7 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
       const allowed = [...context.references.map(r => r.id), ...context.materials.map(m => m.id), ...context.skills.map(s => s.id), ...context.knowledge.assets.map((a: any) => a.id)];
       need(Array.isArray(p.readReferences) && p.readReferences.every((id: unknown) => typeof id === 'string' && allowed.includes(id)), 'readReferences 只能列出当前上下文内实际阅读的引用');
       const selected=deliveryRequirement(next,scope.projectId,scope.taskId);
-      if(selected&&scope.nodeId==='prepare'&&!selected.preparedAt){need(context.talentInputs && context.knowledge.status==='available'&&context.skills.length>0,'Talents 知识与 Skill 尚未就绪',409);selected.talentInputsSnapshot=context.talentInputs;selected.preparedAt=at;selected.inputDigest=context.basisDigest;selected.nodes.prepare={status:'complete',updatedAt:at,summary:'iCode明确采用需求、知识与Skill输入'};selected.updatedAt=at;}
+      if(selected&&scope.nodeId==='prepare'&&!selected.preparedAt){need(context.talentInputs && context.skills.length>0,'Skill 尚未就绪',409);selected.talentInputsSnapshot=context.talentInputs;selected.preparedAt=at;selected.inputDigest=context.basisDigest;selected.nodes.prepare={status:'complete',updatedAt:at,summary:'iCode明确采用需求、知识与Skill输入'};selected.updatedAt=at;}
       adoptionId = randomUUID();
       ledger.adoptions.push({ ...scope, id: adoptionId, role: body.role, runId, sessionId, basisDigest: context.basisDigest, readReferences: [...new Set(p.readReferences as string[])], at, revision });
     } else {

@@ -48,7 +48,7 @@ try {
   const save = async (kind: string, name: string) => { const [response] = await Promise.all([page!.waitForResponse(r => r.url() === origin + '/api/workspace' && r.request().postDataJSON().kind === kind), page!.getByRole('button', { name, exact: true }).click()]); assert.equal(response.status(), 200, await response.text()); };
   const talentsHref = async (target = page!) => new URL((await target.locator('.project-knowledge').getByRole('link', { name: /在 Talents (挖掘|应用)知识/ }).getAttribute('href'))!);
   await visit('projects?project=carddemo&tab=content'); await openPanel('查看知识');
-  await page.locator('.project-knowledge').getByText('Talents 尚未为此项目发布知识', { exact: true }).waitFor();
+  await page.locator('.project-knowledge').getByText('暂无可展示的项目知识', { exact: true }).waitFor();
   assert.equal(await page.locator('[data-action="knowledge"]').count(), 0, 'Teams no longer starts knowledge integration');
   let href = await talentsHref(); assert.equal(href.origin, talentOrigin); assert.equal(href.hash, '#/review?project=carddemo');
   assert.deepEqual(await state(), initial, 'legacy Teams knowledge flag is not shown as published knowledge and is left unchanged');
@@ -75,7 +75,7 @@ try {
   assert.deepEqual(business(created), business(initial));
   await openPanel('项目资料'); await page.getByText('尚未关联项目资料', { exact: true }).waitFor(); await closePanels(); await openPanel('查看知识');
   assert.equal(await page.locator('.created-project [data-action]').count(), 0);
-  await page.locator('.project-knowledge').getByText('Talents 尚未为此项目发布知识', { exact: true }).waitFor();
+  await page.locator('.project-knowledge').getByText('暂无可展示的项目知识', { exact: true }).waitFor();
   href = await talentsHref(); assert.equal(href.hash, '#/review?project=' + projectId); await closePanels();
   await page.screenshot({ path: 'test-results/project-create-content.png' });
   await page.reload(); await page.locator('.breadcrumb strong').getByText(draft.name, { exact: true }).waitFor();
@@ -106,9 +106,9 @@ try {
     await target.goto(origin + '/teams#/projects?project=' + id + '&tab=content');
     if (roleName === 'owner') {
       await target.locator('.project-owner-overview').waitFor(); assert.equal(await target.locator('[data-metric]').count(), 10);
-      await openPanel('查看知识', target); await target.locator('.project-knowledge').getByText(id === 'carddemo' ? '白金卡返现业务规则' : 'Talents 尚未为此项目发布知识', { exact: true }).waitFor(); await closePanels(target);
+      await openPanel('查看知识', target); await target.locator('.project-knowledge').getByText(id === 'carddemo' ? '白金卡返现业务规则' : '暂无可展示的项目知识', { exact: true }).waitFor(); await closePanels(target);
       await openPanel('项目资料', target);
-    } else { await target.locator('.project-content-template').waitFor(); assert.deepEqual(await target.locator('.project-content-template h2').allTextContents(), sharedTitles); await target.locator('.project-knowledge').getByText(id === 'carddemo' ? '白金卡返现业务规则' : 'Talents 尚未为此项目发布知识', { exact: true }).waitFor(); assert.equal((await talentsHref(target)).hash, '#/dev-knowledge?project=' + id); }
+    } else { await target.locator('.project-content-template').waitFor(); assert.deepEqual(await target.locator('.project-content-template h2').allTextContents(), sharedTitles); await target.locator('.project-knowledge').getByText(id === 'carddemo' ? '白金卡返现业务规则' : '暂无可展示的项目知识', { exact: true }).waitFor(); assert.equal(await target.locator('.project-knowledge a[href*="/talents"]').count(), 0); }
     if (id === 'teams') { assert.equal(await target.getByRole('button', { name: '关联项目资产', exact: true }).count(), 0); await target.getByRole('button', { name: '项目成员与职责', exact: true }).click(); await target.getByText('成员 A、B、C 为项目协作成员。', { exact: false }).waitFor(); }
     if (roleName === 'owner') await openPanel('查看 Skill', target);
     if (id === 'teams') for (const skill of bootstrap.data.teamsProject.project.skills) { await target.getByRole('button', { name: '查看 Skill：' + skill.name, exact: true }).click(); const original = bootstrap.data.teamsProject.documents.find((doc: any) => doc.path === '.agents/skills/' + skill.name + '/SKILL.md').content; assert.ok((await target.locator('.drawer-console').innerText()).includes(original)); await closeText(target); }
@@ -124,7 +124,7 @@ try {
   await page.getByRole('button', { name: '查看来源：信用卡消费返现', exact: true }).click();
   assert.ok((await page.locator('.drawer-console').innerText()).includes('来源插件')); await closeText();
   await page.reload(); await openPanel('项目资料'); await page.getByRole('button', { name: '查看来源：信用卡消费返现', exact: true }).waitFor(); await openPanel('查看知识');
-  await page.locator('.project-knowledge').getByText('Talents 尚未为此项目发布知识', { exact: true }).waitFor();
+  await page.locator('.project-knowledge').getByText('暂无可展示的项目知识', { exact: true }).waitFor();
   const beforeIndex = await state();
   await publishFromTalents(projectId, 'a-portal', '客户门户来源索引'); await page.reload(); await openPanel('查看知识');
   await page.locator('[data-artifact="a-portal"]').getByText('客户门户来源索引', { exact: true }).waitFor();

@@ -1,6 +1,7 @@
 // The state the page works on: Talents' own state (server/model.ts) merged with the team, projects,
 // sources and sessions read from iCode Teams (server/teams-data.ts clientState).
-import type { Commit, DocTreeGroup, DocVersion, Over } from '../server/model.ts';
+import type { Commit, DocTreeGroup, DocVersion, Over, Submission } from '../server/model.ts';
+export type { Submission };
 export type { Commit, DocTreeGroup, DocVersion, Over };
 
 export type Role = 'admin' | 'dev';
@@ -68,18 +69,15 @@ export interface Artifact {
   /** A project's AGENTS.md rules: each applied suggestion adds a rule and publishes the next version. */
   rules?: AgentRule[];
   published: Published | null; draft: Draft | null;
+  submission?: Submission;
 }
-export interface SuggestionState { id: string; status: 'pending' | 'applied' | 'declined'; at?: string; result?: string; reason?: string }
+export interface SuggestionState { id: string; status: 'pending' | 'applied' | 'submitted' | 'declined'; at?: string; result?: string; reason?: string; submission?: Submission }
 export interface AgentRule { id: string; text: string; version: number; at: string; from: { artifact: string; suggestion: string } }
 /** A new version of a project skill, written by applying a diagnosis suggestion; Teams reads it from the shared directory. */
 export interface SkillVersion {
   projectId: string; skillId: string; version: string; basedOn: { version: string; sha256?: string }; at: string; note: string;
   from: { artifact: string; suggestion: string }; files: { path: string; text: string }[];
 }
-
-export type Scope = { kind: 'repo'; repos: string[] } | { kind: 'global'; dir: 'chrys' | 'agents' } | { kind: 'agent'; agents: string[] };
-export interface Applied { version: number; scope: Scope; at: string }
-export interface LocalDir { id: string; type: 'repo' | 'docs'; name: string; path: string; repo: string | null; index: { at: string; files: string } | null; applied: boolean }
 
 export interface TalentsState {
   role: Role;
@@ -92,7 +90,6 @@ export interface TalentsState {
   /** Diagnosis reports available in content/trajectory/<topic>/, each for the session it analysed. */
   trajTopics: Record<string, { title: string; session: string }>;
   skillVersions: SkillVersion[];
-  dev: { applied: Record<string, Applied>; local: LocalDir[] };
   team: Team; projects: Project[]; sources: Source[]; sessions: Session[];
 }
 

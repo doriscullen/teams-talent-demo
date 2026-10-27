@@ -16,5 +16,7 @@ export interface Boot { state: TalentsState; revision: number; teams: TeamsInfo 
 export const bootstrap = () => api<Boot>('GET', '/api/bootstrap');
 export const saveState = (revision: number, state: TalentsState) => api<{ revision: number }>('PUT', '/api/state', { revision, state });
 export const resetState = () => api<Boot>('POST', '/api/reset', {});
+export interface SubmitRequest { artifactId: string; suggestionId?: string; repository: string; base: string; note: string; skillDirectory?: string }
+export const submitPullRequest = (request: SubmitRequest) => api<Boot>('POST', '/api/pull-requests', request);
 /** SKILL.md of a project skill, read from the repository through the Talents service. */
 export const getSkill = (projectId: string, id: string) => api<ProjectSkill & { content: string }>('GET', '/api/skill?project=' + encodeURIComponent(projectId) + '&id=' + encodeURIComponent(id));

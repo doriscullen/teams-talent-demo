@@ -55,13 +55,8 @@ try {
   await page.screenshot({ path: '/tmp/codegraph-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'mobile page overflows horizontally');
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(origin + '/talents?role=member#/dev-knowledge?project=carddemo');
-  const card = page.locator('.item-card', { hasText: 'carddemo-java-1025 CodeGraph' });
-  await card.getByRole('button', { name: /预览|查看/ }).first().click();
-  await page.getByRole('dialog').locator('.cg-canvas canvas').waitFor();
-  await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
-  console.log('CodeGraph API, graph navigation, archived source, mobile layout and developer preview passed');
+  console.log('CodeGraph API, graph navigation, archived source, mobile layout passed');
 } finally {
   await browser?.close(); server.kill('SIGTERM');
   await stopped;
