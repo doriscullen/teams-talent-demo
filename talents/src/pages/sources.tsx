@@ -1,18 +1,17 @@
 // 来源管理：项目、代码仓和设计文档来自 iCode Teams，在这里只读；Talents 只登记本地文档目录。
 // 团队会话也由 iCode Teams 管理，只在新建任务选择会话时出现。
 import { useState, type ReactNode } from 'react';
-import { App, AutoComplete, Button, Checkbox, Collapse, Drawer, Form, Input, Modal, Space, Table, Tag } from 'antd';
+import { App, AutoComplete, Button, Collapse, Drawer, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
 import { ExportOutlined, PlusOutlined } from '@ant-design/icons';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
 import type { DocVersion, Project, Source, TalentsState } from '../types.ts';
-import { changeCounts, knownFiles, latestVersion, project, projectsOf, source, sourceFiles } from '../demo/model.ts';
+import { changeCounts, knownFiles, latestVersion, levelName, levelSources, project, source, sourceFiles } from '../demo/model.ts';
 import { now, uid, when } from '../demo/format.ts';
 import { CardGrid, EmptyState, Fields, FileMark, ItemCard, Section, SourceIcon } from '../components/ui.tsx';
 
 const fromText = (s: Source) => s.from ? { teams: '来自 iCode Teams', git: '来自 Git 仓库', shared: '来自共享目录' }[s.from.kind] : '';
 const names = (list: Source[]) => list.length ? list.map(s => s.name).join('、') : <span className="ui-note">无</span>;
-const unassigned = (st: TalentsState) => st.sources.filter(s => s.type !== 'sessions' && !projectsOf(st, s.id).length);
 
 export function Sources() {
   const { state: st, route, go, teamsLink } = useTalents();
@@ -29,7 +28,7 @@ export function Sources() {
 
   let body;
   if (p) {
-    const list = p.sourceIds.map(id => source(st, id)).filter((s): s is Source => !!s);
+    const list = levelSources(st, p.id);
     const section = (type: Source['type'], title: string, empty: string) => {
       const items = list.filter(s => s.type === type);
       return <Section title={title} note={items.length + ' 个'}>{items.length ? <CardGrid>{items.map(s => card(s, false))}</CardGrid> : <EmptyState>{empty}</EmptyState>}</Section>;
@@ -40,14 +39,15 @@ export function Sources() {
       {section('docs', '文档集', '还没有文档。设计文档在 iCode Teams 项目中添加，也可以登记本地文档目录。')}
     </>;
   } else {
-    const loose = unassigned(st);
+    const team = levelSources(st, null);
     body = <>
       <PageHeader title="来源管理" description="项目、代码仓和设计文档来自 iCode Teams；还可以登记本地文档目录作为知识来源。" actions={<Space>{teamsButton(null, '在 iCode Teams 中管理项目')}{register}</Space>} />
       <Section title="项目" note={st.projects.length + ' 个，来自 iCode Teams'}>
         {st.projects.length ? <CardGrid>{st.projects.map(x => <ProjectCard key={x.id} st={st} p={x} onOpen={() => go('#/sources?project=' + encodeURIComponent(x.id))} />)}</CardGrid>
           : <EmptyState title="还没有项目">在 iCode Teams 中创建项目后，会出现在这里。</EmptyState>}
       </Section>
-      {loose.length > 0 && <Section title="未归属的来源" note="还没有加入任何项目"><CardGrid>{loose.map(s => card(s, true))}</CardGrid></Section>}
+      <Section title="团队来源" note="用于团队级的知识任务">{team.length ? <CardGrid>{team.map(s => card(s, true))}</CardGrid>
+        : <EmptyState>还没有团队级的来源。可以登记行内规范等全团队通用的本地文档目录。</EmptyState>}</Section>
     </>;
   }
   return <div className="page-stack">
@@ -58,7 +58,7 @@ export function Sources() {
 }
 
 function ProjectCard({ st, p, onOpen }: { st: TalentsState; p: Project; onOpen(): void }) {
-  const list = p.sourceIds.map(id => source(st, id)).filter((s): s is Source => !!s);
+  const list = levelSources(st, p.id);
   return <ItemCard icon={<SourceIcon type="project" />} title={p.name} subtitle={p.description} onClick={onOpen} actions={<Button type="link" size="small" onClick={onOpen}>查看</Button>}>
     <Fields rows={[['代码仓', names(list.filter(s => s.type === 'repo'))], ['文档集', names(list.filter(s => s.type === 'docs'))]]} />
   </ItemCard>;
@@ -66,7 +66,7 @@ function ProjectCard({ st, p, onOpen }: { st: TalentsState; p: Project; onOpen()
 
 // ---------- Details ----------
 function projectField(st: TalentsState, s: Source): [string, ReactNode] {
-  return ['所属项目', projectsOf(st, s.id).map(p => p.name).join('、') || <span className="ui-note">未归属</span>];
+  return ['所属', levelName(st, s.projectId ?? null)];
 }
 const teamsNote = (s: Source) => s.fromTeams && <p className="caption">来自 iCode Teams，在 Talents 中只读；增删或修改请在 iCode Teams 中进行。</p>;
 
@@ -140,7 +140,7 @@ function SourceDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const remove = () => modal.confirm({
     title: '移除来源“' + s.name + '”？', content: '移除后不再出现在来源列表中，已生成的产物仍然保留。', okText: '移除', okButtonProps: { danger: true }, cancelText: '取消',
     onOk: () => {
-      update(d => { d.sources = d.sources.filter(x => x.id !== id); d.projects.forEach(p => { p.sourceIds = p.sourceIds.filter(x => x !== id); }); });
+      update(d => { d.sources = d.sources.filter(x => x.id !== id); });
       onClose(); toast('已移除');
     },
   });
@@ -157,25 +157,16 @@ function SourceDrawer({ id, onClose }: { id: string; onClose(): void }) {
 }
 
 function EditSource({ s, onClose }: { s: Source; onClose(): void }) {
-  const { state: st, update, toast } = useTalents();
-  const [form] = Form.useForm<{ name: string; desc: string; projects: string[] }>();
-  const save = (v: { name: string; desc?: string; projects?: string[] }) => {
-    update(d => {
-      const x = source(d, s.id)!;
-      x.name = v.name.trim(); x.desc = (v.desc ?? '').trim();
-      d.projects.forEach(p => {
-        const has = p.sourceIds.includes(s.id), want = (v.projects ?? []).includes(p.id);
-        if (want && !has) p.sourceIds.push(s.id);
-        if (!want && has) p.sourceIds = p.sourceIds.filter(id => id !== s.id);
-      });
-    });
+  const { update, toast } = useTalents();
+  const [form] = Form.useForm<{ name: string; desc: string }>();
+  const save = (v: { name: string; desc?: string }) => {
+    update(d => { const x = source(d, s.id)!; x.name = v.name.trim(); x.desc = (v.desc ?? '').trim(); });
     onClose(); toast('已保存');
   };
   return <Modal open title={<div><div className="caption">本地文档目录</div>编辑来源</div>} okText="保存" cancelText="取消" onOk={() => form.submit()} onCancel={onClose}>
-    <Form form={form} layout="vertical" onFinish={save} initialValues={{ name: s.name, desc: s.desc ?? '', projects: projectsOf(st, s.id).map(p => p.id) }}>
+    <Form form={form} layout="vertical" onFinish={save} initialValues={{ name: s.name, desc: s.desc ?? '' }}>
       <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true, message: '请填写名称' }]}><Input /></Form.Item>
       <Form.Item name="desc" label={<>说明 <span className="caption">可选</span></>}><Input.TextArea rows={2} placeholder="一句话说明这个来源的内容" /></Form.Item>
-      <Form.Item name="projects" label="所属项目"><Checkbox.Group options={st.projects.map(p => ({ value: p.id, label: p.name }))} /></Form.Item>
     </Form>
   </Modal>;
 }
@@ -187,11 +178,10 @@ const samples: Sample[] = [
   { path: '~/work/carddemo/requirements', files: 31, ext: 'md 18、docx 9、pdf 4', from: { kind: 'git', origin: 'git@code.bank.local:carddemo/carddemo-requirements.git', branch: 'main' }, tree: [{ dir: '2026Q3', files: ['分期还款需求说明.docx', '额度调整需求说明.md'] }, { dir: '2026Q4', files: ['营销活动二期需求.md', '账单分期改造.md'] }] },
 ];
 function RegisterSource({ defaultProject, onClose }: { defaultProject: string | null; onClose(): void }) {
-  const { state: st, update, toast, focusProject } = useTalents();
+  const { state: st, update, toast } = useTalents();
   const [path, setPath] = useState(samples[0].path), [probing, setProbing] = useState(false), [probe, setProbe] = useState<Sample | null>(null);
   const [name, setName] = useState(''), [desc, setDesc] = useState('');
-  const initial = defaultProject ?? focusProject;
-  const [projects, setProjects] = useState(st.projects.filter(p => p.id === initial || st.projects.length === 1).map(p => p.id));
+  const [level, setLevel] = useState<string | null>(defaultProject);
   const read = () => {
     if (!path.trim()) return;
     setProbing(true);
@@ -204,8 +194,8 @@ function RegisterSource({ defaultProject, onClose }: { defaultProject: string | 
   const submit = () => {
     const p = probe!, id = uid('s');
     const src: Source = { id, type: 'docs', name: name.trim() || p.path.split('/').pop()!, path: p.path, files: p.files, tree: p.tree,
-      from: p.from, lastCheck: now(), versions: [{ at: now(), initial: p.files }], desc: desc.trim() };
-    update(d => { d.sources.push(src); projects.forEach(pid => project(d, pid)?.sourceIds.push(id)); });
+      from: p.from, lastCheck: now(), versions: [{ at: now(), initial: p.files }], desc: desc.trim(), projectId: level };
+    update(d => { d.sources.push(src); });
     onClose(); toast('已登记“' + src.name + '”');
   };
   return <Drawer open width={520} title="登记本地文档来源" onClose={onClose}
@@ -223,7 +213,7 @@ function RegisterSource({ defaultProject, onClose }: { defaultProject: string | 
       {probe && <>
         <label className="field"><span className="label"><span className="step">2</span>名称</span><Input value={name} onChange={e => setName(e.target.value)} /></label>
         <label className="field"><span className="label">说明 <span className="caption">可选</span></span><Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="一句话说明这个来源的内容" /></label>
-        <div className="field"><span className="label"><span className="step">3</span>所属项目</span><Checkbox.Group value={projects} onChange={v => setProjects(v as string[])} options={st.projects.map(p => ({ value: p.id, label: p.name }))} /></div>
+        <div className="field"><span className="label"><span className="step">3</span>所属</span><Select value={level ?? ''} onChange={v => setLevel(v || null)} options={[{ value: '', label: '团队' }, ...st.projects.map(p => ({ value: p.id, label: p.name }))]} /></div>
       </>}
     </div>
   </Drawer>;

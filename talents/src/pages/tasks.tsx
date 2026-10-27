@@ -5,7 +5,7 @@ import { PlusOutlined, StarOutlined } from '@ant-design/icons';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
 import type { Capability, Session, TalentsState, Task } from '../types.ts';
-import { artifact, basisOf, capability, changesSince, memberName, session, source, task, taskName } from '../demo/model.ts';
+import { artifact, basisOf, capability, changesSince, levelName, levelSessions, levelSources, memberName, project, session, source, task, taskName } from '../demo/model.ts';
 import { existingArtifact, runPlan, runProgress, startRun } from '../demo/runs.ts';
 import { askICode } from '../demo/ask-icode.ts';
 import { now, tokens, uid, versionLabel, when } from '../demo/format.ts';
@@ -118,25 +118,26 @@ function TaskDetail({ id, onClose, onRun }: { id: string; onClose(): void; onRun
 }
 
 // ---------- Selection dialogs ----------
-function SessionPicker({ initial, onDone, onClose }: { initial: string[]; onDone(ids: string[]): void; onClose(): void }) {
+function SessionPicker({ level, initial, onDone, onClose }: { level: string | null; initial: string[]; onDone(ids: string[]): void; onClose(): void }) {
   const { state: st } = useTalents();
+  const all = levelSessions(st, level);
   const [selected, setSelected] = useState(() => new Set(initial));
-  const [q, setQ] = useState(''), [member, setMember] = useState('all'), [prompt, setPrompt] = useState('');
+  const [q, setQ] = useState(''), [member, setMember] = useState('all'), [inProject, setInProject] = useState('all'), [prompt, setPrompt] = useState('');
   const [ai, setAi] = useState<{ ids: string[]; answer: string } | null>(null), [busy, setBusy] = useState(false);
   // Example requests follow the Teams data: a member who shared sessions, other than the person viewing.
-  const sharer = st.team.members.filter(m => m.id !== st.team.admin && st.sessions.some(s => s.owner === m.id))[1];
+  const sharer = st.team.members.filter(m => m.id !== st.team.admin && all.some(s => s.owner === m.id))[1];
   const examples = ['对话轮次超过 50 的会话', '最近 7 天返现相关的会话', ...(sharer ? [sharer.name + '共享的会话'] : [])];
-  const base = ai ? ai.ids.map(id => session(st, id)!).filter(Boolean) : st.sessions;
-  const visible = base.filter(s => (member === 'all' || s.owner === member) && (!q.trim() || s.title.toLowerCase().includes(q.trim().toLowerCase()) || s.id.includes(q.trim())));
+  const base = ai ? ai.ids.map(id => session(st, id)!).filter(Boolean) : all;
+  const visible = base.filter(s => (member === 'all' || s.owner === member) && (inProject === 'all' || s.projectId === inProject) && (!q.trim() || s.title.toLowerCase().includes(q.trim().toLowerCase()) || s.id.includes(q.trim())));
   const ask = (text: string) => {
     if (!text.trim()) return;
-    setPrompt(text); setBusy(true); setQ(''); setMember('all');
-    setTimeout(() => { setAi(askICode(st, text, st.sessions)); setBusy(false); }, 1400 + Math.random() * 800);
+    setPrompt(text); setBusy(true); setQ(''); setMember('all'); setInProject('all');
+    setTimeout(() => { setAi(askICode(st, text, all)); setBusy(false); }, 1400 + Math.random() * 800);
   };
   const toggle = (ids: string[], on: boolean) => setSelected(prev => { const next = new Set(prev); ids.forEach(id => on ? next.add(id) : next.delete(id)); return next; });
   return <Modal open width={1000} title="选择会话" onCancel={onClose} className="picker-modal"
     footer={<div className="drawer-foot"><span className="ui-note">已选 <b>{selected.size}</b> 个会话</span><Button type="link" onClick={() => setSelected(new Set())}>清空</Button><span className="spacer" />
-      <Button onClick={onClose}>取消</Button><Button type="primary" disabled={!selected.size} onClick={() => { onDone(st.sessions.filter(s => selected.has(s.id)).map(s => s.id)); onClose(); }}>确定</Button></div>}>
+      <Button onClick={onClose}>取消</Button><Button type="primary" disabled={!selected.size} onClick={() => { onDone(all.filter(s => selected.has(s.id)).map(s => s.id)); onClose(); }}>确定</Button></div>}>
     <div className="form-body">
       <div className="ai-box"><div className="ai-title"><StarOutlined /> 让 iCode 帮你筛选</div>
         <Space.Compact style={{ width: '100%' }}><Input value={prompt} onChange={e => setPrompt(e.target.value)} onPressEnter={() => ask(prompt)} placeholder="用一句话描述要找的会话" /><Button type="primary" loading={busy} onClick={() => ask(prompt)}>{busy ? '筛选中' : '筛选'}</Button></Space.Compact>
@@ -144,6 +145,7 @@ function SessionPicker({ initial, onDone, onClose }: { initial: string[]; onDone
       </div>
       {ai && !busy && <Alert type="info" className="ai-answer" title={<><b>iCode：</b>{ai.answer}</>} action={<Space>{ai.ids.length > 0 && <Button size="small" onClick={() => toggle(ai.ids, true)}>全部选中</Button>}<Button size="small" type="link" onClick={() => setAi(null)}>显示全部会话</Button></Space>} />}
       <div className="picker-search">
+        {level === null && <Select style={{ width: 160 }} aria-label="项目" value={inProject} onChange={setInProject} options={[{ value: 'all', label: '全部项目' }, ...st.projects.map(p => ({ value: p.id, label: p.name }))]} />}
         <Select showSearch optionFilterProp="label" style={{ width: 140 }} aria-label="成员" value={member} onChange={setMember} options={[{ value: 'all', label: '全部成员' }, ...st.team.members.map(m => ({ value: m.id, label: m.name }))]} />
         <Input.Search allowClear value={q} onChange={e => setQ(e.target.value)} placeholder="搜索会话名称或 ID" />
       </div>
@@ -153,6 +155,7 @@ function SessionPicker({ initial, onDone, onClose }: { initial: string[]; onDone
         onRow={s => ({ onClick: () => toggle([s.id], !selected.has(s.id)), className: 'row-click' })}
         columns={[
           { title: '名称', dataIndex: 'title' },
+          ...(level === null ? [{ title: '项目', width: 130, ellipsis: true, render: (_: unknown, s: Session) => project(st, s.projectId)?.name ?? s.projectId }] : []),
           { title: '成员', width: 90, render: (_, s) => memberName(st, s.owner, s.ownerName) },
           { title: '最后更新', width: 110, render: (_, s) => when(s.updated) },
           { title: '对话轮次', dataIndex: 'turns', align: 'right', width: 90 },
@@ -192,6 +195,8 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
   const presetSource = source(st, fromArtifact ? fromArtifact.sources[0] : preset.source);
   const [capId, setCapId] = useState(fromArtifact?.cap ?? preset.cap ?? (presetSource ? (presetSource.type === 'repo' ? 'miner-pr' : 'doc-extract') : 'traj'));
   const [chosen, setChosen] = useState<string | null>(presetSource?.id ?? null);
+  // The level the task belongs to: that of the artifact or source it starts from, else the project the user came for.
+  const [level, setLevel] = useState<string | null>(fromArtifact ? fromArtifact.projectId : presetSource ? presetSource.projectId ?? null : focusProject ?? st.projects[0]?.id ?? null);
   const [prs, setPrs] = useState<number[]>([]), [sessions, setSessions] = useState<string[]>([]);
   const [schedule, setSchedule] = useState<'now' | 'once' | 'daily'>('now'), [mode, setMode] = useState<'update' | 'build'>('update');
   const [at, setAt] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10) + 'T09:00'), [time, setTime] = useState('02:00'), [skip, setSkip] = useState(true);
@@ -201,29 +206,28 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
   const [scenario, setScenario] = useState(''), [snippets, setSnippets] = useState('');
   const [picking, setPicking] = useState<'sessions' | 'prs' | null>(null);
 
-  const repos = st.sources.filter(s => s.type === 'repo');
-  const pool = cap.input === 'docs' ? st.sources.filter(s => s.type === 'docs') : cap.input === 'repo+pr' ? repos.filter(s => s.prs) : repos;
-  // Prefer a source of the project the user came for.
-  const focus = st.projects.find(p => p.id === focusProject);
-  const src = cap.input === 'sessions' ? 's-sessions' : pool.some(s => s.id === chosen) ? chosen : (pool.find(s => focus?.sourceIds.includes(s.id)) ?? pool[0])?.id ?? null;
+  const own = levelSources(st, level), repos = own.filter(s => s.type === 'repo');
+  const pool = cap.input === 'docs' ? own.filter(s => s.type === 'docs') : cap.input === 'repo+pr' ? repos.filter(s => s.prs) : repos;
+  const src = cap.input === 'sessions' ? 's-sessions' : pool.some(s => s.id === chosen) ? chosen : pool[0]?.id ?? null;
   // Update vs rebuild: only when the capability declares an update and this input already has knowledge.
   const modeInfo = (() => {
     if (!cap.update || !src || cap.input === 'sessions') return null;
-    const a = existingArtifact(st, { cap: capId, sources: [src] }), basis = a && basisOf(a);
+    const a = existingArtifact(st, { projectId: level, cap: capId, sources: [src] }), basis = a && basisOf(a);
     return basis ? { artifact: a!, changes: changesSince(source(st, src), basis) } : null;
   })();
 
-  let ok = !!src, hint = '';
+  let ok = !!src, hint = src ? '' : levelName(st, level) + '还没有' + (cap.input === 'docs' ? '文档集' : cap.input === 'repo+pr' ? '有 PR 记录的代码仓' : '代码仓');
   if (modeInfo && mode === 'update' && schedule !== 'daily' && modeInfo.changes && !modeInfo.changes.count) { ok = false; hint = '来源没有变化，无需更新'; }
   if (cap.input === 'sessions') { ok = sessions.length > 0; hint = ok ? '' : '请选择会话'; }
-  if (cap.input === 'repo+pr') { ok = ok && prs.length > 0; hint = ok ? '' : '请选择 PR'; }
-  if (cap.input === 'repo+snippet') { ok = ok && !!scenario.trim() && !!snippets.trim(); hint = ok ? '' : '请填写场景和代码片段'; }
+  if (cap.input === 'repo+pr' && src) { ok = prs.length > 0; hint = ok ? '' : '请选择 PR'; }
+  if (cap.input === 'repo+snippet' && src) { ok = !!scenario.trim() && !!snippets.trim(); hint = ok ? '' : '请填写场景和代码片段'; }
 
   const changeCap = (id: string) => { setCapId(id); setPrs([]); setPrompt(capability(st, id).prompt ?? ''); };
+  const changeLevel = (id: string | null) => { setLevel(id); setChosen(null); setPrs([]); setSessions([]); };
   const submit = () => {
     const id = uid('t');
     const t: Task = {
-      id, name: name.trim(), cap: capId, sources: [src!], created: now(), status: 'idle',
+      id, projectId: level, name: name.trim(), cap: capId, sources: [src!], created: now(), status: 'idle',
       mode: modeInfo ? mode : 'build', prompt: cap.skill ? prompt : undefined,
       schedule: schedule === 'daily' ? { kind: 'daily', time: time || '02:00' } : schedule === 'once' ? { kind: 'once', at } : { kind: 'now' },
     };
@@ -243,6 +247,9 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
   return <Drawer open width={560} title="新建任务" onClose={onClose}
     footer={<div className="drawer-foot"><span className="ui-note">{hint}</span><span className="spacer" /><Button onClick={onClose}>取消</Button><Button type="primary" disabled={!ok} onClick={submit}>{schedule === 'now' ? '创建并运行' : '创建'}</Button></div>}>
     <div className="form-body">
+      <div className="field"><span className="label">所属</span>
+        <Select value={level ?? ''} onChange={v => changeLevel(v || null)} options={[{ value: '', label: '团队' }, ...st.projects.map(p => ({ value: p.id, label: p.name }))]} />
+        <span className="caption">任务只能使用{level ? '这个项目' : '团队级'}的来源，产出的知识也归属{level ? '这个项目' : '团队'}。</span></div>
       <div className="field"><span className="label">能力</span>
         <Select value={capId} onChange={changeCap} options={st.categories.map(c => ({ label: c.name, title: c.name, options: st.capabilities.filter(x => x.cat === c.id).map(x => ({ value: x.id, label: x.name })) }))} />
         <span className="caption">{cap.desc}</span></div>
@@ -275,7 +282,7 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
         <div className="field"><span className="label">提示词</span><Input.TextArea rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} /></div>
       </div> }]} />}
     </div>
-    {picking === 'sessions' && <SessionPicker initial={sessions} onDone={setSessions} onClose={() => setPicking(null)} />}
+    {picking === 'sessions' && <SessionPicker level={level} initial={sessions} onDone={setSessions} onClose={() => setPicking(null)} />}
     {picking === 'prs' && src && <PrPicker repoId={src} initial={prs} onDone={setPrs} onClose={() => setPicking(null)} />}
   </Drawer>;
 }

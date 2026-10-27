@@ -62,7 +62,7 @@ try {
   await page.locator('.diff-line.add').first().waitFor({ timeout: 5000 });
   await page.locator('.wb .page-header').getByRole('button', { name: /^发\s?布$/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: /^发\s?布$/ }).click();
-  await page.getByText(/已发布 v1 到团队空间/).waitFor();
+  await page.getByText(/已发布 v1 到信用卡营销交付/).waitFor();
 
   // 开发者端: the new knowledge is there to apply.
   await page.locator('.compact-role-switch').click();

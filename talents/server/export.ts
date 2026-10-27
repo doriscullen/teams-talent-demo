@@ -38,10 +38,10 @@ export function buildExport(state: TalentsState, dir = contentDir, exportedAt = 
     }
     files.set(a.id + '/v' + p.version, list);
     artifacts.push({
-      id: a.id, projectId: p.project, name: a.name, description: a.desc,
+      id: a.id, projectId: a.projectId, name: a.name, description: a.desc,
       capability: a.cap, capabilityName: cap?.name ?? a.cap, category: cap?.cat ?? '',
       kind: a.kind, version: p.version, publishedAt: p.at, note: p.note, delivery: p.delivery,
-      ...(a.stats ? { stats: a.stats } : {}),
+      ...(a.stats ? { stats: a.stats } : {}), ...(p.agents ? { agents: p.agents } : {}),
       files: list.map(f => ({ path: f.path, title: fileLabel(f.path), type: fileType(f.path) })),
     });
   }

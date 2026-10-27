@@ -2,7 +2,7 @@
 // and what applying to iCode would write on the developer's machine.
 import type { Artifact, Scope, TalentsState } from '../types.ts';
 import { content, skillTree } from '../content.ts';
-import { agent, project, projectRepos, source } from './model.ts';
+import { agent, levelName, projectRepos, source } from './model.ts';
 
 const TALENTS_HOME = '~/.icode-talents';
 const SKILL_DIRS = { chrys: '~/.chrys/skills', agents: '~/.agents/skills' };
@@ -13,6 +13,8 @@ export const isIndex = (a: Artifact) => a.kind === 'index';
 export const kind = (a: Artifact) => a.kind === 'index' ? 'mcp' : a.cap === 'traj' ? 'memory' : 'skill';
 export const kindLabel = { mcp: '在线查询（MCP）', skill: 'Skill', memory: '经验规则' };
 export const deliveryLabel = { local: '同步到本地', cloud: '云端查询' };
+/** The agents published knowledge is meant for (Published.agents). */
+export const audienceText = (st: TalentsState, agents?: string[]) => agents ? agents.map(id => agent(st, id)?.name ?? id).join('、') : '全部智能体';
 export function status(a: Artifact) {
   if (a.published && a.draft) return 'update';
   if (a.published) return 'published';
@@ -97,10 +99,9 @@ export function rules(a: Artifact) {
   const body = content('trajectory/' + a.topic + '/改进建议.md') ?? '';
   return [...body.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map(m => m[1]);
 }
-/** Local clones of this artifact's project code repositories. */
+/** Local clones of this artifact's project code repositories; none for team-level knowledge. */
 export function localRepos(st: TalentsState, a: Artifact) {
-  const pid = a.published?.project;
-  const repoIds = pid ? projectRepos(st, pid).map(r => r.id) : [];
+  const repoIds = a.projectId ? projectRepos(st, a.projectId).map(r => r.id) : [];
   return st.dev.local.filter(l => l.type === 'repo' && l.repo && repoIds.includes(l.repo));
 }
 /** Why a scope kind is unavailable for this artifact; empty when it can be chosen. */
@@ -143,15 +144,14 @@ function specLines(a: Artifact) {
 }
 export interface FileChange { path: string; verb: '新增' | '更新'; lines: string[] }
 /** The files applying the artifact with this scope writes; lines starting with + are added. */
-export function changes(st: TalentsState, a: Artifact, scope: Scope, focusProject: string | null): FileChange[] {
+export function changes(st: TalentsState, a: Artifact, scope: Scope): FileChange[] {
   const out = new Map<string, FileChange>();
   const add = (path: string, verb: FileChange['verb'], lines: string[] = []) => {
     const f = out.get(path) ?? { path, verb, lines: [] };
     f.lines = f.lines.concat(lines);
     out.set(path, f);
   };
-  const pid = a.published ? a.published.project : focusProject, p = project(st, pid);
-  let knowledgeDir = TALENTS_HOME + '/knowledge/' + (p ? p.name : pid) + '/' + (a.folder ?? '') + '/';
+  let knowledgeDir = TALENTS_HOME + '/knowledge/' + levelName(st, a.projectId) + '/' + (a.folder ?? '') + '/';
   const cloud = !a.published || a.published.delivery === 'cloud' || isIndex(a);
   const agents = scope.kind === 'agent' ? scope.agents : st.agents.map(g => g.id);
   const k = kind(a);

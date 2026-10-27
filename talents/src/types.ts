@@ -7,11 +7,12 @@ export type Role = 'admin' | 'dev';
 
 export interface Member { id: string; name: string; role: 'owner' | 'member'; status?: string; title: string }
 export interface Team { name: string; admin: string; me: string; members: Member[] }
-export interface Project { id: string; name: string; description?: string; sourceIds: string[] }
+export interface Project { id: string; name: string; description?: string }
 
 export interface Source {
   id: string; type: 'repo' | 'docs' | 'sessions'; name: string; path: string; desc?: string;
-  fromTeams?: boolean; projectId?: string; auto?: boolean;
+  /** The project the source belongs to; null for a team-level source. The sessions pseudo source has none. */
+  fromTeams?: boolean; projectId?: string | null; auto?: boolean;
   branch?: string; origin?: string; commit?: Commit | null; prs?: number;
   files?: number; tree?: DocTreeGroup[]; titles?: Record<string, string>;
   from?: { kind: 'teams' | 'git' | 'shared'; project?: string; origin?: string; branch?: string };
@@ -32,8 +33,9 @@ export interface Capability {
 
 export type Schedule = { kind: 'now' } | { kind: 'once'; at: string } | { kind: 'daily'; time: string };
 export interface RunPlan { seconds: number; steps: string[]; logs: string[] }
+/** Tasks and artifacts belong to a project, or to the team (projectId null); so do the sources they use. */
 export interface Task {
-  id: string; name?: string; cap: string; sources: string[]; sessions?: string[]; prs?: number[];
+  id: string; projectId: string | null; name?: string; cap: string; sources: string[]; sessions?: string[]; prs?: number[];
   created?: string; status: 'idle' | 'running' | 'success' | 'failed';
   mode?: 'update' | 'build'; input?: { from: string; to: string }; schedule: Schedule; skipUnchanged?: boolean;
   prompt?: string; agent?: string;
@@ -46,11 +48,13 @@ export interface Basis { version?: string; commit?: string }
 export interface Revision { kind: 'chat' | 'manual'; file: string; text: string; prompt?: string; summary?: string; at: string }
 export interface Draft { created: string; task?: string; revisions: Revision[]; basis: Basis | null }
 export interface Published {
-  version: number; at: string; note: string; delivery: 'local' | 'cloud'; project: string;
+  version: number; at: string; note: string; delivery: 'local' | 'cloud';
+  /** Ids of the agents the knowledge is meant for; absent: every agent. */
+  agents?: string[];
   files?: string[]; specs?: string[]; over?: Record<string, Over>; basis?: Basis | null; auto?: boolean;
 }
 export interface Artifact {
-  id: string; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files';
+  id: string; projectId: string | null; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files';
   files?: string[]; specs?: string[]; stats?: [string, string][]; folder?: string; skills?: string[]; usage?: string; mcpName?: string;
   sessions?: string[]; topic?: string; skillPatch?: string;
   published: Published | null; draft: Draft | null;

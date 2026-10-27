@@ -11,7 +11,8 @@ import * as K from '../demo/knowledge.ts';
 import { CapIcon, CardGrid, EmptyState, ItemCard, Section } from '../components/ui.tsx';
 import { ArtifactPreview, ChangeList } from '../components/files.tsx';
 
-const visible = (st: TalentsState, pid: string) => st.artifacts.filter(a => a.published?.project === pid);
+/** Published knowledge of the project, and team-level knowledge, which every project uses. */
+const visible = (st: TalentsState, pid: string) => st.artifacts.filter(a => a.published && (a.projectId === pid || a.projectId === null));
 function applyState(st: TalentsState, a: Artifact) {
   const ap = st.dev.applied[a.id];
   if (!ap) return 'none';
@@ -83,14 +84,14 @@ export function DevKnowledge() {
     {previewed && <ArtifactPreview st={st} a={previewed} onClose={() => setPreview(null)} />}
     {changed && st.dev.applied[changed.id] && <Modal open footer={null} width={760} onCancel={() => setChanges(null)} title={<div><div className="caption">{changed.name}</div>应用到本机 iCode 的改动</div>}>
       <div className="form-body"><div className="apply-summary">{K.sentence(st, changed, st.dev.applied[changed.id].scope)}</div>
-        <ChangeList changes={K.changes(st, changed, st.dev.applied[changed.id].scope, focusProject)} /></div>
+        <ChangeList changes={K.changes(st, changed, st.dev.applied[changed.id].scope)} /></div>
     </Modal>}
     {scoped && st.dev.applied[scoped.id] && <ScopeDialog a={scoped} onClose={() => setScoping(null)} />}
   </div>;
 }
 
 function ScopeDialog({ a, onClose }: { a: Artifact; onClose(): void }) {
-  const { state: st, update, toast, focusProject } = useTalents();
+  const { state: st, update, toast } = useTalents();
   const current = st.dev.applied[a.id].scope;
   const [kind, setKind] = useState<Scope['kind']>(current.kind);
   const [repos, setRepos] = useState(current.kind === 'repo' ? current.repos : K.localRepos(st, a).map(r => r.repo!));
@@ -115,7 +116,7 @@ function ScopeDialog({ a, onClose }: { a: Artifact; onClose(): void }) {
       {valid ? <>
         <div className="apply-summary">{K.sentence(st, a, scope)}</div>
         {kind === 'repo' && K.kind(a) !== 'mcp' && <p className="caption">需在 iCode 设置中开启“加载项目 Skills”。</p>}
-        <Collapse size="small" items={[{ key: 'c', label: '查看具体改动', children: <ChangeList changes={K.changes(st, a, scope, focusProject)} /> }]} />
+        <Collapse size="small" items={[{ key: 'c', label: '查看具体改动', children: <ChangeList changes={K.changes(st, a, scope)} /> }]} />
       </> : <p className="hint">请至少选择一项。</p>}
     </div>
   </Modal>;

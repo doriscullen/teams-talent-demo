@@ -29,6 +29,9 @@
           "152,883"
         ]
       ],
+      "agents": [
+        "Code"
+      ],
       "files": []
     },
     {
@@ -57,6 +60,9 @@
           "向量维度",
           "1,024"
         ]
+      ],
+      "agents": [
+        "Code"
       ],
       "files": []
     },
@@ -98,7 +104,7 @@
     },
     {
       "id": "a-std",
-      "projectId": "carddemo",
+      "projectId": null,
       "name": "银行编码规范要点",
       "description": "分层、建模、接口与安全约定，以及五类检查规则。",
       "capability": "doc-extract",
@@ -109,6 +115,10 @@
       "publishedAt": "2026-10-18 14:02",
       "note": "首次发布",
       "delivery": "local",
+      "agents": [
+        "Code",
+        "Reviewer"
+      ],
       "files": [
         {
           "path": "doc-knowledge/银行编码规范要点.md",

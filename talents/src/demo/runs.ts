@@ -7,9 +7,10 @@ import { basisOf, capability, changesSince, latestVersion, minerFiles, session, 
 
 const sameSet = (x?: string[], y?: string[]) => !!x && !!y && x.length === y.length && x.every(v => y.includes(v));
 
-/** The artifact a run of this task would build or update (same capability on the same input). */
-export function existingArtifact(st: TalentsState, t: Pick<Task, 'cap' | 'sources' | 'sessions'>) {
+/** The artifact a run of this task would build or update (same level, same capability on the same input). */
+export function existingArtifact(st: TalentsState, t: Pick<Task, 'projectId' | 'cap' | 'sources' | 'sessions'>) {
   return st.artifacts.find(x => {
+    if (x.projectId !== t.projectId) return false;
     if (x.cap !== t.cap && !(t.cap === 'miner-diff' && x.cap === 'miner-pr')) return false;
     if (t.cap === 'traj') return sameSet(x.sessions, t.sessions);
     return x.sources[0] === t.sources[0];
@@ -132,7 +133,7 @@ function autoPublish(st: TalentsState, a: Artifact, t: Task) {
   const c = t.mode === 'update' && t.input ? changesSince(src, src?.type === 'docs' ? { version: t.input.from } : { commit: t.input.from }) : null;
   t.unchanged = !!(c && !c.count);
   if (!t.unchanged) {
-    a.published = { version: p.version + 1, at: now(), delivery: p.delivery, project: p.project, basis: a.draft!.basis, auto: true,
+    a.published = { version: p.version + 1, at: now(), delivery: p.delivery, agents: p.agents, basis: a.draft!.basis, auto: true,
       note: c ? (src?.type === 'docs' ? '同步文档变化：' : '同步代码变化：') + c.text : '重新构建' };
   }
   a.draft = null;
@@ -156,7 +157,7 @@ export function produce(st: TalentsState, t: Task): Artifact {
     return a;
   }
   const src = source(st, t.sources[0])!;
-  a = { id: uid('a'), cap: cap.id, sources: t.sources.slice(), published: null, draft, name: '', desc: '', kind: 'files' };
+  a = { id: uid('a'), projectId: t.projectId, cap: cap.id, sources: t.sources.slice(), published: null, draft, name: '', desc: '', kind: 'files' };
   if (t.cap === 'traj') {
     const ids = t.sessions ?? [];
     const topic = trajTopic(st, ids), tp = st.trajTopics[topic];

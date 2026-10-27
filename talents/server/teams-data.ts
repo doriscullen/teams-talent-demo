@@ -92,7 +92,7 @@ export function teamsModel(snapshot: TeamsSnapshot, meta: Record<string, SourceM
   return {
     team: { name: snapshot.team.name, admin: owner?.id ?? '', me: me?.id ?? '',
       members: members.map(m => ({ id: m.id, name: m.name, role: m.role, status: m.status, title: m.role === 'owner' ? 'Owner' : '成员' })) },
-    projects: projects.map(p => ({ id: p.id, name: p.name, description: p.description, sourceIds: sources.filter(s => s.projectId === p.id).map(s => s.id) })),
+    projects: projects.map(p => ({ id: p.id, name: p.name, description: p.description })),
     sources,
     sessions: snapshot.sessions.filter(s => visible.has(s.projectId)).map(session),
   };
@@ -101,10 +101,9 @@ export function teamsModel(snapshot: TeamsSnapshot, meta: Record<string, SourceM
 /** The state the front-end works on: Talents state merged with the Teams-derived team, projects, sources and sessions. */
 export function clientState(state: TalentsState, snapshot: TeamsSnapshot) {
   const teams = teamsModel(snapshot, state.sourceMeta);
-  const projects = teams.projects.map(p => ({ ...p, sourceIds: [...p.sourceIds, ...state.localSources.filter(s => s.projectIds.includes(p.id)).map(s => s.id)] }));
   const owned = Object.fromEntries(CLIENT_OWNED_KEYS.map(key => [key, state[key]]));
   const sources: Source[] = [SESSIONS_SOURCE, ...teams.sources, ...state.localSources];
-  return { ...owned, team: teams.team, projects, sources, sessions: teams.sessions };
+  return { ...owned, team: teams.team, projects: teams.projects, sources, sessions: teams.sessions };
 }
 
 /**
@@ -116,7 +115,6 @@ export function ownedState(client: Record<string, any>, previous: TalentsState):
   if (!client || typeof client !== 'object' || !Array.isArray(client.sources) || !Array.isArray(client.projects) || !Array.isArray(client.artifacts) || !Array.isArray(client.tasks)) throw new HttpError('状态格式无效', 400);
   const next = structuredClone(previous);
   for (const key of CLIENT_OWNED_KEYS) if (client[key] !== undefined) (next as any)[key] = client[key];
-  const visible = new Set<string>(client.projects.map((p: { id: string }) => p.id));
   const sourceMeta = { ...previous.sourceMeta }, localSources: LocalSource[] = [];
   for (const s of client.sources as Source[]) {
     if (s.type === 'sessions') continue;
@@ -126,13 +124,8 @@ export function ownedState(client: Record<string, any>, previous: TalentsState):
       sourceMeta[s.id] = meta;
       continue;
     }
-    const before = previous.localSources.find(x => x.id === s.id);
-    const projectIds = [
-      ...client.projects.filter((p: { sourceIds: string[] }) => p.sourceIds.includes(s.id)).map((p: { id: string }) => p.id),
-      ...(before?.projectIds ?? []).filter(id => !visible.has(id)),
-    ];
-    const { fromTeams, projectId, titles, ...rest } = s;
-    localSources.push({ ...(rest as unknown as LocalSource), type: 'docs', projectIds });
+    const { fromTeams, titles, ...rest } = s;
+    localSources.push({ ...(rest as unknown as LocalSource), type: 'docs', projectId: typeof s.projectId === 'string' ? s.projectId : null });
   }
   return { ...next, sourceMeta, localSources };
 }

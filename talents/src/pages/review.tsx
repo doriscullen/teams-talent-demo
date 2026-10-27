@@ -1,10 +1,10 @@
 // 产物审阅：待审阅 / 已发布列表，以及整页的审阅工作台（内容、对比、对话修订、手动编辑、发布）。
 import { useEffect, useRef, useState } from 'react';
-import { Button, Form, Input, Modal, Radio, Segmented, Select, Space } from 'antd';
+import { Button, Checkbox, Form, Input, Modal, Radio, Segmented, Select, Space } from 'antd';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
 import type { Artifact, Basis, TalentsState } from '../types.ts';
-import { artifact, artifactProjects, basisOf, capability, changesSince, source, task, type Changes } from '../demo/model.ts';
+import { artifact, basisOf, capability, changesSince, levelName, source, task, type Changes } from '../demo/model.ts';
 import { hashId, now, versionLabel, when } from '../demo/format.ts';
 import * as K from '../demo/knowledge.ts';
 import { ArtifactStatus, CapIcon, CardGrid, EmptyState, Fields, FileMark, ItemCard, Section } from '../components/ui.tsx';
@@ -43,7 +43,7 @@ export function Review() {
   };
   const pending = st.artifacts.filter(a => a.draft), done = st.artifacts.filter(a => !a.draft);
   return <div className="page-stack">
-    <PageHeader title="产物审阅" description="审阅知识任务的产出，修订满意后发布到团队空间。开发者只能看到已发布的内容。" />
+    <PageHeader title="产物审阅" description="审阅知识任务的产出，修订满意后发布。开发者只能看到已发布的内容。" />
     <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
     {done.length > 0 && <Section title="已发布" note={done.length + ' 个'}><CardGrid>{done.map(card)}</CardGrid></Section>}
   </div>;
@@ -173,7 +173,8 @@ function PublishedSide({ st, a }: { st: TalentsState; a: Artifact }) {
   const { go } = useTalents();
   const p = a.published!, stale = staleChanges(st, a);
   return <><h3>已发布</h3>
-    <Fields rows={[['版本', 'v' + p.version], ['发布于', p.at], basisRow(st, a, p.basis), ['交付方式', K.deliveryLabel[p.delivery]], ['更新说明', p.note]]} />
+    <Fields rows={[['版本', 'v' + p.version], ['发布于', p.at], ['发布到', levelName(st, a.projectId)], basisRow(st, a, p.basis), ['交付方式', K.deliveryLabel[p.delivery]],
+      ['适用智能体', K.audienceText(st, p.agents)], ['更新说明', p.note]]} />
     {stale ? <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go('#/tasks?new=1&from=' + a.id)}>重新提取</Button></div></>
       : <p className="caption">{K.isIndex(a) ? '对应的知识任务运行后会自动发布新版本。' : '重新运行对应的知识任务后，新版本会出现在“待审阅”。'}</p>}
   </>;
@@ -184,8 +185,9 @@ function docNote(st: TalentsState, a: Artifact) {
   const c = changesSince(source(st, a.sources[0]), a.published?.basis);
   return c && c.count ? '根据文档变化更新：' + c.text : '更新业务知识';
 }
+interface PublishValues { delivery: 'local' | 'cloud'; audience: 'all' | 'some'; agents?: string[]; note: string }
 function PublishDialog({ a, onClose }: { a: Artifact; onClose(): void }) {
-  const { state: st, update, toast, focusProject } = useTalents();
+  const { state: st, update, toast } = useTalents();
   const [busy, setBusy] = useState(false);
   const index = K.isIndex(a), draft = a.draft!;
   const notes = [...new Set(draft.revisions.map(r => r.summary ?? '修订「' + K.fileLabel(r.file) + '」'))];
@@ -193,33 +195,41 @@ function PublishDialog({ a, onClose }: { a: Artifact; onClose(): void }) {
   const defNote = published ? (a.folder === 'miner' && (a.specs ?? []).length > (published.specs ?? []).length
     ? '新增范式「' + (a.specs ?? []).filter(n => !(published.specs ?? []).includes(n)).join('」「') + '」'
     : a.cap === 'doc-extract' ? docNote(st, a) + (notes.length ? '；' + notes.join('；') : '') : '更新内容') : '首次发布';
-  // Publish to the project it was published to before, else the project the user came for, else the source's project.
-  const target = published ? published.project : (focusProject ?? (artifactProjects(st, a)[0] ?? st.projects[0])?.id);
-  const [form] = Form.useForm<{ project: string; delivery: 'local' | 'cloud'; note: string }>();
-  const submit = (v: { project: string; delivery: 'local' | 'cloud'; note: string }) => {
+  const where = levelName(st, a.projectId);
+  // Agents: as last published; indexes are queried by the Code Agent unless the admin says otherwise.
+  const agents = published ? published.agents : index ? ['Code'] : undefined;
+  const [form] = Form.useForm<PublishValues>();
+  const audience = Form.useWatch('audience', form);
+  const submit = (v: PublishValues) => {
     setBusy(true);
     setTimeout(() => {
       const version = update(d => {
         const x = artifact(d, a.id)!, revs = x.draft!.revisions;
         const over: Record<string, { text: string }> = {};
         (x.files ?? []).forEach(key => { if (revs.some(r => r.file === key)) over[key] = { text: K.text(x, 'current', key) ?? '' }; });
-        x.published = { version: (x.published?.version ?? 0) + 1, at: now(), note: v.note.trim() || '更新内容', delivery: v.delivery, project: v.project,
-          files: (x.files ?? []).slice(), specs: x.specs?.slice(), over, basis: x.draft!.basis ?? null };
+        x.published = { version: (x.published?.version ?? 0) + 1, at: now(), note: v.note.trim() || '更新内容', delivery: v.delivery,
+          ...(v.audience === 'some' ? { agents: st.agents.map(g => g.id).filter(id => v.agents!.includes(id)) } : {}), files: (x.files ?? []).slice(), specs: x.specs?.slice(), over, basis: x.draft!.basis ?? null };
         x.draft = null;
         return x.published.version;
       });
-      onClose(); toast('已发布 v' + version + ' 到团队空间');
+      onClose(); toast('已发布 v' + version + ' 到' + where);
     }, 800);
   };
-  return <Modal open title={<div><div className="caption">{a.name}</div>发布到团队空间</div>} okText="发布" cancelText="取消" confirmLoading={busy} onOk={() => form.submit()} onCancel={onClose}>
-    <Form form={form} layout="vertical" onFinish={submit} initialValues={{ project: target, delivery: published ? published.delivery : index ? 'cloud' : 'local', note: defNote }}>
-      <Form.Item name="project" label="发布到" extra="该项目的成员可以在开发者端看到并应用。"><Select options={st.projects.map(p => ({ value: p.id, label: p.name }))} /></Form.Item>
+  return <Modal open title={<div><div className="caption">{a.name}</div>发布到{where}</div>} okText="发布" cancelText="取消" confirmLoading={busy} onOk={() => form.submit()} onCancel={onClose}>
+    <p className="caption">{a.projectId ? '项目成员可以在开发者端看到并应用。' : '团队知识在每个项目中都可用，所有成员都可以在开发者端看到并应用。'}</p>
+    <Form form={form} layout="vertical" onFinish={submit} initialValues={{ delivery: published ? published.delivery : index ? 'cloud' : 'local', audience: agents ? 'some' : 'all', agents: agents ?? [], note: defNote }}>
       <Form.Item name="delivery" label="交付方式">
         <Radio.Group className="option-list">
           <Radio value="local" disabled={index}><b>同步到本地</b><span className="caption">{index ? '索引需要在线查询，不能同步到本地' : '适合小而常用的知识，开发者本机保存一份'}</span></Radio>
           <Radio value="cloud"><b>云端查询</b><span className="caption">适合大而常变的知识，开发者的 iCode 在线查询</span></Radio>
         </Radio.Group>
       </Form.Item>
+      <Form.Item name="audience" label="适用智能体" extra={audience === 'some' ? undefined : '开发者一键应用时，默认应用到这些智能体。'}>
+        <Radio.Group options={[{ value: 'all', label: '全部智能体' }, { value: 'some', label: '指定智能体' }]} />
+      </Form.Item>
+      {audience === 'some' && <Form.Item name="agents" extra="开发者一键应用时，默认应用到这些智能体。" rules={[{ required: true, message: '请至少选择一个智能体' }]}>
+        <Checkbox.Group options={st.agents.map(g => ({ value: g.id, label: g.name }))} />
+      </Form.Item>}
       <Form.Item name="note" label="更新说明" extra="开发者更新时会看到这段说明。"><Input.TextArea rows={2} /></Form.Item>
     </Form>
   </Modal>;

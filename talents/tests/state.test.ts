@@ -40,15 +40,16 @@ test('saving keeps Talents metadata about Teams sources (document check, new ver
   assert.equal(saved.sourceMeta[DOCSET_ID].versions!.length, 3);
 });
 
-test('a registered local document source is stored with the projects it joined', () => {
-  const saved = roundTrip(client => {
-    client.sources.push({ id: 's-new', type: 'docs', name: '会议纪要', path: '/Volumes/team-share/meeting-notes', files: 3, tree: [], from: { kind: 'shared' }, lastCheck: '2026-10-27 09:00', versions: [{ at: '2026-10-27 09:00', initial: 3 }] });
-    client.projects.find((p: any) => p.id === 'carddemo').sourceIds.push('s-new');
-  });
-  const local = saved.localSources.find(s => s.id === 's-new')!;
-  assert.deepEqual(local.projectIds, ['carddemo']);
-  assert.equal(local.name, '会议纪要');
-  assert.ok(!('fromTeams' in local));
+test('a registered local document source is stored with the project it was registered in, or at team level', () => {
+  const registered = (id: string, projectId?: string | null) => ({ id, type: 'docs', name: '会议纪要', path: '/Volumes/team-share/meeting-notes', files: 3, tree: [],
+    from: { kind: 'shared' }, lastCheck: '2026-10-27 09:00', versions: [{ at: '2026-10-27 09:00', initial: 3 }], ...(projectId === undefined ? {} : { projectId }) });
+  const saved = roundTrip(client => { client.sources.push(registered('s-project', 'carddemo'), registered('s-team', null), registered('s-unset')); });
+  const local = (id: string) => saved.localSources.find(s => s.id === id)!;
+  assert.equal(local('s-project').projectId, 'carddemo');
+  assert.equal(local('s-project').name, '会议纪要');
+  assert.ok(!('fromTeams' in local('s-project')));
+  assert.equal(local('s-team').projectId, null);
+  assert.equal(local('s-unset').projectId, null);
 });
 
 test('Talents-owned fields (tasks, artifacts, developer machine) are kept', () => {

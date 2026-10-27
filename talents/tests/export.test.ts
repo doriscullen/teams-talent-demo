@@ -9,10 +9,13 @@ import { seedState } from '../server/seed.ts';
 
 test('exports only published artifacts, at their published version', () => {
   const state = seedState();
-  state.artifacts.push({ id: 'a-draft', cap: 'traj', name: '草稿', desc: '', sources: ['s-sessions'], kind: 'files', files: ['trajectory/platinum/改进建议.md'], published: null, draft: { created: '2026-10-27 09:00', revisions: [] } });
+  state.artifacts.push({ id: 'a-draft', projectId: 'carddemo', cap: 'traj', name: '草稿', desc: '', sources: ['s-sessions'], kind: 'files', files: ['trajectory/platinum/改进建议.md'], published: null, draft: { created: '2026-10-27 09:00', revisions: [] } });
   const { knowledge } = buildExport(state);
   assert.deepEqual(knowledge.artifacts.map(a => [a.id, a.version]), [['a-cg-java', 3], ['a-docidx', 2], ['a-biz', 1], ['a-std', 1], ['a-miner', 2]]);
-  assert.ok(knowledge.artifacts.every(a => a.projectId === 'carddemo'));
+  // The coding standards are team-level knowledge; the rest belongs to the project.
+  assert.deepEqual(knowledge.artifacts.map(a => a.projectId), ['carddemo', 'carddemo', 'carddemo', null, 'carddemo']);
+  assert.deepEqual(knowledge.artifacts.find(a => a.id === 'a-std')!.agents, ['Code', 'Reviewer']);
+  assert.ok(!('agents' in knowledge.artifacts.find(a => a.id === 'a-biz')!), 'knowledge meant for every agent lists none');
   const biz = knowledge.artifacts.find(a => a.id === 'a-biz')!;
   assert.equal(biz.capabilityName, '业务知识提取');
   assert.equal(biz.delivery, 'local');

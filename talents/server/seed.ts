@@ -6,7 +6,7 @@ import { minerFiles } from './content.ts';
 import type { TalentsState } from './model.ts';
 
 /** Bump when the seed changes shape or content; a stored state from another seed version is replaced. */
-export const SEED_VERSION = 8;
+export const SEED_VERSION = 9;
 
 export const PROJECT_ID = 'carddemo';
 /** Source ids derived from the Teams snapshot (see teams-data.ts): repository id, and one document set per project. */
@@ -48,10 +48,10 @@ export function seedState(): TalentsState {
       { id: 'QA', name: 'Q&A Agent' },
       { id: 'Reviewer', name: '代码评审助手' },
     ],
-    // The only source Talents owns: a local document directory registered here.
+    // The only source Talents owns: a local document directory, registered at team level.
     localSources: [
       { id: STD_ID, type: 'docs', name: '银行开发规范', path: '/Volumes/team-share/standards/bank-dev', files: 10, desc: '行内 Java 开发、安全、数据库与接口规范',
-        from: { kind: 'shared' }, lastCheck: '2026-10-26 02:30', projectIds: [PROJECT_ID],
+        from: { kind: 'shared' }, lastCheck: '2026-10-26 02:30', projectId: null,
         versions: [
           { at: '2026-10-22 16:40', added: ['密码与密钥管理规范.md'], modified: ['安全编码指南.md'] },
           { at: '2026-10-12 10:00', initial: 9 },
@@ -92,32 +92,32 @@ export function seedState(): TalentsState {
         prompt: '诊断所选会话中 Agent 的过程错误，给出可复用的改进建议。' },
     ],
     tasks: [
-      { id: 't-cg-java', name: '', cap: 'codegraph', sources: [REPO_ID], schedule: { kind: 'daily', time: '02:00' }, mode: 'update', skipUnchanged: true, input: { from: 'b81d3e9', to: '4e1b7c2' }, status: 'success', lastRun: '2026-10-26 02:00', duration: '12 秒', artifact: 'a-cg-java', created: '2026-10-20 10:20' },
-      { id: 't-docidx', name: '', cap: 'doc-index', sources: [DOCSET_ID], schedule: { kind: 'daily', time: '02:30' }, mode: 'update', skipUnchanged: true, input: { from: '2026-10-26 10:00', to: '2026-10-27 09:05' }, status: 'success', lastRun: '2026-10-27 09:10', duration: '18 秒', artifact: 'a-docidx', created: '2026-10-26 10:12' },
-      { id: 't-biz', name: '', cap: 'doc-extract', sources: [DOCSET_ID], mode: 'update', input: { from: '2026-10-26 10:00', to: '2026-10-27 09:05' }, schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 09:31', duration: '6 分 12 秒', artifact: 'a-biz', created: '2026-10-25 22:24' },
-      { id: 't-std', name: '', cap: 'doc-extract', sources: [STD_ID], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-18 11:22', duration: '9 分 05 秒', artifact: 'a-std', created: '2026-10-18 11:13' },
-      { id: 't-miner', name: '', cap: 'miner-pr', sources: [REPO_ID], prs: [12, 19, 23, 29, 35, 41, 47, 52, 58, 61, 63, 66], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-24 17:10', duration: '26 分 41 秒', artifact: 'a-miner', created: '2026-10-24 16:43' },
+      { id: 't-cg-java', projectId: PROJECT_ID, name: '', cap: 'codegraph', sources: [REPO_ID], schedule: { kind: 'daily', time: '02:00' }, mode: 'update', skipUnchanged: true, input: { from: 'b81d3e9', to: '4e1b7c2' }, status: 'success', lastRun: '2026-10-26 02:00', duration: '12 秒', artifact: 'a-cg-java', created: '2026-10-20 10:20' },
+      { id: 't-docidx', projectId: PROJECT_ID, name: '', cap: 'doc-index', sources: [DOCSET_ID], schedule: { kind: 'daily', time: '02:30' }, mode: 'update', skipUnchanged: true, input: { from: '2026-10-26 10:00', to: '2026-10-27 09:05' }, status: 'success', lastRun: '2026-10-27 09:10', duration: '18 秒', artifact: 'a-docidx', created: '2026-10-26 10:12' },
+      { id: 't-biz', projectId: PROJECT_ID, name: '', cap: 'doc-extract', sources: [DOCSET_ID], mode: 'update', input: { from: '2026-10-26 10:00', to: '2026-10-27 09:05' }, schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 09:31', duration: '6 分 12 秒', artifact: 'a-biz', created: '2026-10-25 22:24' },
+      { id: 't-std', projectId: null, name: '', cap: 'doc-extract', sources: [STD_ID], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-18 11:22', duration: '9 分 05 秒', artifact: 'a-std', created: '2026-10-18 11:13' },
+      { id: 't-miner', projectId: PROJECT_ID, name: '', cap: 'miner-pr', sources: [REPO_ID], prs: [12, 19, 23, 29, 35, 41, 47, 52, 58, 61, 63, 66], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-24 17:10', duration: '26 分 41 秒', artifact: 'a-miner', created: '2026-10-24 16:43' },
     ],
     // published: what developers see; draft: the latest run, waiting for review (revisions are added while reviewing).
     // basis: the source state the artifact was built from (a document version, or a commit for code).
     artifacts: [
-      { id: 'a-cg-java', cap: 'codegraph', name: 'carddemo-java-1025 CodeGraph', desc: '查询 carddemo-java-1025 中类、方法的定义与调用关系。', sources: [REPO_ID], kind: 'index',
+      { id: 'a-cg-java', projectId: PROJECT_ID, cap: 'codegraph', name: 'carddemo-java-1025 CodeGraph', desc: '查询 carddemo-java-1025 中类、方法的定义与调用关系。', sources: [REPO_ID], kind: 'index',
         stats: [['文件', '1,284'], ['节点', '41,206'], ['关系', '152,883']], mcpName: 'codegraph',
-        published: { version: 3, at: '2026-10-26 02:05', note: '同步代码变化：3 个新提交', delivery: 'cloud', project: PROJECT_ID, basis: { commit: '4e1b7c2' }, auto: true }, draft: null },
-      { id: 'a-docidx', cap: 'doc-index', name: '信用卡营销交付文档 RAG 检索', desc: '按问题检索信用卡营销交付文档中的相关段落。', sources: [DOCSET_ID], kind: 'index',
+        published: { version: 3, at: '2026-10-26 02:05', note: '同步代码变化：3 个新提交', delivery: 'cloud', agents: ['Code'], basis: { commit: '4e1b7c2' }, auto: true }, draft: null },
+      { id: 'a-docidx', projectId: PROJECT_ID, cap: 'doc-index', name: '信用卡营销交付文档 RAG 检索', desc: '按问题检索信用卡营销交付文档中的相关段落。', sources: [DOCSET_ID], kind: 'index',
         stats: [['文档', '3'], ['片段', '146'], ['向量维度', '1,024']], mcpName: 'docs-rag',
-        published: { version: 2, at: '2026-10-27 09:12', note: '同步文档变化：新增 1', delivery: 'cloud', project: PROJECT_ID, basis: { version: '2026-10-27 09:05' }, auto: true }, draft: null },
-      { id: 'a-biz', cap: 'doc-extract', name: '信用卡营销返现业务知识', desc: '业务规则目录、统一语言术语表和数据字典，每条注明出处。', sources: [DOCSET_ID], kind: 'files', folder: '业务知识',
+        published: { version: 2, at: '2026-10-27 09:12', note: '同步文档变化：新增 1', delivery: 'cloud', agents: ['Code'], basis: { version: '2026-10-27 09:05' }, auto: true }, draft: null },
+      { id: 'a-biz', projectId: PROJECT_ID, cap: 'doc-extract', name: '信用卡营销返现业务知识', desc: '业务规则目录、统一语言术语表和数据字典，每条注明出处。', sources: [DOCSET_ID], kind: 'files', folder: '业务知识',
         files: BIZ_FILES, skills: ['bank-domain-payments'], usage: '涉及返现规则、字段含义、术语或业务流程时先查阅',
-        published: { version: 1, at: '2026-10-26 14:40', note: '首次发布', delivery: 'local', project: PROJECT_ID, files: BIZ_FILES, basis: { version: '2026-10-26 10:00' },
+        published: { version: 1, at: '2026-10-26 14:40', note: '首次发布', delivery: 'local', files: BIZ_FILES, basis: { version: '2026-10-26 10:00' },
           over: { 'doc-knowledge/业务规则目录.md': 'doc-knowledge-v1/业务规则目录.md' } },
         draft: { created: '2026-10-27 09:31', task: 't-biz', revisions: [], basis: { version: '2026-10-27 09:05' } } },
-      { id: 'a-std', cap: 'doc-extract', name: '银行编码规范要点', desc: '分层、建模、接口与安全约定，以及五类检查规则。', sources: [STD_ID], kind: 'files', folder: '编码规范',
+      { id: 'a-std', projectId: null, cap: 'doc-extract', name: '银行编码规范要点', desc: '分层、建模、接口与安全约定，以及五类检查规则。', sources: [STD_ID], kind: 'files', folder: '编码规范',
         files: STD_FILES, skills: ['dev-bank-coding-standards'], usage: '编写或评审代码时对照检查',
-        published: { version: 1, at: '2026-10-18 14:02', note: '首次发布', delivery: 'local', project: PROJECT_ID, files: STD_FILES, basis: { version: '2026-10-12 10:00' } }, draft: null },
-      { id: 'a-miner', cap: 'miner-pr', name: 'carddemo-java-1025 开发范式', desc: '从已合并 PR 总结的实现范式，含步骤、约束和示例代码。', sources: [REPO_ID], kind: 'files', folder: 'miner',
+        published: { version: 1, at: '2026-10-18 14:02', note: '首次发布', delivery: 'local', agents: ['Code', 'Reviewer'], files: STD_FILES, basis: { version: '2026-10-12 10:00' } }, draft: null },
+      { id: 'a-miner', projectId: PROJECT_ID, cap: 'miner-pr', name: 'carddemo-java-1025 开发范式', desc: '从已合并 PR 总结的实现范式，含步骤、约束和示例代码。', sources: [REPO_ID], kind: 'files', folder: 'miner',
         specs: MINER_V2, files: minerFiles(MINER_V2), skills: ['find-reference-spec'], usage: '开发新需求或修改现有功能前，用 find-reference-spec 查找可参考的范式',
-        published: { version: 2, at: '2026-10-24 17:40', note: '新增范式「营销奖励发放」', delivery: 'local', project: PROJECT_ID, specs: MINER_V2, files: minerFiles(MINER_V2) },
+        published: { version: 2, at: '2026-10-24 17:40', note: '新增范式「营销奖励发放」', delivery: 'local', specs: MINER_V2, files: minerFiles(MINER_V2) },
         history: [{ version: 1, specs: MINER_V1 }], draft: null },
     ],
     // Trajectory reports are picked by matching the selected sessions' titles; the first topic is the default.
@@ -129,7 +129,7 @@ export function seedState(): TalentsState {
     dev: {
       applied: {
         'a-cg-java': { version: 3, scope: { kind: 'agent', agents: ['Code'] }, at: '2026-10-20 11:20' },
-        'a-std': { version: 1, scope: { kind: 'global', dir: 'chrys' }, at: '2026-10-18 15:00' },
+        'a-std': { version: 1, scope: { kind: 'agent', agents: ['Code', 'Reviewer'] }, at: '2026-10-18 15:00' },
         'a-miner': { version: 1, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-22 16:30' },
         'a-biz': { version: 1, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-26 15:10' },
       },

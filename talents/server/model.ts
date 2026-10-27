@@ -13,26 +13,30 @@ export interface DocTreeGroup { dir: string; files: string[] }
 export interface LocalSource {
   id: string; type: 'docs'; name: string; path: string; desc?: string; files: number; tree: DocTreeGroup[];
   from: { kind: 'git' | 'shared'; origin?: string; branch?: string }; lastCheck: string; versions: DocVersion[];
-  projectIds: string[];
+  /** The project it was registered in; null when registered at team level. */
+  projectId: string | null;
 }
 
 /** A source as the front-end sees it: Teams-derived (repo / doc set), local, or the team-sessions pseudo source. */
 export interface Source {
   id: string; type: 'repo' | 'docs' | 'sessions'; name: string; path: string; desc?: string;
-  fromTeams?: boolean; projectId?: string;
+  fromTeams?: boolean; projectId?: string | null;
   branch?: string; origin?: string; commit?: Commit | null; prs?: number;
   files?: number; tree?: DocTreeGroup[]; titles?: Record<string, string>; from?: { kind: string; [key: string]: unknown };
-  lastCheck?: string; versions?: DocVersion[]; projectIds?: string[]; auto?: boolean;
+  lastCheck?: string; versions?: DocVersion[]; auto?: boolean;
 }
 
 export type Over = string | { text: string };
 export interface Published {
-  version: number; at: string; note: string; delivery: 'local' | 'cloud'; project: string;
+  version: number; at: string; note: string; delivery: 'local' | 'cloud';
+  /** Ids of the agents the knowledge is meant for; absent: every agent. */
+  agents?: string[];
   files?: string[]; specs?: string[]; over?: Record<string, Over>; basis?: { version?: string; commit?: string } | null; auto?: boolean;
 }
 export interface Draft { created: string; task?: string; revisions: { file: string; text: string; [key: string]: unknown }[]; basis?: unknown }
+/** Tasks and artifacts belong to a project (projectId) or to the team (null), as their sources do. */
 export interface Artifact {
-  id: string; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files';
+  id: string; projectId: string | null; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files';
   files?: string[]; specs?: string[]; stats?: [string, string][]; folder?: string; skills?: string[];
   published: Published | null; draft: Draft | null; [key: string]: unknown;
 }

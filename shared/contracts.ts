@@ -27,10 +27,13 @@ export interface TeamsSnapshot {
 
 export interface PublishedFile { path: string; title: string; type: 'markdown' | 'html' | 'json' | 'text' }
 export interface PublishedArtifact {
-  id: string; projectId: string; name: string; description: string;
+  /** projectId: the project it belongs to; null for team-level knowledge, which every project uses. */
+  id: string; projectId: string | null; name: string; description: string;
   capability: string; capabilityName: string; category: string;
   kind: 'index' | 'files'; version: number; publishedAt: string; note: string;
   delivery: 'local' | 'cloud'; stats?: [string, string][]; files: PublishedFile[];
+  /** Ids of the agents the knowledge is meant for; absent when it is meant for every agent. */
+  agents?: string[];
 }
 export interface TalentsKnowledge { schemaVersion: 1; exportedAt: string; artifacts: PublishedArtifact[] }
 
