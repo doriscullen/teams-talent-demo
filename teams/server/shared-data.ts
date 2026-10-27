@@ -24,7 +24,7 @@ const localMinute = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600
 function cardSkills(fixtures: Presentation): SharedSkill[] {
   const ids = new Set(fixtures.blueprint.skill_groups.flatMap(group => group.skills));
   return fixtures.skillCatalog.filter(skill => ids.has(skill.id)).map(skill => ({ id: skill.id, name: skill.name, version: skill.version,
-    description: skill.description, path: repositoryPath('skills/' + skill.id + '/SKILL.md'), sha256: skill.contentSha256 }));
+    description: skill.description, path: repositoryPath('.agents/skills/' + skill.id + '/SKILL.md'), sha256: skill.contentSha256 }));
 }
 function cardProject(state: DemoState, fixtures: Presentation, catalog: SourcePluginCatalog): SharedProject {
   const project = state.workspace.project;

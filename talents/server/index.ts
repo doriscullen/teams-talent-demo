@@ -10,7 +10,7 @@ import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.
 import { KnowledgeExporter } from './export.ts';
 import { readContent } from './content.ts';
 import { codegraphSnapshot, withCodegraph } from './codegraph.ts';
-import { submitPullRequest } from './pull-requests.ts';
+import { defaultTarget, projectRepositories, submitPullRequest } from './pull-requests.ts';
 
 const store = new Store(); await store.init();
 const submissions = new Set<string>();
@@ -93,6 +93,7 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
         await exportKnowledge();
         json(200, await bootstrap()); return;
       }
+      if (method === 'GET' && path === '/api/pull-requests/target') { json(200, await defaultTarget(url.searchParams.get('project'))); return; }
       if (method === 'POST' && path === '/api/pull-requests') {
         const body = await bodyJson(request);
         const key = body.artifactId + '/' + (body.suggestionId ?? '');
@@ -103,7 +104,7 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
         if (existing) { json(200, await bootstrap()); return; }
         submissions.add(key);
         try {
-          const submitted = await submitPullRequest(structuredClone(artifact), { repository: body.repository, base: body.base, note: body.note, skillDirectory: body.skillDirectory }, body.suggestionId);
+          const submitted = await submitPullRequest(structuredClone(artifact), { repository: body.repository, base: body.base, note: body.note, skillDirectory: body.skillDirectory, directory: artifact.projectId ? projectRepositories[artifact.projectId]?.directory : undefined }, body.suggestionId);
           await store.mutate(null, previous => {
             const next = structuredClone(previous), a = next.artifacts.find(a => a.id === body.artifactId)!;
             if (body.suggestionId) {

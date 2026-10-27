@@ -27,7 +27,7 @@ async function files(root:string,prefix=''):Promise<SkillPackageFile[]> {
   }
   return result.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
 }
-export async function loadSourceSkillPackage(id:string,sourceDirectory=join(workspace,'skills')):Promise<NativeSkillPackage> {
+export async function loadSourceSkillPackage(id:string,sourceDirectory=join(workspace,'.agents','skills')):Promise<NativeSkillPackage> {
   const metadata=item(id),path=join(sourceDirectory,id),stat=await lstat(path);
   if(!stat.isDirectory()||stat.isSymbolicLink())throw new Error('Skill 来源必须是实际目录：'+id);
   const entries=await files(path),body=entries.find(file=>file.path==='SKILL.md')?.bytes.toString('utf8');
@@ -47,7 +47,7 @@ export async function currentProjectSkillPackage(projectId:string,id:string):Pro
 }
 function entry(pkg:NativeSkillPackage):SkillCatalogEntry {
   const metadata=item(pkg.id),owner=projectSkillIds.includes(pkg.id);
-  return {id:pkg.id,name:pkg.name,description:metadata.description,version:pkg.version,sha256:pkg.sha256,contentSha256:pkg.files.find(file=>file.path==='SKILL.md')!.sha256,category:'skill',publisher:owner?'owner':'library',publisherName:owner?'林悦':'研发效能团队',source:'workspace/skills/'+pkg.id};
+  return {id:pkg.id,name:pkg.name,description:metadata.description,version:pkg.version,sha256:pkg.sha256,contentSha256:pkg.files.find(file=>file.path==='SKILL.md')!.sha256,category:'skill',publisher:owner?'owner':'library',publisherName:owner?'林悦':'研发效能团队',source:'workspace/.agents/skills/'+pkg.id};
 }
 export async function readSkillCatalog() {
   const packages=await Promise.all(inventory.map(skill=>loadSourceSkillPackage(skill.name)));

@@ -36,7 +36,11 @@ Talents 自己的状态（任务、产物、PR 提交记录与提交内容、诊
 
 ## 提交 PR
 
-“提交 PR”和“提交改进 PR”由服务端调用本机 `gh api` 完成，需要先 `gh auth login`，账号对目标仓库有写权限。服务端不会修改本机任何代码仓的工作区：
+“提交 PR”和“提交改进 PR”由服务端调用本机 `gh api` 完成，需要先 `gh auth login`，账号对目标仓库有写权限。服务端不会修改本机任何代码仓的工作区。
+
+目标仓库：每个项目关联一个 GitHub 仓库和仓内目录（`server/pull-requests.ts` 的 `projectRepositories`）。目前假设“信用卡营销交付”就是本仓库 `zhuyuloveai/teams-talent-demo` 的 `workspace/` 目录。打开提交弹窗时，服务端查看本仓库的 `git remote`（`DEMO_PR_CHECKOUT` 可指定其他本地克隆）：有这个仓库的 fork 就默认提交到 fork，没有就提交到项目仓库；目标分支默认都是 `main`。弹窗中可以修改。
+
+提交过程：
 
 1. 读取目标分支的最新提交，在其上创建一个新提交（文件内容随请求一起写入 Git 树）。
 2. 推到专用分支 `talents/<摘要>`，摘要由仓库、目标分支、产物、建议和文件内容算出；重试时先按分支查找已有 PR，不会重复创建。
@@ -46,9 +50,9 @@ Talents 自己的状态（任务、产物、PR 提交记录与提交内容、诊
 
 | 来源 | 写入的文件 |
 |---|---|
-| 知识产物（业务知识、开发范式等） | `docs/knowledge/<产物>/<路径>`，内容为审阅后的当前版本 |
-| Skill 建议 | `<仓内 Skill 目录>/<文件>`，默认目录 `.agents/skills/<Skill>`。目标文件与诊断时的内容不一致时拒绝提交 |
-| 工具调用、任务指令建议 | 在仓库现有 `AGENTS.md` 末尾补充一条规则（文件不存在时新建） |
+| 知识产物（业务知识、开发范式等） | `workspace/docs/knowledge/<产物>/<路径>`，内容为审阅后的当前版本 |
+| Skill 建议 | `<仓内 Skill 目录>/<文件>`，默认目录 `workspace/.agents/skills/<Skill>`（iCode 自动加载这个目录，Teams 也从这里读取 Skill）。目标文件与诊断时的内容不一致时拒绝提交；原文件是 CRLF 换行时保持 CRLF |
+| 工具调用、任务指令建议 | 在 `workspace/AGENTS.md` 末尾补充一条规则（文件不存在时新建） |
 
 ## 配置
 
@@ -58,6 +62,7 @@ Talents 自己的状态（任务、产物、PR 提交记录与提交内容、诊
 | `DEMO_PORT` | 45970 | Teams 端口，用于“返回 iCode Teams”链接 |
 | `DEMO_SHARED_DIR` | `<仓库>/shared/data` | 共享数据目录 |
 | `DEMO_TALENT_STATE_DIR` | `talents/.runtime` | Talents 状态目录 |
+| `DEMO_PR_CHECKOUT` | `<仓库>` | 判断 PR 默认提交到 fork 还是项目仓库时，读取哪个本地克隆的 `git remote` |
 
 也可以写在 `talents/.local/config.json`（格式与 `teams/.local/config.json` 相同，`DEMO_LOCAL_CONFIG` 可指定其他文件）。
 
@@ -69,18 +74,19 @@ Talents 自己的状态（任务、产物、PR 提交记录与提交内容、诊
 | `GET /api/bootstrap` | Talents 状态合并 Teams 数据（团队、项目、来源、会话），以及 Teams 地址 |
 | `PUT /api/state` | 保存页面上的状态（`{ revision, state }`，按 revision 检查冲突）。服务端去掉来自 Teams 的部分，只保存 Talents 自己的数据，然后更新共享目录中的知识 |
 | `POST /api/reset` | 恢复初始数据 |
+| `GET /api/pull-requests/target?project=<项目>` | 项目默认的 PR 目标：`{ repository, base, fork, directory }` |
 | `POST /api/pull-requests` | 提交 PR（`{ artifactId, suggestionId?, repository, base, note, skillDirectory? }`），成功后返回最新状态；同一产物或建议提交中时返回 409 |
 
 ## 演示脚本（约 10 分钟）
 
-以 Owner（林悦）身份演示；顶栏左侧的系统切换选“iCode Teams”回到 Teams 中的项目。演示前确认 `gh auth status` 已登录，并准备一个可以接收 PR 的演示仓库。
+以 Owner（林悦）身份演示；顶栏左侧的系统切换选“iCode Teams”回到 Teams 中的项目。演示前确认 `gh auth status` 已登录，并且本仓库的 `git remote` 中有自己的 fork（PR 会默认提交到 fork）。
 
 1. **项目**：点进“信用卡营销交付”，在“来源”页签介绍来自 Teams 的代码仓和文档集；打开“信用卡营销交付文档”，看版本记录和“检查更新”；再看“会话与 Skill”中成员共享的会话和项目 Skill。
 2. **知识能力**：按四类介绍能力，说明“更新”字段：CodeGraph、文档 RAG 检索、业务知识提取在来源变化后只处理变化的部分。
 3. **知识任务**（项目的“知识任务”页签）：“历史”中有一条已完成的会话轨迹诊断，打开看产出。演示不新建诊断任务。
 4. **产物管理**（项目默认打开的页签，页签上显示待审阅的产物和待提交的建议数量）：
    - 打开“信用卡营销返现业务知识”（新版本待审阅），切到“对比”，看与上次版本 v1 的差异。
-   - 点“提交 PR”，填写 GitHub 仓库和目标分支，提交后右侧显示“PR 已创建”和 PR 链接，由开发者在代码托管平台审阅合入。
+   - 点“提交 PR”，GitHub 仓库和目标分支已按 fork 预填，提交后右侧显示“PR 已创建”和 PR 链接，由开发者在代码托管平台审阅合入。
    - 打开“会话轨迹诊断：CardDemo 迁移与扩建（19 轮）”（卡片提示“3 条优化建议待提交”），先看诊断报告，再逐条看建议：
      - “统一 ADR Skill、模板与校验脚本的章节契约”：点“提交改进 PR”，修改仓内 Skill arch-adr-writing 的文件。
      - “为完成声明补充最终复验与数据变更披露要求”：点“提交改进 PR”，向仓库的 AGENTS.md 补充规则。

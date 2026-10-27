@@ -4,412 +4,412 @@
     "description": "按标准格式（MADR）记录架构决策的背景、决策、备选方案与后果，编号归档并关联设计文档。做出重要技术决策时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/arch-adr-writing/SKILL.md"
+    "path": "workspace/.agents/skills/arch-adr-writing/SKILL.md"
   },
   {
     "name": "arch-impact-analysis",
     "description": "完整识别变更影响面（代码/数据/接口/配置/文档/权限），输出风险清单与回退建议。任何变更进入设计阶段或需求范围变更时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/arch-impact-analysis/SKILL.md"
+    "path": "workspace/.agents/skills/arch-impact-analysis/SKILL.md"
   },
   {
     "name": "arch-nfr-design",
     "description": "系统梳理并设计非功能需求（性能/可用性/安全/可扩展性/可维护性/合规），逐项量化指标与验证方法。架构设计阶段、功能需求初步明确后使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/arch-nfr-design/SKILL.md"
+    "path": "workspace/.agents/skills/arch-nfr-design/SKILL.md"
   },
   {
     "name": "arch-solution-design",
     "description": "把需求说明书转化为可落地、合规、可演进的方案设计与架构决策（ADR），覆盖总体设计、模块/服务、接口、数据、部署、演进与NFR应答，并用脚本校验需求覆盖矩阵。在G1需求签字通过后进入设计阶段时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/arch-solution-design/SKILL.md"
+    "path": "workspace/.agents/skills/arch-solution-design/SKILL.md"
   },
   {
     "name": "audit-evidence",
     "description": "保证\"需求→故事→MR→测试→变更→发布→PIR\"全链路可追溯：收集工件、校验ID链与证据链接、生成审计证据包。任意门禁评审、发布执行、审计抽检时使用。",
     "version": "2.0.0",
     "scripts": 1,
-    "path": "workspace/skills/audit-evidence/SKILL.md"
+    "path": "workspace/.agents/skills/audit-evidence/SKILL.md"
   },
   {
     "name": "ba-acceptance-criteria",
     "description": "把需求说明书拆分为用户故事，并为每条故事定义可测试的Given/When/Then验收标准，校验故事与需求ID的关联完整性（RTM）。在需求定稿前、验收标准编写与G1评审材料准备时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/ba-acceptance-criteria/SKILL.md"
+    "path": "workspace/.agents/skills/ba-acceptance-criteria/SKILL.md"
   },
   {
     "name": "ba-change-impact",
     "description": "评估需求变更对功能/数据/接口/进度/成本/干系人的影响，输出变更评估意见。收到变更请求或需求调整时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/ba-change-impact/SKILL.md"
+    "path": "workspace/.agents/skills/ba-change-impact/SKILL.md"
   },
   {
     "name": "ba-requirement-analysis",
     "description": "把原始业务诉求转化为结构化、可开发、可测试的需求说明书，覆盖背景、目标、范围、功能需求、非功能需求、业务规则、依赖、风险、合规标注。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/ba-requirement-analysis/SKILL.md"
+    "path": "workspace/.agents/skills/ba-requirement-analysis/SKILL.md"
   },
   {
     "name": "ba-requirement-tracing",
     "description": "维护需求追踪矩阵（RTM），确保需求→故事→用例→测试→变更全链路可追溯。需求变更、迭代规划、审计追溯检查时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/ba-requirement-tracing/SKILL.md"
+    "path": "workspace/.agents/skills/ba-requirement-tracing/SKILL.md"
   },
   {
     "name": "bank-domain-payments",
     "description": "统一支付领域语言，提供领域词汇表、核心业务流程（支付/冲正/清算/对账）与监管约束，校验产出中的术语一致性。任何涉及支付业务的Agent任务时使用。",
     "version": "2.0.0",
     "scripts": 1,
-    "path": "workspace/skills/bank-domain-payments/SKILL.md"
+    "path": "workspace/.agents/skills/bank-domain-payments/SKILL.md"
   },
   {
     "name": "change-cab-prep",
     "description": "自动收集并整理CAB评审材料（RFC/风险评估/回滚方案/测试报告/影响分析），生成评审包与重点摘要。CAB评审前材料准备阶段使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/change-cab-prep/SKILL.md"
+    "path": "workspace/.agents/skills/change-cab-prep/SKILL.md"
   },
   {
     "name": "change-rfc",
     "description": "生成合规、完整、可评审的变更申请单（RFC），含类型/原因/范围/影响/窗口/回滚/证据链接。发布包就绪、申请生产变更前使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/change-rfc/SKILL.md"
+    "path": "workspace/.agents/skills/change-rfc/SKILL.md"
   },
   {
     "name": "change-risk-assessment",
     "description": "对变更进行分级（低/中/高）并给出风险与应急结论，引用影响分析与测试证据。RFC起草时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/change-risk-assessment/SKILL.md"
+    "path": "workspace/.agents/skills/change-risk-assessment/SKILL.md"
   },
   {
     "name": "change-window-scheduling",
     "description": "根据变更类型、风险等级与业务影响安排变更窗口，检测窗口冲突（业务高峰/冻结期）。RFC提交后、变更窗口安排时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/change-window-scheduling/SKILL.md"
+    "path": "workspace/.agents/skills/change-window-scheduling/SKILL.md"
   },
   {
     "name": "cobol-legacy-knowledge",
     "description": "从存量AS/400 COBOL代码提取可追溯的业务与系统知识（L1–L5五层模型），并通过适配层转化为BA/Arch岗位消费格式。需求/设计任务涉及存量系统时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/cobol-legacy-knowledge/SKILL.md"
+    "path": "workspace/.agents/skills/cobol-legacy-knowledge/SKILL.md"
   },
   {
     "name": "dev-api-integration",
     "description": "确保接口契约正确实现：契约确认、Mock先行、联调验证、异常降级、幂等性、安全加固、可观测性与契约测试。前后端联调、跨系统接口对接、第三方集成时使用。",
     "version": "1.0.0",
     "scripts": 3,
-    "path": "workspace/skills/dev-api-integration/SKILL.md"
+    "path": "workspace/.agents/skills/dev-api-integration/SKILL.md"
   },
   {
     "name": "dev-backend-service",
     "description": "按银行后端架构规范（DDD分层、微服务）实现业务逻辑：Application层→Domain层→Infrastructure层，含DTO映射、业务规则追溯、统一错误码、日志与接口实现。后端服务/业务逻辑层开发任务时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/dev-backend-service/SKILL.md"
+    "path": "workspace/.agents/skills/dev-backend-service/SKILL.md"
   },
   {
     "name": "dev-bank-coding-standards",
     "description": "按银行编码规范与安全基线对变更代码做静态检查，按致命/严重/告警分级并输出检查报告。编码过程中或完成后自检时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/dev-bank-coding-standards/SKILL.md"
+    "path": "workspace/.agents/skills/dev-bank-coding-standards/SKILL.md"
   },
   {
     "name": "dev-code-reviewer",
     "description": "辅助代码评审：自动检查编码规范、常见缺陷、架构一致性、安全漏洞，生成按严重级别分类、可定位到代码行的评审意见。MR提交后、代码评审前使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/dev-code-reviewer/SKILL.md"
+    "path": "workspace/.agents/skills/dev-code-reviewer/SKILL.md"
   },
   {
     "name": "dev-data-sql",
     "description": "高质量数据层开发：建表SQL、数据访问层、迁移脚本（含回滚）、ETL、SQL性能优化、事务一致性、脱敏权限与数据验证。表结构设计、SQL开发、数据迁移、ETL脚本开发时使用。",
     "version": "1.0.0",
     "scripts": 3,
-    "path": "workspace/skills/dev-data-sql/SKILL.md"
+    "path": "workspace/.agents/skills/dev-data-sql/SKILL.md"
   },
   {
     "name": "dev-frontend-ui",
     "description": "按UI设计稿与交互规范像素级实现前端界面：组件复用、状态管理、表单校验、接口对接、响应式、A11y、i18n与性能优化。前端页面/组件开发任务时使用。",
     "version": "1.0.0",
     "scripts": 3,
-    "path": "workspace/skills/dev-frontend-ui/SKILL.md"
+    "path": "workspace/.agents/skills/dev-frontend-ui/SKILL.md"
   },
   {
     "name": "dev-perf-optimization",
     "description": "系统性分析和优化代码性能：瓶颈定位、根因分析、优化方案设计、基准对比与性能回归。性能问题修复、性能优化专项、代码性能review时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/dev-perf-optimization/SKILL.md"
+    "path": "workspace/.agents/skills/dev-perf-optimization/SKILL.md"
   },
   {
     "name": "dev-refactoring",
     "description": "识别重构机会与技术债，制定小步可验证的重构计划，重构后验证功能等价。技术债清理、功能重构、代码质量提升时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/dev-refactoring/SKILL.md"
+    "path": "workspace/.agents/skills/dev-refactoring/SKILL.md"
   },
   {
     "name": "dev-unit-test",
     "description": "生成并运行高质量单元测试，覆盖正常/边界/异常/回滚路径，量化覆盖率。编码完成、提交MR前使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/dev-unit-test/SKILL.md"
+    "path": "workspace/.agents/skills/dev-unit-test/SKILL.md"
   },
   {
     "name": "dev-unit-test-extended",
     "description": "超越基本单测：分层单测策略、Mock规范、测试金字塔指导、覆盖率缺口分析与测试坏味道检测。单元测试编写、覆盖率提升、测试质量改进时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/dev-unit-test-extended/SKILL.md"
+    "path": "workspace/.agents/skills/dev-unit-test-extended/SKILL.md"
   },
   {
     "name": "g1-gate-execution",
     "description": "G1需求阶段门禁执行器，统一运行需求完整性/模糊词/RTM校验脚本并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g1-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g1-gate-execution/SKILL.md"
   },
   {
     "name": "g2-gate-execution",
     "description": "G2设计阶段门禁执行器，统一运行需求-设计覆盖矩阵和ADR格式校验并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g2-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g2-gate-execution/SKILL.md"
   },
   {
     "name": "g3-gate-execution",
     "description": "G3开发阶段门禁执行器，统一运行编码规范/分层/循环依赖/覆盖率校验并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g3-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g3-gate-execution/SKILL.md"
   },
   {
     "name": "g4-gate-execution",
     "description": "G4测试阶段门禁执行器，统一运行需求-用例覆盖率和用例去重校验并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g4-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g4-gate-execution/SKILL.md"
   },
   {
     "name": "g5-gate-execution",
     "description": "G5安全阶段门禁执行器，统一运行漏洞分诊校验并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g5-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g5-gate-execution/SKILL.md"
   },
   {
     "name": "g6-gate-execution",
     "description": "G6发布阶段门禁执行器，统一运行构建制品校验和回滚手册完整性检查并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g6-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g6-gate-execution/SKILL.md"
   },
   {
     "name": "g7-gate-execution",
     "description": "G7变更阶段门禁执行器，统一运行RFC校验/风险分级/窗口排期校验并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g7-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g7-gate-execution/SKILL.md"
   },
   {
     "name": "g8-gate-execution",
     "description": "G8管理阶段门禁执行器，统一运行门禁采集/全链路追溯/SoD合规/脱敏检查并汇总结果",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/g8-gate-execution/SKILL.md"
+    "path": "workspace/.agents/skills/g8-gate-execution/SKILL.md"
   },
   {
     "name": "output-sanitization",
     "description": "自动扫描并脱敏Agent产出中的敏感信息（手机号/账号/证件号/密钥/IP/生产数据片段），高危命中直接阻断提交。任何Agent产出提交前、对外输出前使用。",
     "version": "2.0.0",
     "scripts": 2,
-    "path": "workspace/skills/output-sanitization/SKILL.md"
+    "path": "workspace/.agents/skills/output-sanitization/SKILL.md"
   },
   {
     "name": "pm-gate-checklist",
     "description": "确保阶段产出与审批状态完整，生成门禁检查清单与评审材料，支持银行交付流水线 G1–G8 八大阶段门禁决策。每个阶段末、里程碑评审前使用。",
     "version": "1.1.0",
     "scripts": 1,
-    "path": "workspace/skills/pm-gate-checklist/SKILL.md"
+    "path": "workspace/.agents/skills/pm-gate-checklist/SKILL.md"
   },
   {
     "name": "pm-risk-register",
     "description": "项目全生命周期风险识别、评估（概率×影响）、应对、跟踪与报告。风险识别、风险跟踪、风险报告时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/pm-risk-register/SKILL.md"
+    "path": "workspace/.agents/skills/pm-risk-register/SKILL.md"
   },
   {
     "name": "pm-status-reporting",
     "description": "自动汇总项目数据，生成标准化的周报/月报/里程碑报告，标注偏差根因与异常项。周报、月报、里程碑报告、状态更新时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/pm-status-reporting/SKILL.md"
+    "path": "workspace/.agents/skills/pm-status-reporting/SKILL.md"
   },
   {
     "name": "qa-defect-management",
     "description": "缺陷的记录、分类、跟踪、验证、统计与退出风险评估，确保缺陷闭环管理。发现缺陷、缺陷生命周期管理、测试退出评估时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/qa-defect-management/SKILL.md"
+    "path": "workspace/.agents/skills/qa-defect-management/SKILL.md"
   },
   {
     "name": "qa-integration-test",
     "description": "确保跨系统/跨模块集成正确：集成范围确认、SIT环境规划、接口/数据流/业务场景/异常容错/幂等测试与联调管理。SIT阶段多系统/模块集成测试设计与执行时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/qa-integration-test/SKILL.md"
+    "path": "workspace/.agents/skills/qa-integration-test/SKILL.md"
   },
   {
     "name": "qa-performance-test",
     "description": "系统化实施性能测试：需求分析、计划、场景设计（基准/负载/压力/稳定性/并发）、脚本、执行、结果分析与报告。性能测试需求、性能验收、性能问题复现时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/qa-performance-test/SKILL.md"
+    "path": "workspace/.agents/skills/qa-performance-test/SKILL.md"
   },
   {
     "name": "qa-regression-selection",
     "description": "智能选择回归测试范围：变更分析、影响分析、风险分级、用例选择与回归报告。缺陷修复后、需求变更后、版本发布前使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/qa-regression-selection/SKILL.md"
+    "path": "workspace/.agents/skills/qa-regression-selection/SKILL.md"
   },
   {
     "name": "qa-system-test-design",
     "description": "系统化设计系统测试用例：等价类/边界值/决策表/状态迁移/场景法，覆盖功能/边界/异常/UI/数据验证，关联需求确保100%覆盖。系统测试（ST）阶段用例设计时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/qa-system-test-design/SKILL.md"
+    "path": "workspace/.agents/skills/qa-system-test-design/SKILL.md"
   },
   {
     "name": "qa-test-case-design",
     "description": "从需求与验收标准导出可执行、可追溯的测试用例集（正常/边界/异常/回归），并关联RTM。测试策略定稿后使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/qa-test-case-design/SKILL.md"
+    "path": "workspace/.agents/skills/qa-test-case-design/SKILL.md"
   },
   {
     "name": "qa-test-execution",
     "description": "管理测试执行进度、跟踪用例执行状态、生成测试日报与总结报告。测试执行阶段、每日测试跟踪时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/qa-test-execution/SKILL.md"
+    "path": "workspace/.agents/skills/qa-test-execution/SKILL.md"
   },
   {
     "name": "qa-test-strategy",
     "description": "定义测试范围、层级（单测/集成/SIT/UAT/性能/安全）、环境数据策略与可量化退出标准。设计定稿、测试启动前使用。",
     "version": "1.0.0",
     "scripts": 0,
-    "path": "workspace/skills/qa-test-strategy/SKILL.md"
+    "path": "workspace/.agents/skills/qa-test-strategy/SKILL.md"
   },
   {
     "name": "qa-uat-support",
     "description": "支持业务用户完成UAT：范围确认、场景梳理、用例评审、环境数据准备、培训支持、执行跟踪与验收材料。UAT阶段用户验收测试支持与协调时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/qa-uat-support/SKILL.md"
+    "path": "workspace/.agents/skills/qa-uat-support/SKILL.md"
   },
   {
     "name": "qa-unit-test-strategy",
     "description": "制定单测策略（覆盖率阈值、测试范围、关键路径清单），审核开发单测计划与覆盖率，必要时阻断提测。开发自测前、单测覆盖率审核、UT阶段质量把关时使用。",
     "version": "1.0.0",
     "scripts": 2,
-    "path": "workspace/skills/qa-unit-test-strategy/SKILL.md"
+    "path": "workspace/.agents/skills/qa-unit-test-strategy/SKILL.md"
   },
   {
     "name": "release-deployment-runbook",
     "description": "生成可执行的部署操作手册：命令级步骤、预期结果、验证方法、前置/后置检查与异常处理。发布执行前、部署操作中使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/release-deployment-runbook/SKILL.md"
+    "path": "workspace/.agents/skills/release-deployment-runbook/SKILL.md"
   },
   {
     "name": "release-environment-mgmt",
     "description": "管理多套环境（DEV/SIT/UAT/PROD/DR）的配置、版本与可用性，检测环境漂移。环境准备、配置变更、环境一致性检查时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/release-environment-mgmt/SKILL.md"
+    "path": "workspace/.agents/skills/release-environment-mgmt/SKILL.md"
   },
   {
     "name": "release-plan",
     "description": "产出可执行、可回滚、可验证的发布计划：变更包与制品校验、发布顺序与窗口、灰度策略、投产检查单。G5安全放行通过、进入发布准备时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/release-plan/SKILL.md"
+    "path": "workspace/.agents/skills/release-plan/SKILL.md"
   },
   {
     "name": "rollback-runbook",
     "description": "定义发布失败时的快速、安全回滚路径：回退点识别、命令级步骤、数据一致性处理、验证方法与责任人。发布计划编制时必配。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/rollback-runbook/SKILL.md"
+    "path": "workspace/.agents/skills/rollback-runbook/SKILL.md"
   },
   {
     "name": "sdlc-context-bus",
     "description": "SDLC上下文总线与Agent协作机制，提供结构化上下文传递、回调修复、并行编排与条件分支能力",
     "version": "1.0.0",
     "scripts": 3,
-    "path": "workspace/skills/sdlc-context-bus/SKILL.md"
+    "path": "workspace/.agents/skills/sdlc-context-bus/SKILL.md"
   },
   {
     "name": "sdlc-metrics",
     "description": "SDLC交付效能度量体系，采集Lead Time/门禁拦截率/DORA指标/Agent效能，生成度量看板与趋势报告",
     "version": "1.0.0",
     "scripts": 3,
-    "path": "workspace/skills/sdlc-metrics/SKILL.md"
+    "path": "workspace/.agents/skills/sdlc-metrics/SKILL.md"
   },
   {
     "name": "sdlc-ux-enhancer",
     "description": "SDLC用户体验增强，提供进度看板、门禁旁路记录、Agent推荐引擎与一键全流程触发能力",
     "version": "1.0.0",
     "scripts": 4,
-    "path": "workspace/skills/sdlc-ux-enhancer/SKILL.md"
+    "path": "workspace/.agents/skills/sdlc-ux-enhancer/SKILL.md"
   },
   {
     "name": "sec-scan-review",
     "description": "将SAST/DAST/依赖扫描结果按CVSS与内部标准分级，识别误报，给出修复/豁免处置意见与放行/打回结论。构建完成、发布前或依赖更新后使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/sec-scan-review/SKILL.md"
+    "path": "workspace/.agents/skills/sec-scan-review/SKILL.md"
   },
   {
     "name": "sec-secure-coding-guide",
     "description": "提供银行场景的安全编码规范与正反示例（OWASP Top 10变体），代码编写前/评审中/咨询时使用，并自动检查安全编码合规性。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/sec-secure-coding-guide/SKILL.md"
+    "path": "workspace/.agents/skills/sec-secure-coding-guide/SKILL.md"
   },
   {
     "name": "sec-threat-model",
     "description": "在设计阶段通过STRIDE分析识别安全威胁并确定缓解措施，覆盖认证/授权/数据/输入校验/日志/会话。设计定稿前、涉及认证/数据/接口的功能时使用。",
     "version": "1.0.0",
     "scripts": 0,
-    "path": "workspace/skills/sec-threat-model/SKILL.md"
+    "path": "workspace/.agents/skills/sec-threat-model/SKILL.md"
   },
   {
     "name": "sec-vulnerability-mgmt",
     "description": "漏洞全生命周期管理：发现→定级→分派→修复→验证→关闭，含SLA跟踪与态势报告。发现安全漏洞、修复跟踪、定期漏洞评估时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/sec-vulnerability-mgmt/SKILL.md"
+    "path": "workspace/.agents/skills/sec-vulnerability-mgmt/SKILL.md"
   },
   {
     "name": "sod-compliance-check",
     "description": "自动检测职责分离（SoD）冲突：角色权限冲突、门禁执行人与审批人冲突、间接冲突（传递闭包）。门禁评审、配置变更、审计抽检时使用。",
     "version": "1.0.0",
     "scripts": 1,
-    "path": "workspace/skills/sod-compliance-check/SKILL.md"
+    "path": "workspace/.agents/skills/sod-compliance-check/SKILL.md"
   }
 ]

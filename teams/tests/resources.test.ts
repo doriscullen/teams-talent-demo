@@ -20,10 +20,10 @@ test('all 59 source files and full package manifests use their real metadata ver
   const catalog=await publicationCatalog();assert.deepEqual(catalog,skillCatalog);
   let attachments=0;
   for(const item of catalog){
-    assert.equal(skillContents[item.id],await readFile(join(workspace,'skills',item.id,'SKILL.md'),'utf8'));
+    assert.equal(skillContents[item.id],await readFile(join(workspace,'.agents','skills',item.id,'SKILL.md'),'utf8'));
     assert.equal(sha256(skillContents[item.id]),item.contentSha256);
     const pkg=await loadNativeSkillPackage(item.id,item.version,item.sha256);assert.equal(skillPackageDigest(pkg.files),item.sha256);
-    for(const file of pkg.files)assert.deepEqual(file.bytes,await readFile(join(workspace,'skills',item.id,file.path)));
+    for(const file of pkg.files)assert.deepEqual(file.bytes,await readFile(join(workspace,'.agents','skills',item.id,file.path)));
     attachments+=pkg.files.length-1;
   }
   assert.equal(attachments,286);assert.equal(resourceVersion(initialState(),'audit-evidence'),'2.0.0');
@@ -68,7 +68,7 @@ test('unattributed legacy acquisitions grant neither actor and can be explicitly
 });
 
 test('generated Python cache is excluded while source attachments and invalid files remain checked',async()=>{
-  const source=join(dir,'source'),id='audit-evidence';await mkdir(source);await cp(join(workspace,'skills',id),join(source,id),{recursive:true});
+  const source=join(dir,'source'),id='audit-evidence';await mkdir(source);await cp(join(workspace,'.agents','skills',id),join(source,id),{recursive:true});
   const expected=await loadSourceSkillPackage(id,source);await mkdir(join(source,id,'__pycache__'));await writeFile(join(source,id,'__pycache__','local.pyc'),'cache');await writeFile(join(source,id,'scripts','local.pyc'),'cache');
   assert.equal((await loadSourceSkillPackage(id,source)).sha256,expected.sha256);
   await symlink(join(source,id,'SKILL.md'),join(source,id,'linked.md'));await assert.rejects(loadSourceSkillPackage(id,source),/符号链接/);

@@ -18,5 +18,8 @@ export const saveState = (revision: number, state: TalentsState) => api<{ revisi
 export const resetState = () => api<Boot>('POST', '/api/reset', {});
 export interface SubmitRequest { artifactId: string; suggestionId?: string; repository: string; base: string; note: string; skillDirectory?: string }
 export const submitPullRequest = (request: SubmitRequest) => api<Boot>('POST', '/api/pull-requests', request);
+/** Where a project's PRs go by default (server/pull-requests.ts defaultTarget). */
+export interface PullRequestTarget { repository: string; base: string; fork: boolean; directory: string }
+export const pullRequestTarget = (projectId: string) => api<PullRequestTarget>('GET', '/api/pull-requests/target?project=' + encodeURIComponent(projectId));
 /** SKILL.md of a project skill, read from the repository through the Talents service. */
 export const getSkill = (projectId: string, id: string) => api<ProjectSkill & { content: string }>('GET', '/api/skill?project=' + encodeURIComponent(projectId) + '&id=' + encodeURIComponent(id));

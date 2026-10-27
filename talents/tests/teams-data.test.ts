@@ -93,7 +93,7 @@ test('project skills come from Teams, and their SKILL.md is read from the reposi
   const skills = teamsModel(seed).projects.find(p => p.id === 'carddemo')!.skills;
   assert.equal(skills.length, 13);
   const adr = skills.find(s => s.id === 'arch-adr-writing')!;
-  assert.equal(adr.path, 'workspace/skills/arch-adr-writing/SKILL.md');
+  assert.equal(adr.path, 'workspace/.agents/skills/arch-adr-writing/SKILL.md');
   const read = await readSkill(seed, 'carddemo', 'arch-adr-writing');
   assert.match(read.content, /\| version \| 1\.0\.0 \|/);
   await assert.rejects(readSkill(seed, 'carddemo', 'unknown'), (e: any) => e.status === 404);
