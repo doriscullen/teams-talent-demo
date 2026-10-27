@@ -474,8 +474,9 @@ class InstallmentApplicationServiceTest {
                 .isEqualTo("ALREADY_INSTALLED");
 
         InstallmentApplicationIntent intent = intentsByKey.get("key-rev");
-        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.LEDGER_POSTED);
-        assertThat(intent.isResumable()).isTrue();
+        // A-R001：补偿决定先落库，逆向未确认时停在 COMPENSATION_PENDING
+        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.COMPENSATION_PENDING);
+        assertThat(intent.isCompensationPending()).isTrue();
         assertThat(intent.getLastError()).contains("reversal pending");
 
         when(intentRepository.findByStatusInAndUpdatedAtBefore(any(), any())).thenReturn(List.of(intent));
@@ -483,10 +484,66 @@ class InstallmentApplicationServiceTest {
 
         assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.REVERSED);
         ArgumentCaptor<String> groups = ArgumentCaptor.forClass(String.class);
-        verify(ledgerPort, org.mockito.Mockito.atLeast(4))
+        verify(ledgerPort, org.mockito.Mockito.atLeast(3))
                 .postGroup(groups.capture(), anyString(), anyString(), any());
         assertThat(groups.getAllValues().stream().filter(group -> group.endsWith("-REV")).count())
                 .isEqualTo(2); // 失败一次 + 成功一次，均为同一稳定反向作用ID
         verify(planRepository, never()).save(any());
+    }
+
+    @Test
+    void compensationPhaseNeverCompletesForwardEvenWhenReasonClears() {
+        // 创建过账成功 → 业务拒绝 → 补偿阶段落库 → 反向过账响应丢失（状态仍 COMPENSATION_PENDING）
+        when(allocationRepository.existsByTransactionId(TXN)).thenReturn(true);
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RemoteServiceException("ledger-service", "response lost"))
+                .doNothing()
+                .when(ledgerPort).postGroup(anyString(), anyString(), anyString(), any());
+        assertThatThrownBy(() -> service.create(CUSTOMER, command("key-comp", new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("ALREADY_INSTALLED");
+        InstallmentApplicationIntent intent = intentsByKey.get("key-comp");
+        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.COMPENSATION_PENDING);
+
+        // 原拒绝原因解除（本金占用消失）后重试同一 key：只允许幂等完成逆向
+        when(allocationRepository.existsByTransactionId(TXN)).thenReturn(false);
+        org.mockito.Mockito.clearInvocations(planRepository, scheduleRepository, ledgerPort);
+
+        assertThatThrownBy(() -> service.create(CUSTOMER, command("key-comp", new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("IDEMPOTENCY_KEY_CONFLICT");
+
+        verify(planRepository, never()).save(any());
+        verify(scheduleRepository, never()).saveAll(any());
+        verify(ledgerPort, org.mockito.Mockito.times(1))
+                .postGroup(eq(intent.getPlanId() + "-REV"), anyString(), anyString(), any());
+        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.REVERSED);
+    }
+
+    @Test
+    void reconciliationOfCompensationPendingOnlyReverses() {
+        when(allocationRepository.existsByTransactionId(TXN)).thenReturn(true);
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RemoteServiceException("ledger-service", "response lost"))
+                .doNothing()
+                .when(ledgerPort).postGroup(anyString(), anyString(), anyString(), any());
+        assertThatThrownBy(() -> service.create(CUSTOMER, command("key-comp2", new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessRuleException.class);
+        InstallmentApplicationIntent intent = intentsByKey.get("key-comp2");
+
+        when(allocationRepository.existsByTransactionId(TXN)).thenReturn(false);
+        when(intentRepository.findByStatusInAndUpdatedAtBefore(any(), any())).thenReturn(List.of(intent));
+        org.mockito.Mockito.clearInvocations(planRepository, ledgerPort);
+
+        int completed = service.reconcilePending();
+
+        assertThat(completed).isEqualTo(1);
+        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.REVERSED);
+        verify(planRepository, never()).save(any());
+        ArgumentCaptor<String> groups = ArgumentCaptor.forClass(String.class);
+        verify(ledgerPort, org.mockito.Mockito.times(1)).postGroup(groups.capture(), anyString(), anyString(), any());
+        assertThat(groups.getValue()).isEqualTo(intent.getPlanId() + "-REV");
     }
 }

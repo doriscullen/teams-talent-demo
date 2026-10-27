@@ -38,6 +38,9 @@ public class InstallmentSchedule {
     @Column(name = "total_due", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalDue;
 
+    @Column(name = "paid_principal", nullable = false, precision = 12, scale = 2)
+    private BigDecimal paidPrincipal;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 16, nullable = false)
     private ScheduleStatus status;
@@ -58,7 +61,34 @@ public class InstallmentSchedule {
         this.principalDue = principalDue;
         this.feeDue = feeDue;
         this.totalDue = principalDue.add(feeDue);
+        this.paidPrincipal = BigDecimal.ZERO.setScale(2);
         this.status = ScheduleStatus.PENDING;
+    }
+
+    /**
+     * 累计归还本金（REQ 原文/PRD：按实际归还本金更新计划，允许部分归还）。
+     * 每期不得超过该期应还本金；累计达到应还本金即置 PAID 并记录时间。
+     */
+    public void applyPrincipal(BigDecimal amount, LocalDateTime paidAt) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("repayment amount must be positive");
+        }
+        if (status == ScheduleStatus.PAID) {
+            throw new IllegalStateException("schedule already paid");
+        }
+        BigDecimal applied = paidPrincipal.add(amount);
+        if (applied.compareTo(principalDue) > 0) {
+            throw new IllegalArgumentException("repayment exceeds the period principal");
+        }
+        this.paidPrincipal = applied;
+        if (applied.compareTo(principalDue) == 0) {
+            this.status = ScheduleStatus.PAID;
+            this.paidAt = paidAt;
+        }
+    }
+
+    public BigDecimal unpaidPrincipal() {
+        return principalDue.subtract(paidPrincipal);
     }
 
     public void markPaid(LocalDateTime paidAt) {
@@ -95,6 +125,10 @@ public class InstallmentSchedule {
 
     public BigDecimal getTotalDue() {
         return totalDue;
+    }
+
+    public BigDecimal getPaidPrincipal() {
+        return paidPrincipal;
     }
 
     public ScheduleStatus getStatus() {

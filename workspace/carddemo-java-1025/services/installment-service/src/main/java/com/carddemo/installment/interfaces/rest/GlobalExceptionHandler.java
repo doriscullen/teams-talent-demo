@@ -23,7 +23,7 @@ public class GlobalExceptionHandler {
 
     private static final Set<String> BAD_REQUEST_CODES = Set.of(
             "INVALID_PARAMETER", "INVALID_TERM", "AGREEMENT_REQUIRED", "INVALID_FEE_REBATE",
-            "REPAYMENT_EXCEEDS_PRINCIPAL", "UNSUPPORTED_REPAYMENT_AMOUNT", "REPAYMENT_AMOUNT_CHANGED");
+            "REPAYMENT_EXCEEDS_PRINCIPAL");
 
     @ExceptionHandler(BusinessRuleException.class)
     public ResponseEntity<ApiError> handleBusinessRule(BusinessRuleException ex) {

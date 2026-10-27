@@ -25,6 +25,8 @@ public class InstallmentApplicationIntent {
     public static final String LEDGER_POSTED = "LEDGER_POSTED";
     public static final String COMPLETED = "COMPLETED";
     public static final String FAILED = "FAILED";
+    /** 已决定并持久化的逆向阶段（A-R001）：恢复只允许完成同一逆向，不再前向完成。 */
+    public static final String COMPENSATION_PENDING = "COMPENSATION_PENDING";
     public static final String REVERSED = "REVERSED";
 
     @Id
@@ -129,6 +131,16 @@ public class InstallmentApplicationIntent {
 
     public boolean isResumable() {
         return PENDING.equals(status) || LEDGER_POSTED.equals(status);
+    }
+
+    public boolean isCompensationPending() {
+        return COMPENSATION_PENDING.equals(status);
+    }
+
+    /** 在发出任何反向过账之前先把补偿决定落库（崩溃/丢响应后可据此只做逆向）。 */
+    public void markCompensationPending(LocalDateTime at) {
+        this.status = COMPENSATION_PENDING;
+        this.updatedAt = at;
     }
 
     private static String truncate(String message) {

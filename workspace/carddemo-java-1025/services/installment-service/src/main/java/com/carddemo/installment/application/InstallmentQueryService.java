@@ -32,7 +32,8 @@ import java.util.List;
 public class InstallmentQueryService {
 
     public record ScheduleView(int installmentNo, LocalDate dueDate, BigDecimal principalDue,
-                               BigDecimal feeDue, BigDecimal totalDue, String status, LocalDateTime paidAt) {
+                               BigDecimal paidPrincipal, BigDecimal feeDue, BigDecimal totalDue,
+                               String status, LocalDateTime paidAt) {
     }
 
     public record RepaymentView(String paymentKey, BigDecimal amount, BigDecimal principalApplied,
@@ -140,8 +141,8 @@ public class InstallmentQueryService {
                 plan.getCreatedAt(), plan.getSettledAt(),
                 schedules.stream()
                         .map(schedule -> new ScheduleView(schedule.getInstallmentNo(), schedule.getDueDate(),
-                                schedule.getPrincipalDue(), schedule.getFeeDue(), schedule.getTotalDue(),
-                                schedule.getStatus().name(), schedule.getPaidAt()))
+                                schedule.getPrincipalDue(), schedule.getPaidPrincipal(), schedule.getFeeDue(),
+                                schedule.getTotalDue(), schedule.getStatus().name(), schedule.getPaidAt()))
                         .toList(),
                 repayments.stream()
                         .map(repayment -> new RepaymentView(repayment.getPaymentKey(), repayment.getAmount(),

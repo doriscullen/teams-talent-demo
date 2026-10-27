@@ -65,7 +65,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | `/api/v1/installments/preview` | POST | 200 + `previewToken`/期次明细/总费/首期合计 | 404（越权/不属本账户）、409 `INSTALLMENT_NOT_ELIGIBLE`/`PRINCIPAL_EXCEEDS_LIMIT`/`ALREADY_INSTALLED`，400 `INVALID_TERM` |
 | `/api/v1/installments/eligibility` | GET | 200 `{eligible,reason,alreadyInstalled,existingPlanId,minAmount}` | 404（越权） |
 | `/api/v1/installments/bills/{accountId}` | GET | 200 `{billId,cycleStart,cycleEnd,billPrincipal,availablePrincipal,lines[]}` | 404（越权），503 |
-| `/api/v1/installments/{planId}/repayments` | POST | 200 `{remainingPrincipal,principalApplied,paidInstallments,replayed}`（本轮仅支持完整一期本金） | 409 `REPAYMENT_NOT_ALLOWED`/`IDEMPOTENCY_KEY_CONFLICT`/`SETTLEMENT_IN_PROGRESS`，400 `REPAYMENT_EXCEEDS_PRINCIPAL`/`UNSUPPORTED_REPAYMENT_AMOUNT` |
+| `/api/v1/installments/{planId}/repayments` | POST | 200 `{remainingPrincipal,principalApplied,paidInstallments,replayed}`（本金-only，支持部分归还并按期累计） | 409 `REPAYMENT_NOT_ALLOWED`/`IDEMPOTENCY_KEY_CONFLICT`/`SETTLEMENT_IN_PROGRESS`，400 `REPAYMENT_EXCEEDS_PRINCIPAL`/`INVALID_PARAMETER` |
 | `/api/v1/installments/{planId}/settlement-quote` | GET | 200 `{remainingPrincipal,penaltyFee,feeRebate,settlementTotal}` | 409 `SETTLEMENT_NOT_ALLOWED` |
 | `/api/v1/installments` | POST | 201（同键重放 200） | 409 `ALREADY_INSTALLED`/`INSTALLMENT_LIMIT_EXCEEDED`/`PREVIEW_EXPIRED`/`IDEMPOTENCY_KEY_CONFLICT`，400 `AGREEMENT_REQUIRED`，503 `DOWNSTREAM_UNAVAILABLE` |
 | `/api/v1/installments` | GET | 200 `{items,page,size,total}` | 400 `INVALID_PARAMETER`，404（非本人） |
@@ -102,9 +102,12 @@ services/installment-service/src/main/java/com/carddemo/installment/
 4. ledger 过账（`entryGroupId = planId`，幂等；分录**借贷平衡**：DEBIT 1100 应收 = 本金+手续费，CREDIT 2100 客户应付 = 本金，CREDIT 4001 手续费收入 = 手续费）。
 5. 独立事务内建计划 + 还款计划 + 占用记录（提交时**重新校验**来源入账状态、争议/逾期信号、本金占用与可分期本金），成功标记意图 COMPLETED。
 6. 失败处理：下游 503 → 意图保持可续跑（`last_error` 记录），同键重试或对账 worker 续跑；
-   业务性失败（本金已占用等）→ 按同一 `planId` 过账冲正组（`planId-REV`，稳定作用ID）；
-   **冲正调用本身失败时不置 REVERSED**，保持 PENDING/LEDGER_POSTED 由重试/对账继续，直到反向分录真实成功后
-   才终结为 REVERSED（A-R001），因此不会留下无法补偿的有效入账。
+   业务性失败（本金已占用等）→ **先在独立事务持久化补偿阶段 `COMPENSATION_PENDING`**（补偿决定落库），
+   再用稳定作用ID过账冲正组（`planId-REV`），成功后置 REVERSED。
+   一旦进入 `COMPENSATION_PENDING`，同键重试与对账**只允许幂等完成同一逆向**：即使原拒绝原因（占用/争议标记）
+   已解除，也绝不重新 postCreate/completePlan，因此不会出现「净分录为 0 却生成有效计划」。
+   冲正未确认（失败或响应丢失）时保持 `COMPENSATION_PENDING`，恢复后续跑同一逆向；完成后调用方拿到
+   `IDEMPOTENCY_KEY_CONFLICT`（该键已被消费，需新键）。
 7. 审计 + 通知发件箱（失败不回滚），通知由投递 worker 真实发送。
 
 **结清（US-005/AC-16/INS-08，A-001/A-005/A-006）**
@@ -116,15 +119,19 @@ services/installment-service/src/main/java/com/carddemo/installment/
 4. 步骤：ledger 过账（分组键 = `settlementKey`，平衡：DEBIT 1001 现金 = 本金+违约金，CREDIT 1100 应收 = 本金，CREDIT 4002 违约金收入 = 违约金）→ account `payments`（**effectId = `EffectIds.settlement(planId, settlementKey)`**，账户端去重）→ 计划 SETTLED + 意图 COMPLETED。任一步响应丢失都可在同键重试中续跑：ledger 幂等、账户端 effectId 去重，最终只有一次资金效果。
 5. ledger 失败：503，计划保持 ACTIVE、未还款；账户端失败：503 且意图保留在途，重试续跑。
 
-**一期还款（A-003 / A-R002/A-R003/A-R004）**：`POST /{planId}/repayments`
-1. 金额合同：本轮只支持「完整一期本金」。计划锁内取最早未还期次，金额必须等于该期 `principal_due`；
-   100/350 等不完整金额在任何远端资金动作之前返回 400 `UNSUPPORTED_REPAYMENT_AMOUNT`（不静默吞款、不新增部分还款政策）。
-2. 先落 `installment_repayment`（paymentKey 幂等；同键并发在计划锁后重核）→ account 真实还款
-   （effectId = `EffectIds.repayment(planId, paymentKey)`）→ ledger `REPAY-<effectId>` 平衡分录 →
-   同一事务内把该期置 PAID、减少 `remaining_principal`、标记 COMPLETED（回写金额恒等于扣款金额）。
-3. 失败语义：账户/账务 5xx 或超时 → 保持 PENDING（账户可能已扣），既阻止结清也由对账续跑；
-   账户业务拒绝（余额不足等）→ FAILED（无资金效果），同键可再次尝试。
-900/3 还 300 → 剩余 600、第 1 期 PAID，随后结清 600+6−0=606。
+**本金-only 累计还款（A-003 / A-R002，按原文与 PRD BR-INS-10）**：`POST /{planId}/repayments`
+1. 金额合同：接受任何不超过「未还本金合计」的合法金额（正数、最多两位小数）；不引入手续费分配政策，
+   也不要求整期金额。计划锁内校验并落 `installment_repayment`（paymentKey 幂等；同键并发在锁后重核）。
+2. 真实资金：account 真实还款（effectId = `EffectIds.repayment(planId, paymentKey)`）→ ledger
+   `REPAY-<effectId>`（DEBIT 现金 / CREDIT 分期应收，金额等于本次归还本金）。
+3. 回写：按最早未还期次累计 `installment_schedule.paid_principal`，每期累计达到 `principal_due` 才置 PAID；
+   同步减少 `remaining_principal`，回写金额恒等于扣款金额（900/3 还 100 → remaining 800、第 1 期已还 100 未完成；
+   再还 250 → 累计 350 → 第 1 期完成、第 2 期已还 50、remaining 550；独立新计划单次 350 同样得到一期完成+二期 50）。
+4. 失败语义：账户/账务 5xx 或超时 → 保持 PENDING（账户可能已扣），既阻止结清也由对账续跑；
+   账户业务拒绝（余额不足等）→ FAILED（0 资金效果）。**FAILED/PENDING 重试都在计划锁内先重核
+   「计划仍 ACTIVE + 无在途结清」再触碰任何账户/账务**：计划已结清时旧 key 直接 409 `REPAYMENT_NOT_ALLOWED`，
+   不会先扣款再报错；正常 ACTIVE 计划上的同键重试仍可恢复。
+900/3 还 300 → 剩余 600、第 1 期 PAID，随后结清 600+6−0=606（原 US-005 不变）。
 
 **本金资金动作互斥（A-R003）**：同一计划的还款与结清共用互斥——建结清意图时若存在 PENDING 还款 → 409 `REPAYMENT_IN_PROGRESS`；
 建还款意图时若存在在途结清意图（PENDING/LEDGER_POSTED/PAYMENT_APPLIED）→ 409 `SETTLEMENT_IN_PROGRESS`。
@@ -180,8 +187,10 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | REQ-INS-07 后台查询导出 | §5、§8 | US-008、AC-21 | AdminExportServiceTest、AccessGuardTest |
 | 权限/SoD | §8 | AC-14/15/21 | AccessGuardTest、TokenAuthenticationFilterTest、HmacTokenVerifierTest |
 | 跨服务幂等/补偿 | §7 | A-001/A-002 | SettlementServiceTest、InstallmentApplicationServiceTest、AccountApplicationServiceTest、LedgerPostingServiceTest |
-| 冲正失败可恢复 | §7 | A-R001 | InstallmentApplicationServiceTest（failedReversalKeepsIntentResumable…） |
-| 还款金额合同/互斥/作用ID | §7 | A-R002/A-R003/A-R004 | RepaymentServiceTest、SettlementServiceTest、EffectIds |
+| 补偿阶段持久化与只逆向恢复 | §7 | A-R001 | InstallmentApplicationServiceTest（compensationPhaseNeverCompletesForward…、reconciliationOfCompensationPendingOnlyReverses） |
+| 本金-only 累计还款 | §7 | A-R002、US-005 | RepaymentServiceTest、InstallmentScheduleTest |
+| 还款/结清互斥与失败重试栅栏 | §7 | A-R003 | RepaymentServiceTest、SettlementServiceTest |
+| 操作作用ID | §7 | A-R004 | RepaymentServiceTest、EffectIds |
 | FAILED 不占在途 | §7 | A-R005 | SettlementServiceTest（failedIntentDoesNotBlockNewSettlementKey） |
 | 副作用事务边界（真实 PG 触发器） | §8 | R-C-01 | InstallmentSideEffectFailureTest（Testcontainers + 表级拒绝 INSERT） |
 | 通知显式重排 | §8 | R-C-03 | NotificationWorkerTest、InstallmentSideEffectFailureTest |
@@ -196,5 +205,5 @@ services/installment-service/src/main/java/com/carddemo/installment/
 2. `idempotencyKey` 超过 30 分钟窗口：PRD §12-6 未定正式错误码，本期按「拒绝旧键、不新建」实现为 409 `IDEMPOTENCY_KEY_EXPIRED`，正式码值仍待确认。
 3. 生产鉴权（JWT/网关，§12-7）与统一权限中心（§12-8）未实施；本地权限表属演示实现。
 4. 通知已实现本地真实投递（文件落盘 + 失败可见 + 自动补发 + 超限后客服显式重排），但未接入外部短信/推送厂商；正式通道与模板审核仍待 PRD §12 确认。
-6. 还款金额合同本轮限定为「完整一期本金」：部分还款（如 100/350）在资金动作前拒绝，正式部分还款/最低还款政策待 PRD 确认后再扩展。
+6. 还款按原文/PRD 实现本金-only 累计（支持部分归还）；手续费/利息如何随部分还款分配仍属 PRD §12 待确认，本轮不做手续费分配。
 5. 性能指标（p95）未在本次单测阶段验证，需在隔离 Compose 环境压测（verify 节点）。

@@ -128,16 +128,53 @@ class RepaymentServiceTest {
     }
 
     @Test
-    void partialAmountIsRejectedBeforeAnyMoneyMoves() {
-        for (String amount : List.of("100.00", "350.00", "299.99")) {
-            assertThatThrownBy(() -> service.repay(CUSTOMER, command("partial-" + amount, amount)))
-                    .isInstanceOf(BusinessRuleException.class)
-                    .extracting(ex -> ((BusinessRuleException) ex).getCode())
-                    .isEqualTo("UNSUPPORTED_REPAYMENT_AMOUNT");
-        }
+    void partialPrincipalIsAccumulatedPerPeriodExactly() {
+        // 900/3：先还 100 → 剩余 800，第 1 期已还 100 仍未完成
+        RepaymentService.RepaymentResult first = service.repay(CUSTOMER, command("part-1", "100.00"));
+        assertThat(first.principalApplied()).isEqualByComparingTo("100.00");
+        assertThat(first.paidInstallments()).isZero();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("800.00");
+        assertThat(schedules.get(0).getPaidPrincipal()).isEqualByComparingTo("100.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PENDING");
+
+        // 再还 250 → 累计 350：第 1 期完成（300），第 2 期已还 50，剩余 550
+        RepaymentService.RepaymentResult second = service.repay(CUSTOMER, command("part-2", "250.00"));
+        assertThat(second.principalApplied()).isEqualByComparingTo("250.00");
+        assertThat(second.paidInstallments()).isEqualTo(1);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("550.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+        assertThat(schedules.get(0).getPaidPrincipal()).isEqualByComparingTo("300.00");
+        assertThat(schedules.get(1).getStatus().name()).isEqualTo("PENDING");
+        assertThat(schedules.get(1).getPaidPrincipal()).isEqualByComparingTo("50.00");
+
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("100.00")), anyString());
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("250.00")), anyString());
+        verify(ledgerPort, org.mockito.Mockito.times(2))
+                .postGroup(anyString(), eq("INSTALLMENT_REPAYMENT"), eq(PLAN_ID), any());
+    }
+
+    @Test
+    void singlePartialRepaymentOnFreshPlanIsRecordedCompletely() {
+        RepaymentService.RepaymentResult result = service.repay(CUSTOMER, command("single-350", "350.00"));
+
+        assertThat(result.principalApplied()).isEqualByComparingTo("350.00");
+        assertThat(result.paidInstallments()).isEqualTo(1);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("550.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+        assertThat(schedules.get(1).getPaidPrincipal()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    void amountAboveUnpaidPrincipalIsRejectedBeforeMoneyMoves() {
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("too-much", "900.01")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_EXCEEDS_PRINCIPAL");
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("bad-scale", "10.001")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("INVALID_PARAMETER");
         verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
-        verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
-        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("900.00");
     }
 
     @Test
@@ -266,5 +303,57 @@ class RepaymentServiceTest {
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
         }
+    }
+
+    @Test
+    void failedRepaymentRetryAfterSettlementMovesNoMoney() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(repayments.get("pay-fail").getStatus()).isEqualTo(InstallmentRepayment.FAILED);
+
+        // 计划随后被结清（真实业务动作），用同一失败 key 重试
+        plan.settle("settle-x", NOW.minusMinutes(1));
+        org.mockito.Mockito.clearInvocations(accountPort, ledgerPort);
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail", "300.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_NOT_ALLOWED");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+        verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void failedRepaymentRetryDuringSettlementIsRejectedBeforeMoneyMoves() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail2", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+
+        when(settlementIntentRepository.findFirstByPlanIdAndStatusIn(eq(PLAN_ID), any()))
+                .thenReturn(Optional.of(new SettlementIntent("settle-y", PLAN_ID, new BigDecimal("900.00"),
+                        new BigDecimal("9.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("909.00"), NOW)));
+        org.mockito.Mockito.clearInvocations(accountPort, ledgerPort);
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail2", "300.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("SETTLEMENT_IN_PROGRESS");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+    }
+
+    @Test
+    void failedRepaymentRetryOnActivePlanStillRecovers() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"))
+                .thenReturn(new BigDecimal("864.00"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-ok", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+
+        RepaymentService.RepaymentResult recovered = service.repay(CUSTOMER, command("pay-ok", "300.00"));
+
+        assertThat(recovered.replayed()).isFalse();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
     }
 }

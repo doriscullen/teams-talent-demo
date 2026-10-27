@@ -2289,11 +2289,12 @@ function pageInstallmentDetail(planId) {
                     <dt>还款计划合计</dt><dd class="mono">${money(scheduleTotal)}</dd>
                 </dl>
                 <div class="table-wrap mt-16"><table class="table">
-                    <thead><tr><th>期序</th><th>应还日期</th><th>本金</th><th>手续费</th><th>合计</th><th>状态</th></tr></thead>
+                    <thead><tr><th>期序</th><th>应还日期</th><th>应还本金</th><th>已还本金</th><th>手续费</th><th>合计</th><th>状态</th></tr></thead>
                     <tbody>${plan.schedules.map((row) => `
                         <tr><td>${row.installmentNo}</td>
                             <td>${dateText(row.dueDate)}</td>
                             <td class="num mono">${money(row.principalDue)}</td>
+                            <td class="num mono">${money(row.paidPrincipal || 0)}</td>
                             <td class="num mono">${money(row.feeDue)}</td>
                             <td class="num mono">${money(row.totalDue)}</td>
                             <td>${esc(row.status)}</td></tr>`).join('')}
@@ -2310,11 +2311,15 @@ function pageInstallmentDetail(planId) {
                             <td class="nowrap">${dateTimeText(row.createdAt)}</td></tr>`).join('')}
                     </tbody></table></div>` : ''}
                 ${plan.status === 'ACTIVE' ? `
-                <h3 class="mt-16">归还本期</h3>
-                <p class="hint">从账户真实还款并回写还款计划：本期应还本金 ${nextUnpaid ? money(nextUnpaid.principalDue) : '0.00'}。
-                    同一还款标识重试只扣款一次。</p>
-                <div class="form-actions">
-                    <button class="btn ghost" id="ins-repay" ${nextUnpaid ? '' : 'disabled'}>归还本期本金</button>
+                <h3 class="mt-16">归还本金</h3>
+                <p class="hint">按实际归还本金累计回写：本期未还本金 ${nextUnpaid ? money(Number(nextUnpaid.principalDue) - Number(nextUnpaid.paidPrincipal || 0)) : '0.00'}，
+                    可部分归还（不少于 0.01，不超过剩余本金 ${money(plan.remainingPrincipal)}）。同一还款标识重试只扣款一次。</p>
+                <div class="inline-form">
+                    <label class="field"><span>本次归还本金</span>
+                        <input id="ins-repay-amount" type="number" step="0.01" min="0.01"
+                            max="${esc(plan.remainingPrincipal)}"
+                            value="${nextUnpaid ? (Number(nextUnpaid.principalDue) - Number(nextUnpaid.paidPrincipal || 0)).toFixed(2) : ''}"></label>
+                    <button class="btn ghost" id="ins-repay" ${nextUnpaid ? '' : 'disabled'}>归还本金</button>
                 </div>
                 <div id="ins-repay-msg"></div>
                 <h3 class="mt-16">提前结清</h3>
@@ -2339,13 +2344,19 @@ function pageInstallmentDetail(planId) {
         button.addEventListener('click', async () => {
             const msg = document.getElementById('ins-repay-msg');
             msg.innerHTML = '';
-            // 同一期还款重试复用同一 paymentKey（幂等）
+            const amountInput = document.getElementById('ins-repay-amount');
+            const amount = Number(amountInput.value);
+            if (!amount || amount <= 0) {
+                msg.innerHTML = '<div class="alert error">请输入大于 0 的归还本金金额</div>';
+                return;
+            }
+            // 同一笔还款重试复用同一 paymentKey（幂等）
             if (!repaymentKey) repaymentKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
             setBusy(button, true, '还款中…');
             try {
                 const result = await api(`/api/v1/installments/${encodeURIComponent(planId)}/repayments`, {
                     method: 'POST',
-                    body: { paymentKey: repaymentKey, amount: Number(nextUnpaid.principalDue) }
+                    body: { paymentKey: repaymentKey, amount: amount }
                 });
                 toast(result.replayed ? '该次还款已处理（重放首次结果）' : '还款成功', 'success');
                 repaymentKey = null;

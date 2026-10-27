@@ -205,6 +205,12 @@ public class InstallmentApplicationService {
                             "completed installment intent has no plan: " + intent.getIntentId()));
             return new CreateResult(plan, true);
         }
+        if (intent.isCompensationPending()) {
+            // A-R001：补偿决定已持久化 → 只允许幂等完成同一逆向，即使原拒绝原因已解除也不得前向完成
+            completeCompensation(intent);
+            throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
+                    "A previous attempt with this key was compensated; please use a new key.");
+        }
         if (!intent.isResumable()) {
             throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
                     "A previous attempt with this key failed and was compensated; please use a new key.");
@@ -244,6 +250,10 @@ public class InstallmentApplicationService {
         InstallmentApplicationIntent intent = intentRepository.findById(detached.getIntentId())
                 .orElseThrow(() -> new IllegalStateException("installment intent disappeared: "
                         + detached.getIntentId()));
+        if (intent.isCompensationPending() || InstallmentApplicationIntent.REVERSED.equals(intent.getStatus())) {
+            throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
+                    "This installment intent is being compensated and cannot be completed.");
+        }
         InstallmentPolicy policy = policyRepository.findById((short) 1)
                 .orElseThrow(() -> new BusinessRuleException("CONFIGURATION_MISSING", "Installment policy is missing"));
         accountLockRepository.ensureExists(intent.getAccountId());
@@ -302,11 +312,18 @@ public class InstallmentApplicationService {
      */
     public int reconcilePending() {
         List<InstallmentApplicationIntent> stale = intentRepository.findByStatusInAndUpdatedAtBefore(
-                List.of(InstallmentApplicationIntent.PENDING, InstallmentApplicationIntent.LEDGER_POSTED),
+                List.of(InstallmentApplicationIntent.PENDING, InstallmentApplicationIntent.LEDGER_POSTED,
+                        InstallmentApplicationIntent.COMPENSATION_PENDING),
                 clock.now().minusSeconds(5));
         int completed = 0;
         InstallmentPrincipal system = new InstallmentPrincipal("SYSTEM", "A");
         for (InstallmentApplicationIntent intent : stale) {
+            if (intent.isCompensationPending()) {
+                if (completeCompensation(intent)) {
+                    completed++;
+                }
+                continue;
+            }
             try {
                 postCreateLedger(intent);
                 markLedgerPosted(intent);
@@ -327,23 +344,42 @@ public class InstallmentApplicationService {
      * 直到反向分录真实成功才终结为 REVERSED。
      */
     private void compensate(InstallmentApplicationIntent intent, String reason) {
-        boolean reversed;
+        // ① 先把「补偿决定」落库（独立事务），之后的崩溃/丢响应都只能走逆向
+        transactionTemplate.executeWithoutResult(status ->
+                intentRepository.findById(intent.getIntentId()).ifPresent(fresh -> {
+                    fresh.markCompensationPending(clock.now());
+                    intentRepository.saveAndFlush(fresh);
+                }));
+        completeCompensation(intent, reason);
+    }
+
+    /**
+     * 只完成逆向（可重复调用）：用稳定作用ID {@code planId-REV} 冲正，成功后置 REVERSED。
+     * 逆向过账失败或响应丢失时保持 COMPENSATION_PENDING，下一次重试/对账会幂等完成同一逆向。
+     */
+    private boolean completeCompensation(InstallmentApplicationIntent detached) {
+        return completeCompensation(detached, detached.getLastError());
+    }
+
+    private boolean completeCompensation(InstallmentApplicationIntent detached, String reason) {
         try {
-            postReversalLedger(intent);
-            reversed = true;
+            postReversalLedger(detached);
         } catch (RemoteServiceException ex) {
-            log.warn("installment compensation posting failed, kept resumable: planId={}", intent.getPlanId());
-            reversed = false;
-        }
-        if (reversed) {
+            log.warn("installment reversal not confirmed yet, staying COMPENSATION_PENDING: planId={}",
+                    detached.getPlanId());
             transactionTemplate.executeWithoutResult(status ->
-                    intentRepository.findById(intent.getIntentId()).ifPresent(fresh -> {
-                        fresh.markReversed(reason, clock.now());
+                    intentRepository.findById(detached.getIntentId()).ifPresent(fresh -> {
+                        fresh.recordError("reversal pending: " + ex.getMessage(), clock.now());
                         intentRepository.saveAndFlush(fresh);
                     }));
-        } else {
-            recordError(intent, "reversal pending: " + reason);
+            return false;
         }
+        transactionTemplate.executeWithoutResult(status ->
+                intentRepository.findById(detached.getIntentId()).ifPresent(fresh -> {
+                    fresh.markReversed(reason == null ? "compensated" : reason, clock.now());
+                    intentRepository.saveAndFlush(fresh);
+                }));
+        return true;
     }
 
     private void postCreateLedger(InstallmentApplicationIntent intent) {
