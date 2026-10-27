@@ -44,6 +44,7 @@ public class AccountRestClient implements AccountPort {
                     String.valueOf(body.get("activeStatus")),
                     decimal(body.get("currentBalance")),
                     decimal(body.get("creditLimit")),
+                    decimal(body.get("cashCreditLimit")),
                     java.time.LocalDate.parse(String.valueOf(body.get("openDate"))));
         } catch (HttpClientErrorException ex) {
             if (ex.getStatusCode() == HttpStatus.NOT_FOUND) {

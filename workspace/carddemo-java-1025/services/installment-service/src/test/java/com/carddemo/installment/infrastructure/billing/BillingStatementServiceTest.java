@@ -38,7 +38,8 @@ class BillingStatementServiceTest {
     void setUp() {
         AccountPort accountPort = mock(AccountPort.class);
         when(accountPort.getAccount(ACCOUNT)).thenReturn(new AccountPort.AccountSnapshot(
-                ACCOUNT, "Y", new BigDecimal("2450.75"), new BigDecimal("8000.00"), LocalDate.of(2018, 3, 9)));
+                ACCOUNT, "Y", new BigDecimal("2450.75"), new BigDecimal("8000.00"),
+                new BigDecimal("4000.00"), LocalDate.of(2018, 3, 9)));
         transactionPort = mock(TransactionPort.class);
         allocationRepository = mock(PrincipalAllocationRepository.class);
         flagRepository = mock(EligibilityFlagRepository.class);

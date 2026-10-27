@@ -65,6 +65,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | `/api/v1/installments/preview` | POST | 200 + `previewToken`/期次明细/总费/首期合计 | 404（越权/不属本账户）、409 `INSTALLMENT_NOT_ELIGIBLE`/`PRINCIPAL_EXCEEDS_LIMIT`/`ALREADY_INSTALLED`，400 `INVALID_TERM` |
 | `/api/v1/installments/eligibility` | GET | 200 `{eligible,reason,alreadyInstalled,existingPlanId,minAmount}` | 404（越权） |
 | `/api/v1/installments/bills/{accountId}` | GET | 200 `{billId,cycleStart,cycleEnd,billPrincipal,availablePrincipal,lines[]}` | 404（越权），503 |
+| `/api/v1/installments/accounts/{accountId}/limit-view` | GET | 200 `{accountId,activeStatus,creditLimit,cashCreditLimit,currentBalance,installmentOccupied,activePlanCount,asOf}`：原文 §8.1 `account_limit_view`，`installmentOccupied` = ACTIVE 计划 `remaining_principal` 合计（本金口径，来自 V7 视图） | 401（无 token）、404（非本人账户）、403（后台无读权限）、503 |
 | `/api/v1/installments/{planId}/repayments` | POST | 200 `{remainingPrincipal,principalApplied,paidInstallments,replayed}`（本金-only，支持部分归还并按期累计） | 409 `REPAYMENT_NOT_ALLOWED`/`IDEMPOTENCY_KEY_CONFLICT`/`SETTLEMENT_IN_PROGRESS`，400 `REPAYMENT_EXCEEDS_PRINCIPAL`/`INVALID_PARAMETER` |
 | `/api/v1/installments/{planId}/settlement-quote` | GET | 200 `{remainingPrincipal,penaltyFee,feeRebate,settlementTotal}` | 409 `SETTLEMENT_NOT_ALLOWED` |
 | `/api/v1/installments` | POST | 201（同键重放 200） | 409 `ALREADY_INSTALLED`/`INSTALLMENT_LIMIT_EXCEEDED`/`PREVIEW_EXPIRED`/`IDEMPOTENCY_KEY_CONFLICT`，400 `AGREEMENT_REQUIRED`，503 `DOWNSTREAM_UNAVAILABLE` |
@@ -91,6 +92,8 @@ services/installment-service/src/main/java/com/carddemo/installment/
 `installment_policy`（起分额/20 笔上限/违约金率/令牌与幂等窗口）、`installment_rate`（3/6/12 月费率）、`installment_plan`、`installment_schedule`、`installment_principal_allocation`、`installment_account_access`、`installment_permission`、`installment_account_lock`、`installment_eligibility_flag`、`installment_settlement_intent`、`installment_export_file`、`installment_audit_event`、`installment_audit_retry`、`installment_notification_outbox`；ledger：`ledger_entry_group`、`ledger_entry_line`。
 本轮新增：`installment_application_intent`、`installment_repayment`（分期库）；`account_payment_effect`（账户库，effectId 去重）；通知发件箱增加 `sent_at/updated_at`；结清意图增加 `last_error`。
 关键约束：`uk_installment_plan_idempotency`（去重键全局唯一）、`uk_installment_schedule(plan_id, installment_no)`、`installment_settlement_intent.settlement_key` 主键、`uk_installment_intent_plan`、**部分唯一索引 `uk_installment_settlement_active_plan(plan_id) WHERE status <> 'COMPLETED'`**（同一计划只允许一条在途结清）、`account_payment_effect.effect_id` 主键。
+**视图 `account_limit_view`（V7）**：`account_id` / `installment_occupied`（`numeric(12,2)`，= ACTIVE 计划 `remaining_principal` 合计）/ `active_plan_count`，直接聚合 `installment_plan`，不另存展示字段；无 ACTIVE 计划的账户由查询侧补 `0.00`。读取由 `JdbcAccountLimitViewRepository` 完成，接口见 §5。
+
 列类型对齐：`installment_plan.term_months`、`installment_schedule.installment_no` 由 `SMALLINT` 改为 `INT`（V3，对应实体 `int`），`installment_policy.id` 保持 `SMALLINT`（对应 `Short`）；真实 PostgreSQL 启动/迁移/Schema 校验由 `InstallmentSchemaValidationTest`（Testcontainers `postgres:16-alpine` + `ddl-auto=validate`）守护。
 
 ## 7. 事务、幂等与并发
@@ -194,7 +197,7 @@ waiting=48-50`、41×500、9×30.3s）。因此改为两段式：
 - `docker-compose.yml` 新增两服务（8088/8089）与 web-ui 代理配置；`docker/postgres/init/01-databases.sql` 新增 `carddemo_installment`、`carddemo_ledger`。
 - `transaction-service`：`TransactionResponse` **新增 `status` 字段**（分期资格判断需要真实 POSTED 状态；原文 §11.2 要求交易响应增加分期资格相关字段）。
 - `iam-service`：新增 `V3__installment_roles.sql`（ADMIN002=客服、ADMIN003=风控只读、USER0002=第二客户）提供真实登录身份；相应种子数量断言已更新。
-- `web-ui`：`/api/v1/installments`、`/api/v1/admin/installments` 代理；新增「我的分期」「我的账单（真实账单号/账期/可分期本金）」「申请分期（三步：期数→试算→确认，幂等键页面内稳定）」「分期详情（归还本期 + 结清试算→确认→取消）」「分期后台（真实分页+只读详情+带 Bearer 的 CSV 下载）」页面。交易详情入口按服务端 `eligibility` 投影渲染：低额/争议/逾期/未入账显示禁用与原因，已分期显示徽标与计划链接。
+- `web-ui`：`/api/v1/installments`、`/api/v1/admin/installments` 代理；账户视图页新增「分期占用」（读 `limit-view`，无权限/未登录时显示 `—`，不阻断其余账户信息）；新增「我的分期」「我的账单（真实账单号/账期/可分期本金）」「申请分期（三步：期数→试算→确认，幂等键页面内稳定）」「分期详情（归还本期 + 结清试算→确认→取消）」「分期后台（真实分页+只读详情+带 Bearer 的 CSV 下载）」页面。交易详情入口按服务端 `eligibility` 投影渲染：低额/争议/逾期/未入账显示禁用与原因，已分期显示徽标与计划链接。
 
 ## 11. 需求覆盖矩阵
 
@@ -205,6 +208,7 @@ waiting=48-50`、41×500、9×30.3s）。因此改为两段式：
 | REQ-INS-03 试算 | §5、§7 | US-001、AC-12、AC-13 | FeeScheduleCalculatorTest、PreviewServiceTest、PreviewTokenServiceTest |
 | REQ-INS-04 提交 | §7 | US-001/002/003/007、AC-10/11/14/19/20 | InstallmentApplicationServiceTest、InstallmentControllerTest |
 | REQ-INS-05 我的分期 | §5、§7 | US-004、AC-15 | InstallmentQueryServiceTest |
+| 账户额度视图分期占用（§8.1） | §5、§6 | US-004、§11.2 | AccountLimitViewServiceTest、InstallmentSchemaValidationTest（真实 PG 视图聚合/还款后回落）、InstallmentControllerTest |
 | REQ-INS-06 提前结清 | §7 | US-005、AC-16 | SettlementServiceTest、SettlementCalculatorTest |
 | REQ-INS-07 后台查询导出 | §5、§8 | US-008、AC-21 | AdminExportServiceTest、AccessGuardTest |
 | 权限/SoD | §8 | AC-14/15/21 | AccessGuardTest、TokenAuthenticationFilterTest、HmacTokenVerifierTest |

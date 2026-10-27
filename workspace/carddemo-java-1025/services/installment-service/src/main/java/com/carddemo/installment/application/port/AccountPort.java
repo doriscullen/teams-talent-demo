@@ -7,7 +7,7 @@ import java.time.LocalDate;
 public interface AccountPort {
 
     record AccountSnapshot(String accountId, String activeStatus, BigDecimal currentBalance,
-                           BigDecimal creditLimit, LocalDate openDate) {
+                           BigDecimal creditLimit, BigDecimal cashCreditLimit, LocalDate openDate) {
     }
 
     AccountSnapshot getAccount(String accountId);

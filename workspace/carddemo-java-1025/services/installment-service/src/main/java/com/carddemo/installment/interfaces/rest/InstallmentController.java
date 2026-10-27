@@ -1,5 +1,6 @@
 package com.carddemo.installment.interfaces.rest;
 
+import com.carddemo.installment.application.AccountLimitViewService;
 import com.carddemo.installment.application.EligibilityQueryService;
 import com.carddemo.installment.application.InstallmentApplicationService;
 import com.carddemo.installment.application.InstallmentQueryService;
@@ -93,19 +94,22 @@ public class InstallmentController {
     private final SettlementService settlementService;
     private final RepaymentService repaymentService;
     private final EligibilityQueryService eligibilityQueryService;
+    private final AccountLimitViewService accountLimitViewService;
 
     public InstallmentController(PreviewService previewService,
                                  InstallmentApplicationService applicationService,
                                  InstallmentQueryService queryService,
                                  SettlementService settlementService,
                                  RepaymentService repaymentService,
-                                 EligibilityQueryService eligibilityQueryService) {
+                                 EligibilityQueryService eligibilityQueryService,
+                                 AccountLimitViewService accountLimitViewService) {
         this.previewService = previewService;
         this.applicationService = applicationService;
         this.queryService = queryService;
         this.settlementService = settlementService;
         this.repaymentService = repaymentService;
         this.eligibilityQueryService = eligibilityQueryService;
+        this.accountLimitViewService = accountLimitViewService;
     }
 
     @Operation(summary = "分期试算", description = "不落库、不产生资金状态；返回 previewToken 供提交复用。越权 404。")
@@ -135,6 +139,16 @@ public class InstallmentController {
             @PathVariable @Pattern(regexp = "\\d{11}", message = "accountId must be 11 digits") String accountId) {
         requirePrincipal(principal);
         return eligibilityQueryService.currentBill(principal, accountId);
+    }
+
+    @Operation(summary = "账户额度视图",
+            description = "原文 §8.1 account_limit_view：账户额度 + 分期占用（ACTIVE 计划剩余本金合计，本金口径）；越权 404。")
+    @GetMapping("/accounts/{accountId}/limit-view")
+    public AccountLimitViewService.LimitView accountLimitView(
+            @RequestAttribute(name = InstallmentPrincipal.ATTRIBUTE, required = false) InstallmentPrincipal principal,
+            @PathVariable @Pattern(regexp = "\\d{11}", message = "accountId must be 11 digits") String accountId) {
+        requirePrincipal(principal);
+        return accountLimitViewService.accountLimitView(principal, accountId);
     }
 
     @Operation(summary = "创建分期", description = "201 创建成功；同一 idempotencyKey 重放返回 200 与首次计划。")

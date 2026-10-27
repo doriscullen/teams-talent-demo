@@ -381,6 +381,9 @@ function pageAccounts() {
                     .catch(() => null);
             }
             const available = Number(account.creditLimit) - Number(account.currentBalance);
+            // 原文 §8.1 / US-004：账户额度视图的分期占用（= ACTIVE 计划剩余本金合计）
+            const limitView = await api(`/api/v1/installments/accounts/${encodeURIComponent(accountId)}/limit-view`)
+                .catch(() => null);
             box.innerHTML = `
                 <div class="grid cols-3 mt-16">
                     <div class="card">
@@ -390,13 +393,15 @@ function pageAccounts() {
                             <dt>当前欠款余额</dt><dd class="mono">${money(account.currentBalance)}</dd>
                             <dt>信用额度</dt><dd class="mono">${money(account.creditLimit)}</dd>
                             <dt>可用额度</dt><dd class="mono"><strong>${money(available)}</strong></dd>
+                            <dt>分期占用</dt><dd class="mono">${limitView ? money(limitView.installmentOccupied) : '—'}</dd>
                             <dt>现金额度</dt><dd class="mono">${money(account.cashCreditLimit)}</dd>
                             <dt>本期贷 / 借</dt><dd class="mono">${money(account.currentCycleCredit)} / ${money(account.currentCycleDebit)}</dd>
                             <dt>开户 / 到期</dt><dd>${dateText(account.openDate)} / ${dateText(account.expirationDate)}</dd>
                             <dt>重发日</dt><dd>${dateText(account.reissueDate)}</dd>
                             <dt>账户组</dt><dd class="mono">${esc(account.groupId || '—')}</dd>
                         </dl>
-                        <div class="hint mt-16">可用额度 = 信用额度 − 当前欠款（授权时还会扣除待授权占用）。</div>
+                        <div class="hint mt-16">可用额度 = 信用额度 − 当前欠款（授权时还会扣除待授权占用）。
+                            分期占用为生效计划剩余本金合计，已含在欠款中，不重复扣减。</div>
                     </div>
                     <div class="card">
                         <h3>客户</h3>
@@ -422,6 +427,7 @@ function pageAccounts() {
                         </div>
                         <div class="hint mt-16">
                             欠款 ${money(account.currentBalance)} / 额度 ${money(account.creditLimit)}<br>
+                            分期占用 ${limitView ? money(limitView.installmentOccupied) : '—'}（本金口径）<br>
                             卡片 ${cards.length} 张
                         </div>
                     </div>

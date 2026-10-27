@@ -1,5 +1,6 @@
 package com.carddemo.installment.interfaces.rest;
 
+import com.carddemo.installment.application.AccountLimitViewService;
 import com.carddemo.installment.application.InstallmentApplicationService;
 import com.carddemo.installment.application.EligibilityQueryService;
 import com.carddemo.installment.application.InstallmentQueryService;
@@ -41,6 +42,7 @@ class InstallmentControllerTest {
     private SettlementService settlementService;
     private RepaymentService repaymentService;
     private EligibilityQueryService eligibilityQueryService;
+    private AccountLimitViewService accountLimitViewService;
     private MockMvc mvc;
 
     @BeforeEach
@@ -51,9 +53,11 @@ class InstallmentControllerTest {
         settlementService = mock(SettlementService.class);
         repaymentService = mock(RepaymentService.class);
         eligibilityQueryService = mock(EligibilityQueryService.class);
+        accountLimitViewService = mock(AccountLimitViewService.class);
         mvc = MockMvcBuilders.standaloneSetup(
                         new InstallmentController(previewService, applicationService, queryService,
-                                settlementService, repaymentService, eligibilityQueryService))
+                                settlementService, repaymentService, eligibilityQueryService,
+                                accountLimitViewService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -234,6 +238,41 @@ class InstallmentControllerTest {
                         .content("{\"settlementIdempotencyKey\":\"settle-9\",\"feeRebate\":10000.00}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_FEE_REBATE"));
+    }
+
+    @Test
+    void accountLimitViewReturnsInstallmentOccupied() throws Exception {
+        when(accountLimitViewService.accountLimitView(any(), eq("00000000006"))).thenReturn(
+                new AccountLimitViewService.LimitView("00000000006", "Y", new BigDecimal("20000.00"),
+                        new BigDecimal("8000.00"), new BigDecimal("1000.00"), new BigDecimal("1000.00"), 1,
+                        java.time.LocalDateTime.of(2026, 10, 28, 9, 0)));
+
+        mvc.perform(get("/api/v1/installments/accounts/00000000006/limit-view")
+                        .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountId").value("00000000006"))
+                .andExpect(jsonPath("$.installmentOccupied").value(1000.00))
+                .andExpect(jsonPath("$.activePlanCount").value(1))
+                .andExpect(jsonPath("$.currentBalance").value(1000.00));
+    }
+
+    @Test
+    void accountLimitViewRequiresAuthentication() throws Exception {
+        mvc.perform(get("/api/v1/installments/accounts/00000000006/limit-view"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void accountLimitViewOfOtherCustomerIsNotFound() throws Exception {
+        when(accountLimitViewService.accountLimitView(any(), eq("00000000005"))).thenThrow(
+                new com.carddemo.installment.domain.exception.NotFoundException("INSTALLMENT_NOT_FOUND",
+                        "Account is not accessible for this customer."));
+
+        mvc.perform(get("/api/v1/installments/accounts/00000000005/limit-view")
+                        .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INSTALLMENT_NOT_FOUND"));
     }
 
     @Test

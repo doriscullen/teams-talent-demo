@@ -1,5 +1,6 @@
 package com.carddemo.installment;
 
+import com.carddemo.installment.domain.repository.AccountLimitViewRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,12 +40,15 @@ class InstallmentSchemaValidationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private AccountLimitViewRepository accountLimitView;
+
     @Test
     void migrationsApplyOnRealPostgres() {
         List<String> versions = jdbc.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class);
 
-        assertThat(versions).contains("1", "2", "3", "4");
+        assertThat(versions).contains("1", "2", "3", "4", "5", "6", "7");
     }
 
     @Test
@@ -69,6 +73,52 @@ class InstallmentSchemaValidationTest {
         assertThat(jdbc.queryForObject("select count(*) from information_schema.tables "
                 + "where table_name in ('installment_application_intent', 'installment_repayment')", Integer.class))
                 .isEqualTo(2);
+    }
+
+    @Test
+    void accountLimitViewSumsOnlyActiveRemainingPrincipal() {
+        insertPlan("IPVIEW0001", "00000000090", "ACTIVE", "1000.00", "view-key-1");
+        insertPlan("IPVIEW0002", "00000000090", "ACTIVE", "600.00", "view-key-2");
+        insertPlan("IPVIEW0003", "00000000090", "SETTLED", "600.00", "view-key-3");
+        insertPlan("IPVIEW0004", "00000000090", "CANCELLED", "500.00", "view-key-4");
+
+        AccountLimitViewRepository.Occupancy occupancy = accountLimitView.findOccupancy("00000000090");
+
+        assertThat(occupancy.installmentOccupied()).isEqualByComparingTo("1600.00");
+        assertThat(occupancy.activePlanCount()).isEqualTo(2);
+    }
+
+    @Test
+    void accountLimitViewFollowsRepaymentAndSettlement() {
+        insertPlan("IPVIEW0011", "00000000091", "ACTIVE", "1000.00", "view-key-11");
+
+        jdbc.update("update installment_plan set remaining_principal = 700.00 where plan_id = 'IPVIEW0011'");
+        assertThat(accountLimitView.findOccupancy("00000000091").installmentOccupied())
+                .isEqualByComparingTo("700.00");
+
+        jdbc.update("update installment_plan set remaining_principal = 0.00, status = 'SETTLED' "
+                + "where plan_id = 'IPVIEW0011'");
+        AccountLimitViewRepository.Occupancy settled = accountLimitView.findOccupancy("00000000091");
+        assertThat(settled.installmentOccupied()).isEqualByComparingTo("0.00");
+        assertThat(settled.activePlanCount()).isZero();
+    }
+
+    @Test
+    void accountLimitViewIsZeroForAccountWithoutPlans() {
+        AccountLimitViewRepository.Occupancy occupancy = accountLimitView.findOccupancy("00000000099");
+
+        assertThat(occupancy.installmentOccupied()).isEqualByComparingTo("0.00");
+        assertThat(occupancy.activePlanCount()).isZero();
+    }
+
+    private void insertPlan(String planId, String accountId, String status, String remainingPrincipal,
+                            String idempotencyKey) {
+        jdbc.update("insert into installment_plan (plan_id, account_id, source_type, source_id, principal, "
+                        + "term_months, monthly_fee_rate, total_fee, remaining_principal, status, created_at, "
+                        + "idempotency_key) values (?, ?, 'TRANSACTION', ?, 1000.00, 6, 0.0055, 19.25, ?, ?, "
+                        + "CURRENT_TIMESTAMP, ?)",
+                planId, accountId, "0000000000" + planId.substring(planId.length() - 2),
+                new java.math.BigDecimal(remainingPrincipal), status, idempotencyKey);
     }
 
     private int integerColumnCount(String table, String column) {

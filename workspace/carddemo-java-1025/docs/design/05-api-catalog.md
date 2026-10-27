@@ -643,6 +643,8 @@
 | POST | `/api/v1/installments` | 创建分期；`201`，同一 `idempotencyKey` 重放 `200` 返回首次计划 |
 | GET | `/api/v1/installments?accountId=&status=&page=&size=` | 我的/账户分期列表；`page≥1`、`1≤size≤100` |
 | GET | `/api/v1/installments/{planId}` | 详情 + 还款计划；越权 `404 INSTALLMENT_NOT_FOUND` |
+| POST | `/api/v1/installments/{planId}/repayments` | 一期/部分本金还款；同 `paymentKey` 重放首次结果，本金-only 按期累计 |
+| GET | `/api/v1/installments/accounts/{accountId}/limit-view` | 账户额度视图（原文 §8.1 `account_limit_view`）：账户额度字段 + `installmentOccupied`（= ACTIVE 计划 `remaining_principal` 合计，本金口径）；越权 `404`，后台无读权限 `403` |
 | POST | `/api/v1/installments/{planId}/early-settlement` | 提前结清；同 `settlementIdempotencyKey` 重放 `200` 首次结果，异键对非 ACTIVE `409 SETTLEMENT_NOT_ALLOWED` |
 | GET | `/api/v1/admin/installments?accountId=&status=&page=&size=` | 后台查询（需 `STAFF_ASSIST` 或 `RISK_READONLY`） |
 | POST | `/api/v1/admin/installments/exports?days=30` | 创建 CSV 导出（24 小时有效），返回 `exportId/rowCount/expiresAt` |

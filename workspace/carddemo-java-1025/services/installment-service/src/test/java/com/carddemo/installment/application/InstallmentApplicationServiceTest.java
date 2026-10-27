@@ -128,7 +128,7 @@ class InstallmentApplicationServiceTest {
         when(lockRepository.lockByAccountId(ACCOUNT)).thenReturn(Optional.of(mock(AccountLockRow.class)));
         when(accountPort.getAccount(ACCOUNT)).thenReturn(
                 new AccountPort.AccountSnapshot(ACCOUNT, "Y", new BigDecimal("2450.75"),
-                        new BigDecimal("20000.00"), LocalDate.of(2018, 3, 9)));
+                        new BigDecimal("20000.00"), new BigDecimal("8000.00"), LocalDate.of(2018, 3, 9)));
         when(transactionPort.findTransaction(TXN)).thenReturn(Optional.of(new TransactionPort.TransactionView(
                 TXN, ACCOUNT, "3344556677889900", "01", "0001", "Purchase", new BigDecimal("1000.00"),
                 NOW.minusDays(1), "POSTED")));
