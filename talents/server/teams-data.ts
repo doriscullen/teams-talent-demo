@@ -2,9 +2,9 @@
 // projects, code repositories, design documents and shared sessions; Talents shows them read-only
 // and keeps only its own metadata about them (TalentsState.sourceMeta).
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { sharedPaths, type SharedProject, type SharedSession, type TeamsSnapshot } from '../../shared/contracts.ts';
-import { seedDir, sharedDir } from './config.ts';
+import { repositoryRoot, seedDir, sharedDir } from './config.ts';
 import { CLIENT_OWNED_KEYS, HttpError, SOURCE_META_KEYS, type DocTreeGroup, type LocalSource, type Source, type SourceMeta, type TalentsState } from './model.ts';
 
 export type SnapshotOrigin = 'shared' | 'seed' | 'none';
@@ -92,10 +92,20 @@ export function teamsModel(snapshot: TeamsSnapshot, meta: Record<string, SourceM
   return {
     team: { name: snapshot.team.name, admin: owner?.id ?? '', me: me?.id ?? '',
       members: members.map(m => ({ id: m.id, name: m.name, role: m.role, status: m.status, title: m.role === 'owner' ? 'Owner' : '成员' })) },
-    projects: projects.map(p => ({ id: p.id, name: p.name, description: p.description })),
+    projects: projects.map(p => ({ id: p.id, name: p.name, description: p.description, skills: p.skills ?? [] })),
     sources,
     sessions: snapshot.sessions.filter(s => visible.has(s.projectId)).map(session),
   };
+}
+
+/** SKILL.md of a project skill, read from the path Teams gives (relative to the repository root). */
+export async function readSkill(snapshot: TeamsSnapshot, projectId: string, skillId: string, root = repositoryRoot) {
+  const skill = snapshot.projects.find(p => p.id === projectId && !p.readonly)?.skills?.find(s => s.id === skillId);
+  if (!skill) throw new HttpError('项目 Skill 不存在', 404);
+  const path = resolve(root, skill.path);
+  if (relative(root, path).startsWith('..')) throw new HttpError('Skill 路径无效', 400);
+  try { return { ...skill, content: await readFile(path, 'utf8') }; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new HttpError('找不到 Skill 文件：' + skill.path, 404); throw error; }
 }
 
 /** The state the front-end works on: Talents state merged with the Teams-derived team, projects, sources and sessions. */

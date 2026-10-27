@@ -1,13 +1,15 @@
-// 来源：一个层级（团队或项目）的代码仓和文档集。项目的代码仓和设计文档来自 iCode Teams，在这里只读；
-// Talents 只登记本地文档目录。团队会话也由 iCode Teams 管理，只在新建任务选择会话时出现。
-import { useState, type ReactNode } from 'react';
-import { App, AutoComplete, Button, Collapse, Drawer, Form, Input, Modal, Space, Table, Tag } from 'antd';
+// 来源：一个层级（团队或项目）的代码仓和文档集；项目另有成员共享的会话和项目 Skill。代码仓、设计文档、
+// 会话和 Skill 来自 iCode Teams，在这里只读；Talents 只登记本地文档目录。
+import { useEffect, useState, type ReactNode } from 'react';
+import { App, AutoComplete, Button, Collapse, Drawer, Form, Input, Modal, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { ExportOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTalents } from '../store.tsx';
 import { levelHash } from '../navigation.ts';
-import type { DocVersion, Source, TalentsState } from '../types.ts';
-import { changeCounts, knownFiles, latestVersion, levelName, levelSources, source, sourceFiles } from '../demo/model.ts';
-import { now, uid, when } from '../demo/format.ts';
+import type { DocVersion, ProjectSkill, Session, Source, TalentsState } from '../types.ts';
+import { changeCounts, knownFiles, latestVersion, levelName, levelSessions, levelSources, memberName, project, source, sourceFiles } from '../demo/model.ts';
+import { now, tokens, uid, when } from '../demo/format.ts';
+import { getSkill } from '../api.ts';
+import { Markdown } from '../components/files.tsx';
 import { CardGrid, EmptyState, Fields, FileMark, ItemCard, Section, SourceIcon } from '../components/ui.tsx';
 import type { Toolbar } from './level.tsx';
 
@@ -16,7 +18,8 @@ const fromText = (s: Source) => s.from ? { teams: '来自 iCode Teams', git: '�
 export function LevelSources({ pid, toolbar }: { pid: string | null; toolbar: Toolbar }) {
   const { state: st } = useTalents();
   const [open, setOpen] = useState<string | null>(null), [registering, setRegistering] = useState(false);
-  const list = levelSources(st, pid);
+  const [collection, setCollection] = useState<'sessions' | 'skills' | null>(null);
+  const list = levelSources(st, pid), p = project(st, pid);
   const card = (s: Source) => <ItemCard key={s.id} icon={<SourceIcon type={s.type} />} title={s.name} subtitle={<span className="path">{s.path}</span>} onClick={() => setOpen(s.id)}
     caption={s.fromTeams ? <Tag>iCode Teams</Tag> : <Tag>本地登记</Tag>}
     actions={<Button type="link" size="small" onClick={() => setOpen(s.id)}>详情</Button>}>
@@ -29,13 +32,92 @@ export function LevelSources({ pid, toolbar }: { pid: string | null; toolbar: To
   };
   return <>
     {toolbar(<Button type="primary" icon={<PlusOutlined />} onClick={() => setRegistering(true)}>登记本地文档来源</Button>)}
-    {pid ? <>
+    {p ? <>
       {section('repo', '代码仓', '这个 iCode Teams 项目还没有本机代码仓。')}
       {section('docs', '文档集', '还没有文档。设计文档在 iCode Teams 项目中添加，也可以登记本地文档目录。')}
+      <TeamsCollections p={p} sessions={levelSessions(st, p.id)} onOpen={setCollection} />
     </> : section('docs', '文档集', '还没有团队级的来源。可以登记行内规范等全团队通用的本地文档目录。')}
     {open && source(st, open) && <SourceDrawer id={open} onClose={() => setOpen(null)} />}
+    {p && collection === 'sessions' && <SessionsDrawer sessions={levelSessions(st, p.id)} onClose={() => setCollection(null)} />}
+    {p && collection === 'skills' && <SkillsDrawer pid={p.id} skills={p.skills} onClose={() => setCollection(null)} />}
     {registering && <RegisterSource pid={pid} onClose={() => setRegistering(false)} />}
   </>;
+}
+
+// ---------- Sessions and skills (from Teams, read-only) ----------
+// Each is one card; the card opens a drawer listing them, and a row switches the drawer to its details.
+const PAGE = 10;
+const latest = (sessions: Session[]) => sessions.reduce((a, s) => s.updated > a ? s.updated : a, '');
+function TeamsCollections({ p, sessions, onOpen }: { p: { skills: ProjectSkill[] }; sessions: Session[]; onOpen(which: 'sessions' | 'skills'): void }) {
+  const members = new Set(sessions.map(s => s.owner)).size, names = p.skills.slice(0, 2).map(s => s.name).join('、');
+  const card = (which: 'sessions' | 'skills', title: string, subtitle: string, rows: [string, ReactNode][]) =>
+    <ItemCard key={which} icon={<SourceIcon type={which} />} title={title} subtitle={subtitle} onClick={() => onOpen(which)}
+      caption={<Tag>iCode Teams</Tag>} actions={<Button type="link" size="small" onClick={() => onOpen(which)}>查看</Button>}><Fields rows={rows} /></ItemCard>;
+  return <Section title="会话与 Skill" note="来自 iCode Teams">
+    <CardGrid>
+      {card('sessions', '成员共享的会话', '成员在 iCode Teams 中共享的 Agent 会话', sessions.length
+        ? [['会话', sessions.length + ' 个，' + members + ' 位成员'], ['最近更新', when(latest(sessions))]] : [['会话', <span className="ui-note">还没有成员共享会话</span>]])}
+      {card('skills', '项目 Skill', 'iCode Teams 项目可用的 Skill', p.skills.length
+        ? [['Skill', p.skills.length + ' 个'], ['包括', names + (p.skills.length > 2 ? ' 等' : '')]] : [['Skill', <span className="ui-note">还没有项目 Skill</span>]])}
+    </CardGrid>
+  </Section>;
+}
+
+/** A drawer listing items with search and pages; picking one shows its details in the same drawer. */
+function ListDrawer<T extends { id: string }>({ title, items, search, columns, detail, onClose }: {
+  title: string; items: T[]; search(item: T, q: string): boolean; columns: TableColumnsType<T>;
+  detail(item: T): { title: ReactNode; body: ReactNode }; onClose(): void;
+}) {
+  const [q, setQ] = useState(''), [page, setPage] = useState(1), [picked, setPicked] = useState<T | null>(null);
+  const shown = items.filter(item => !q.trim() || search(item, q.trim().toLowerCase())), d = picked && detail(picked);
+  return <Drawer open width={760} onClose={onClose} title={d ? <div><a className="caption" onClick={() => setPicked(null)}>← 返回{title}</a><div>{d.title}</div></div> : <div><div className="caption">来自 iCode Teams</div>{title}</div>}>
+    {d ? d.body : <div className="form-body">
+      <Input.Search allowClear value={q} onChange={e => { setQ(e.target.value); setPage(1); }} placeholder="搜索名称" />
+      <Table<T> size="small" rowKey="id" dataSource={shown} columns={columns} locale={{ emptyText: '没有匹配的结果' }}
+        pagination={shown.length > PAGE && { current: page, pageSize: PAGE, onChange: setPage, showSizeChanger: false, size: 'small' }}
+        onRow={item => ({ onClick: () => setPicked(item), className: 'row-click' })} />
+    </div>}
+  </Drawer>;
+}
+
+function SessionsDrawer({ sessions, onClose }: { sessions: Session[]; onClose(): void }) {
+  const { state: st } = useTalents();
+  const owner = (s: Session) => memberName(st, s.owner, s.ownerName);
+  return <ListDrawer<Session> title="成员共享的会话" items={[...sessions].sort((a, b) => a.updated < b.updated ? 1 : -1)} onClose={onClose}
+    search={(s, q) => s.title.toLowerCase().includes(q) || s.id.includes(q) || owner(s).includes(q)}
+    columns={[
+      { title: '名称', dataIndex: 'title' },
+      { title: '成员', width: 80, render: (_, s) => owner(s) },
+      { title: '关联需求', width: 120, render: (_, s) => s.requirementId ?? <span className="ui-note">无</span> },
+      { title: '对话轮次', dataIndex: 'turns', align: 'right', width: 90 },
+      { title: '最后更新', width: 110, className: 'nowrap', render: (_, s) => when(s.updated) },
+    ]}
+    detail={s => ({ title: s.title, body: <div className="form-body">
+      {s.summary && <p>{s.summary}</p>}
+      <Fields rows={[['成员', owner(s)], !!s.agent && ['Agent', s.agent], !!s.model && ['模型', s.model], ['关联需求', s.requirementId ?? <span className="ui-note">无</span>],
+        ['对话轮次', s.turns], ['消息', s.messages], ['Token', tokens(s.tokens)], ['最后更新', when(s.updated)], !!s.cwd && ['工作目录', <span className="path">{s.cwd}</span>], ['会话 ID', <code>{s.id}</code>]]} />
+      <p className="caption">会话由成员在 iCode Teams 中共享，在 Talents 中只读。</p>
+    </div> })} />;
+}
+
+function SkillsDrawer({ pid, skills, onClose }: { pid: string; skills: ProjectSkill[]; onClose(): void }) {
+  return <ListDrawer<ProjectSkill> title="项目 Skill" items={skills} onClose={onClose}
+    search={(s, q) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)}
+    columns={[
+      { title: '名称', width: 220, render: (_, s) => <code>{s.name}</code> },
+      { title: '版本', dataIndex: 'version', width: 80 },
+      { title: '说明', dataIndex: 'description', ellipsis: true },
+    ]}
+    detail={s => ({ title: s.name, body: <SkillDetail pid={pid} skill={s} /> })} />;
+}
+function SkillDetail({ pid, skill }: { pid: string; skill: ProjectSkill }) {
+  const [text, setText] = useState<string | null>(null), [error, setError] = useState('');
+  useEffect(() => { getSkill(pid, skill.id).then(s => setText(s.content), e => setError((e as Error).message)); }, [pid, skill.id]);
+  return <div className="form-body">
+    <Fields rows={[['版本', skill.version], ['说明', skill.description], ['路径', <span className="path">{skill.path}</span>]]} />
+    <p className="caption">项目 Skill 在 iCode Teams 中管理，在 Talents 中只读。</p>
+    {error ? <p className="hint">{error}</p> : text === null ? <p className="ui-note">正在读取 SKILL.md…</p> : <article className="markdown"><Markdown text={text} /></article>}
+  </div>;
 }
 
 // ---------- Details ----------

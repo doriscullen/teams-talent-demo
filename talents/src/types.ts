@@ -7,7 +7,9 @@ export type Role = 'admin' | 'dev';
 
 export interface Member { id: string; name: string; role: 'owner' | 'member'; status?: string; title: string }
 export interface Team { name: string; admin: string; me: string; members: Member[] }
-export interface Project { id: string; name: string; description?: string }
+/** A project skill from Teams (项目可用 Skill); its SKILL.md is read on demand (api.getSkill). */
+export interface ProjectSkill { id: string; name: string; version: string; description: string; path: string; sha256: string }
+export interface Project { id: string; name: string; description?: string; skills: ProjectSkill[] }
 
 export interface Source {
   id: string; type: 'repo' | 'docs' | 'sessions'; name: string; path: string; desc?: string;
@@ -21,7 +23,7 @@ export interface Source {
 
 export interface Session {
   id: string; title: string; updated: string; turns: number; messages: number; tokens: number; files: number;
-  owner: string; ownerName?: string; projectId: string; agent?: string;
+  owner: string; ownerName?: string; projectId: string; agent?: string; model?: string; cwd?: string; requirementId?: string; summary?: string;
 }
 
 export interface Category { id: string; name: string; desc: string }

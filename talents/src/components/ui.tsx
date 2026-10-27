@@ -1,14 +1,14 @@
 // Building blocks shared by the pages: cards, labelled fields, sections and status tags.
 import type { ReactNode } from 'react';
 import { Card, Empty, Tag } from 'antd';
-import { BranchesOutlined, CodeOutlined, ExperimentOutlined, FileSearchOutlined, FileTextOutlined, FolderOpenOutlined, MessageOutlined, ProjectOutlined } from '@ant-design/icons';
+import { BranchesOutlined, CodeOutlined, ExperimentOutlined, FileSearchOutlined, FileTextOutlined, FolderOpenOutlined, MessageOutlined, ProjectOutlined, ToolOutlined } from '@ant-design/icons';
 import type { Artifact, Capability, Source } from '../types.ts';
 import { status } from '../demo/knowledge.ts';
 
 const capIcons: Record<string, ReactNode> = { index: <FileSearchOutlined />, doc: <FileTextOutlined />, code: <CodeOutlined />, traj: <ExperimentOutlined /> };
 export const CapIcon = ({ cap }: { cap: Capability }) => <>{capIcons[cap.cat] ?? <FileTextOutlined />}</>;
-const sourceIcons: Record<string, ReactNode> = { repo: <BranchesOutlined />, docs: <FolderOpenOutlined />, sessions: <MessageOutlined /> };
-export const SourceIcon = ({ type }: { type: Source['type'] | 'project' }) => <>{type === 'project' ? <ProjectOutlined /> : sourceIcons[type]}</>;
+const sourceIcons: Record<string, ReactNode> = { repo: <BranchesOutlined />, docs: <FolderOpenOutlined />, sessions: <MessageOutlined />, skills: <ToolOutlined /> };
+export const SourceIcon = ({ type }: { type: Source['type'] | 'skills' | 'project' }) => <>{type === 'project' ? <ProjectOutlined /> : sourceIcons[type]}</>;
 
 /** Labelled values, one per row: [label, value]; falsy rows are skipped. */
 export function Fields({ rows }: { rows: ([ReactNode, ReactNode] | false | null | undefined | '')[] }) {

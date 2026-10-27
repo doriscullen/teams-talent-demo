@@ -1,7 +1,7 @@
 // The Talents service (server/index.ts). Bootstrap returns Talents' own state merged with the team,
 // members, projects, code repositories, design documents and sessions read from Teams; saving sends the
 // whole state back and the service keeps only the Talents-owned part.
-import type { TalentsState, TeamsInfo } from './types.ts';
+import type { ProjectSkill, TalentsState, TeamsInfo } from './types.ts';
 
 export class ApiError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
@@ -16,3 +16,5 @@ export interface Boot { state: TalentsState; revision: number; teams: TeamsInfo 
 export const bootstrap = () => api<Boot>('GET', '/api/bootstrap');
 export const saveState = (revision: number, state: TalentsState) => api<{ revision: number }>('PUT', '/api/state', { revision, state });
 export const resetState = () => api<Boot>('POST', '/api/reset', {});
+/** SKILL.md of a project skill, read from the repository through the Talents service. */
+export const getSkill = (projectId: string, id: string) => api<ProjectSkill & { content: string }>('GET', '/api/skill?project=' + encodeURIComponent(projectId) + '&id=' + encodeURIComponent(id));

@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TeamsSnapshot } from '../../shared/contracts.ts';
 import snapshotJson from './fixtures/teams-snapshot.json' with { type: 'json' };
-import { clientState, readTeamsData, teamsModel } from '../server/teams-data.ts';
+import { clientState, readSkill, readTeamsData, teamsModel } from '../server/teams-data.ts';
+import seedSnapshotJson from '../../shared/seed/teams/snapshot.json' with { type: 'json' };
 import { seedState, DOCSET_ID, REPO_ID, STD_ID } from '../server/seed.ts';
 
 const snapshot = snapshotJson as TeamsSnapshot;
@@ -85,4 +86,17 @@ test('reads the shared snapshot, then the seed copy, then an empty team', async 
   const read = await readTeamsData({ shared, seed });
   assert.equal(read.from, 'shared');
   assert.equal(read.snapshot.team.name, '新团队');
+});
+
+test('project skills come from Teams, and their SKILL.md is read from the repository', async () => {
+  const seed = seedSnapshotJson as TeamsSnapshot;
+  const skills = teamsModel(seed).projects.find(p => p.id === 'carddemo')!.skills;
+  assert.equal(skills.length, 13);
+  const adr = skills.find(s => s.id === 'arch-adr-writing')!;
+  assert.equal(adr.path, 'workspace/skills/arch-adr-writing/SKILL.md');
+  const read = await readSkill(seed, 'carddemo', 'arch-adr-writing');
+  assert.match(read.content, /\| version \| 1\.0\.0 \|/);
+  await assert.rejects(readSkill(seed, 'carddemo', 'unknown'), (e: any) => e.status === 404);
+  // An older snapshot without skills gives projects none.
+  assert.deepEqual(teamsModel(snapshot).projects[0].skills, []);
 });

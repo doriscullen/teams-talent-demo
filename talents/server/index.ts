@@ -6,7 +6,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { root, port, origin, teamsOrigin, runtimeDir, sharedDir, publicDir, localConfiguration } from './config.ts';
 import { Store } from './store.ts';
 import { HttpError } from './model.ts';
-import { clientState, ownedState, readTeamsData } from './teams-data.ts';
+import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.ts';
 import { KnowledgeExporter } from './export.ts';
 
 const store = new Store(); await store.init();
@@ -56,6 +56,7 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
       }
       if (method === 'GET' && path === '/api/health') { json(200, { app: 'talents-carddemo', service: 'talents', workspaceRoot: root, stateRoot: runtimeDir, sharedDir, version: '0.1.0', pid: process.pid, origin, teamsOrigin }); return; }
       if (method === 'GET' && path === '/api/bootstrap') { json(200, await bootstrap()); return; }
+      if (method === 'GET' && path === '/api/skill') { json(200, await readSkill((await readTeamsData()).snapshot, url.searchParams.get('project') ?? '', url.searchParams.get('id') ?? '')); return; }
       if (method === 'PUT' && path === '/api/state') {
         const body = await bodyJson(request);
         if (!Number.isInteger(body.revision)) throw new HttpError('缺少 revision', 400);

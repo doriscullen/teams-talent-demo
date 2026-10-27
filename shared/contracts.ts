@@ -11,7 +11,9 @@
 export interface SharedMember { id: string; name: string; role: 'owner' | 'member'; status: 'active' | 'invited' }
 export interface SharedRepository { id: string; name: string; path?: string; remote?: string; branch?: string; description?: string }
 export interface SharedDocument { id: string; title: string; path: string; summary: string }
-export interface SharedProject { id: string; name: string; description: string; readonly: boolean; repositories: SharedRepository[]; documents: SharedDocument[] }
+/** A project skill (the project's "项目可用 Skill" in Teams); path is its SKILL.md and sha256 that file's digest. */
+export interface SharedSkill { id: string; name: string; version: string; description: string; path: string; sha256: string }
+export interface SharedProject { id: string; name: string; description: string; readonly: boolean; repositories: SharedRepository[]; documents: SharedDocument[]; skills: SharedSkill[] }
 /** A session a member shared with the team in Teams; Talents uses these as trajectory diagnosis input. */
 export interface SharedSession {
   id: string; projectId: string; title: string; memberId: string; memberName: string;
