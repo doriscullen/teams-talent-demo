@@ -15,14 +15,17 @@ public class InstallmentReconciliationWorker {
 
     private final InstallmentApplicationService applicationService;
     private final RepaymentService repaymentService;
+    private final SideEffectTransactions sideEffects;
     private final boolean schedulingEnabled;
 
     public InstallmentReconciliationWorker(InstallmentApplicationService applicationService,
                                            RepaymentService repaymentService,
+                                           SideEffectTransactions sideEffects,
                                            @org.springframework.beans.factory.annotation.Value(
                                                    "${installment.workers.enabled:true}") boolean schedulingEnabled) {
         this.applicationService = applicationService;
         this.repaymentService = repaymentService;
+        this.sideEffects = sideEffects;
         this.schedulingEnabled = schedulingEnabled;
     }
 
@@ -41,6 +44,9 @@ public class InstallmentReconciliationWorker {
             }
         } catch (RuntimeException ex) {
             log.warn("installment reconciliation round failed: {}", ex.getMessage());
+        } finally {
+            // 续跑完成计划时会登记审计副作用；worker 没有 HTTP 请求边界，这里在事务结束后统一落库
+            sideEffects.flush();
         }
     }
 }

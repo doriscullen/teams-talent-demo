@@ -5,6 +5,7 @@ import com.carddemo.installment.application.port.NotificationPort;
 import com.carddemo.installment.infrastructure.support.AuditRetryWorker;
 import com.carddemo.installment.infrastructure.support.LocalNotificationSender;
 import com.carddemo.installment.infrastructure.support.NotificationWorker;
+import com.carddemo.installment.infrastructure.support.SideEffectTransactions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -63,6 +64,8 @@ class InstallmentSideEffectFailureTest {
     private LocalNotificationSender notificationSender;
     @Autowired
     private PlatformTransactionManager transactionManager;
+    @Autowired
+    private SideEffectTransactions sideEffects;
 
     private void insertPlan(String planId) {
         jdbc.update("insert into installment_plan (plan_id, account_id, customer_id, source_type, source_id, "
@@ -91,6 +94,9 @@ class InstallmentSideEffectFailureTest {
                 insertPlan("IP-AUDIT-FAIL");
                 auditPort.record("ADMIN002", "TEST_AUDIT_DENIED", "INSTALLMENT_PLAN", "IP-AUDIT-FAIL", "payload");
             });
+            // 副作用在业务事务结束（连接归还）后落库，与 HTTP 请求边界的 SideEffectFlushFilter 一致；
+            // 此时触发器仍生效，用于证明插入失败被隔离
+            assertThat(sideEffects.flush()).isEqualTo(1);
         } finally {
             jdbc.execute("drop trigger deny_audit on installment_audit_event");
             jdbc.execute("drop function deny_audit_insert()");
@@ -125,6 +131,7 @@ class InstallmentSideEffectFailureTest {
                 insertPlan("IP-NOTIFY-FAIL");
                 notificationPort.enqueue("SMS", "00000000006", "TEST_NOTIFY_DENIED", "planId=IP-NOTIFY-FAIL");
             });
+            assertThat(sideEffects.flush()).isEqualTo(1);
         } finally {
             jdbc.execute("drop trigger deny_outbox on installment_notification_outbox");
             jdbc.execute("drop function deny_outbox_insert()");
@@ -183,6 +190,7 @@ class InstallmentSideEffectFailureTest {
             auditPort.record("USER0001", "TEST_AUDIT_OK", "INSTALLMENT_PLAN", "IP-HEALTHY", "payload");
             notificationPort.enqueue("SMS", "00000000006", "TEST_NOTIFY_OK", "planId=IP-HEALTHY");
         });
+        assertThat(sideEffects.flush()).isEqualTo(2);
 
         assertThat(count("select count(*) from installment_plan where plan_id = 'IP-HEALTHY'")).isEqualTo(1);
         assertThat(count("select count(*) from installment_audit_event where action = 'TEST_AUDIT_OK'"))

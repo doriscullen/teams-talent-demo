@@ -39,24 +39,21 @@ public class AuditEventWriter implements AuditPort {
 
     @Override
     public void record(String actor, String action, String resourceType, String resourceId, String payload) {
-        sideEffects.afterCommit(() -> recordNow(actor, action, resourceType, resourceId, payload));
-    }
-
-    void recordNow(String actor, String action, String resourceType, String resourceId, String payload) {
         LocalDateTime now = clock.now();
-        try {
-            sideEffects.inNewTransaction(() -> auditEventRepository.save(
-                    new AuditEvent(actor, action, resourceType, resourceId, payload, now)));
-        } catch (RuntimeException ex) {
-            log.warn("audit write failed, queueing retry: action={} resource={}", action, resourceId);
-            queueRetry(actor, action, resourceType, resourceId, payload, ex, now);
-        }
+        sideEffects.submit(
+                () -> auditEventRepository.save(
+                        new AuditEvent(actor, action, resourceType, resourceId, payload, now)),
+                failure -> {
+                    log.warn("audit write failed, queueing retry: action={} resource={}", action, resourceId);
+                    queueRetry(actor, action, resourceType, resourceId, payload, failure, now);
+                });
     }
 
+    /** 补偿：在另一条独立事务中写重试队列，由 {@link AuditRetryWorker} 真实重放。 */
     private void queueRetry(String actor, String action, String resourceType, String resourceId,
                             String payload, RuntimeException failure, LocalDateTime now) {
         try {
-            sideEffects.inNewTransaction(() -> auditRetryRepository.save(new AuditRetry(actor, action,
+            sideEffects.executeIsolated(() -> auditRetryRepository.save(new AuditRetry(actor, action,
                     resourceType, resourceId, payload, truncate(failure.getMessage()), now)));
         } catch (RuntimeException ex) {
             // 整个库不可用时业务事务本身也已失败，这里只显式记录，不伪造成功

@@ -37,23 +37,20 @@ public class NotificationOutboxWriter implements NotificationPort {
 
     @Override
     public void enqueue(String channel, String recipient, String template, String payload) {
-        sideEffects.afterCommit(() -> enqueueNow(channel, recipient, template, payload));
+        sideEffects.submit(
+                () -> repository.save(new NotificationOutbox(channel, recipient, template, payload, clock.now())),
+                failure -> {
+                    log.warn("notification enqueue failed, queueing retry: template={} recipient={}",
+                            template, recipient);
+                    queueRetry(channel, recipient, template, payload, failure);
+                });
     }
 
-    void enqueueNow(String channel, String recipient, String template, String payload) {
-        try {
-            sideEffects.inNewTransaction(() -> repository.save(
-                    new NotificationOutbox(channel, recipient, template, payload, clock.now())));
-        } catch (RuntimeException ex) {
-            log.warn("notification enqueue failed, queueing retry: template={} recipient={}", template, recipient);
-            queueRetry(channel, recipient, template, payload, ex);
-        }
-    }
-
+    /** 补偿：在另一条独立事务中写重试队列，由 {@link NotificationWorker} 重新入队后投递。 */
     private void queueRetry(String channel, String recipient, String template, String payload,
                             RuntimeException failure) {
         try {
-            sideEffects.inNewTransaction(() -> retryRepository.save(new NotificationRetry(channel, recipient,
+            sideEffects.executeIsolated(() -> retryRepository.save(new NotificationRetry(channel, recipient,
                     template, payload, failure.getMessage(), clock.now())));
         } catch (RuntimeException ex) {
             log.error("notification retry queue write failed: template={} recipient={}", template, recipient, ex);

@@ -20,7 +20,6 @@ import com.carddemo.installment.domain.service.EffectIds;
 import com.carddemo.installment.domain.service.SettlementCalculator;
 import com.carddemo.installment.infrastructure.security.AccessGuard;
 import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;

@@ -147,6 +147,18 @@ services/installment-service/src/main/java/com/carddemo/installment/
 只控制金额不足/无在途本金时的**明确拒绝**才置 FAILED；响应未知/账务未完成保持 PENDING 供对账续跑，不提前清栅栏，
 也不把栅栏扩成永久禁止（在途行完成后同键与其它键都可以继续）。
 
+**副作用连接边界（A-PERF-001）**：审计/通知这类非关键副作用**不得在业务事务的提交回调里借数据库连接**。
+Spring 的 `afterCommit` 在外层事务 `cleanupAfterCompletion` 之前执行，此时业务连接仍被占用；若在其中开
+`REQUIRES_NEW`（尤其再嵌套一层），每条请求会瞬时占用两条连接，默认 Hikari（`maximum-pool-size: 10`）
+在并发创建下被占满，业务响应与副作用互相等待连接超时（历史实测 50 并发：`total=10, active=10, idle=0,
+waiting=48-50`、41×500、9×30.3s）。因此改为两段式：
+1. `SideEffectTransactions.submit(primary, onFailure)`：有业务事务时**只登记到线程内队列**（不碰数据库），
+   并注册回滚钩子——业务事务回滚则丢弃登记（未提交的业务不产生副作用）；
+2. `flush()`：业务事务结束、连接已归还后执行。HTTP 请求由 `SideEffectFlushFilter` 在 `finally` 统一触发，
+   定时 worker（对账续跑）在自己的 `finally` 中触发；每条副作用以**单层** REQUIRES_NEW 事务执行，
+   失败补偿（写 `*_retry` 队列）另起一条独立事务。任一时刻一条副作用只占用一条连接，且不嵌套事务。
+无事务的调用点（绝大多数审计点）直接以单层事务执行，行为与原来一致。
+
 **账户作用ID（A-R004）**：`EffectIds` 按「操作类型 + 计划 + 客户端键」生成 `REPAY-<sha256前40位>` / `SETTLE-<sha256前40位>`，
 服务端生成、操作命名空间分离，客户端键相同的还款与结清也不会碰撞；同键重放仍稳定。
 
@@ -162,7 +174,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | 后台权限 | `installment_permission`：STAFF_ASSIST 可写、RISK_READONLY 只读；无权限 403；不因 `userType=A` 放行 |
 | 参数校验 | 金额/期数/枚举/分页在 controller + 领域双重校验；资格不从前端推导 |
 | 日志与响应 | 不返回完整卡号；日志仅输出计划号/账户号/金额；token 不落日志 |
-| 审计 | 创建/结清/还款/后台查询/后台详情/导出/导出下载写 `installment_audit_event`（actor/action/resource/payload/时间）。**写入在业务提交后、独立事务（REQUIRES_NEW）中执行**：INSERT 失败只回滚它自己，业务事务照常提交；失败记录写 `installment_audit_retry`（另一个独立事务），由 `AuditRetryWorker` 重放后清空。整个库不可用时业务事务本身失败，不伪造成功。 |
+| 审计 | 创建/结清/还款/后台查询/后台详情/导出/导出下载写 `installment_audit_event`（actor/action/resource/payload/时间）。**写入在业务事务结束、连接归还之后、以单层独立事务执行**（见 §7「副作用连接边界」）：INSERT 失败只回滚它自己，业务事务照常提交；失败记录写 `installment_audit_retry`（另一条独立事务），由 `AuditRetryWorker` 重放后清空。整个库不可用时业务事务本身失败，不伪造成功。 |
 | 通知 | 本地投递适配器把通知真实写入投递目录（原子落盘）；目标不可用（`.offline` 标记）时状态为 FAILED 且记录 `last_error/attempts`。发件箱写入同样在提交后独立事务执行，INSERT 失败写 `installment_notification_retry` 并在下一轮重新入队。自动重试有界（5 次）；超过后由客服调用显式幂等重排接口（`notifications/{id}/requeue`）恢复，恢复后恰好投递一次，已 SENT 幂等无操作。待发送不等于已发送 |
 | 导出 | 后台 CSV 走与其它接口相同的 Bearer 认证（前端 fetch 带 token 下载），下载与创建都写审计；只读事务内不做审计写 |
 
@@ -203,6 +215,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | 操作作用ID | §7 | A-R004 | RepaymentServiceTest、EffectIds |
 | FAILED 不占在途 | §7 | A-R005 | SettlementServiceTest（failedIntentDoesNotBlockNewSettlementKey） |
 | 副作用事务边界（真实 PG 触发器） | §8 | R-C-01 | InstallmentSideEffectFailureTest（Testcontainers + 表级拒绝 INSERT） |
+| 副作用连接边界（并发不借连接） | §7 | A-PERF-001 | SideEffectConnectionPoolTest（Hikari=2/连接超时 3s 下 8 并发业务事务+审计+通知全部成功；回滚事务不产生副作用） |
 | 通知显式重排 | §8 | R-C-03 | NotificationWorkerTest、InstallmentSideEffectFailureTest |
 | 一期还款回写 | §7 | A-003、US-005 | RepaymentServiceTest |
 | 通知投递/补发 | §8 | C-03 | NotificationWorkerTest |
