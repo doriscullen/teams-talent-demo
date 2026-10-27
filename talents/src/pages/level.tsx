@@ -37,7 +37,7 @@ function Level({ pid }: { pid: string | null }) {
   const { state: st, route, go } = useTalents();
   const tab: LevelTab = levelTabs.find(t => t.key === route.params.tab)?.key ?? 'review';
   const opened = tab === 'review' && route.params.id ? artifact(st, route.params.id) : null;
-  if (tab === 'review' && route.params.id) return <div className="page-stack">
+  if (tab === 'review' && route.params.id) return <div className="page-stack opened-page">
     <div><Button icon={<ArrowLeftOutlined />} onClick={() => go(levelHash(pid, 'review'))}>返回产物管理</Button></div>
     {opened?.kind === 'diagnosis' ? <DiagnosisWorkbench key={opened.id} id={opened.id} /> : <Workbench key={route.params.id} id={route.params.id} />}
   </div>;

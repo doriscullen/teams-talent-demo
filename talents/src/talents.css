@@ -111,6 +111,7 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 
 /* Review workbench: files | content | revision side panel, filling the page area. */
 .framework-root .page-scroll.workbench-scroll{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
+.framework-root .page-stack.opened-page{flex:1;min-height:0}
 .wb{flex:1;min-height:0;display:flex;flex-direction:column}
 .wb-body{flex:1;min-height:0;display:grid;grid-template-columns:230px minmax(0,1fr) 360px;border:1px solid var(--ui-color-divider);border-bottom:0;border-radius:var(--ui-radius-card) var(--ui-radius-card) 0 0;overflow:hidden}
 .wb-body.no-files{grid-template-columns:minmax(0,1fr) 360px}
