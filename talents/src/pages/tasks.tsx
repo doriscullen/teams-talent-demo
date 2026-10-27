@@ -1,15 +1,16 @@
-// 知识任务：任务列表、新建任务（来源在单独的选择弹窗中选），运行进度与产出。
+// 知识任务：一个层级（团队或项目）的任务列表、新建任务（来源在单独的选择弹窗中选），运行进度与产出。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Button, Checkbox, Collapse, Drawer, Input, Modal, Progress, Radio, Segmented, Select, Space, Steps, Table, Tag } from 'antd';
 import { PlusOutlined, StarOutlined } from '@ant-design/icons';
-import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
+import { levelHash } from '../navigation.ts';
 import type { Capability, Session, TalentsState, Task } from '../types.ts';
 import { artifact, basisOf, capability, changesSince, levelName, levelSessions, levelSources, memberName, project, session, source, task, taskName } from '../demo/model.ts';
 import { existingArtifact, runPlan, runProgress, startRun } from '../demo/runs.ts';
 import { askICode } from '../demo/ask-icode.ts';
 import { now, tokens, uid, versionLabel, when } from '../demo/format.ts';
 import { CapIcon, CardGrid, EmptyState, Fields, ItemCard } from '../components/ui.tsx';
+import type { Toolbar } from './level.tsx';
 
 function ResultTag({ t }: { t: Task }) {
   if (t.status === 'running') return <Tag color="processing">运行中</Tag>;
@@ -41,35 +42,35 @@ function modeText(st: TalentsState, t: Task) {
   return source(st, t.sources[0])?.type === 'docs' ? '更新，' + versionLabel(t.input.from) + ' → ' + versionLabel(t.input.to) : '更新，提交 ' + t.input.from + ' → ' + t.input.to;
 }
 
-export function Tasks() {
+export function LevelTasks({ pid, toolbar }: { pid: string | null; toolbar: Toolbar }) {
   const { state: st, route, replace, update, go, toast, clock } = useTalents();
   const [tab, setTab] = useState<'current' | 'history'>('current'), [cat, setCat] = useState('all');
   const [form, setForm] = useState<Preset | null>(null), [detail, setDetail] = useState<string | null>(null);
   // ?new=1 (with cap / source / from) opens the form, ?open=<task> the detail; then the address drops them.
   useEffect(() => {
     const p = route.params;
-    if (p.new) { setForm({ cap: p.cap, source: p.source, from: p.from }); replace('#/tasks'); }
-    else if (p.open) { setDetail(p.open); replace('#/tasks'); }
-  }, [route, replace]);
+    if (p.new) { setForm({ cap: p.cap, source: p.source, from: p.from }); replace(levelHash(pid, 'tasks')); }
+    else if (p.open) { setDetail(p.open); replace(levelHash(pid, 'tasks')); }
+  }, [route, replace, pid]);
 
   const run = (id: string) => { update(d => startRun(d, task(d, id)!)); setTab('current'); toast('已开始运行'); };
-  const tasks = st.tasks.filter(t => cat === 'all' || capability(st, t.cap).cat === cat);
+  const mine = st.tasks.filter(t => t.projectId === pid);
+  const tasks = mine.filter(t => cat === 'all' || capability(st, t.cap).cat === cat);
   const current = tasks.filter(t => !isHistory(t)).sort((a, b) => {
     if ((a.status === 'running') !== (b.status === 'running')) return a.status === 'running' ? -1 : 1;
     return (a.created ?? '') < (b.created ?? '') ? 1 : -1;
   });
   const history = tasks.filter(isHistory).sort((a, b) => (a.lastRun ?? '') < (b.lastRun ?? '') ? 1 : -1);
-  const allCurrent = st.tasks.filter(t => !isHistory(t)).length;
+  const allCurrent = mine.filter(t => !isHistory(t)).length;
   const list = tab === 'current' ? current : history;
   const produced = (t: Task) => {
     const a = artifact(st, t.produced ?? t.artifact);
-    return a && ['产出', <><a onClick={e => { e.stopPropagation(); go('#/review?id=' + a.id); }}>{a.name}</a>（{a.draft ? '待审阅' : '已发布 v' + a.published!.version}）</>] as [string, ReactNode];
+    return a && ['产出', <><a onClick={e => { e.stopPropagation(); go(levelHash(pid, 'review', { id: a.id })); }}>{a.name}</a>（{a.draft ? '待审阅' : '已发布 v' + a.published!.version}）</>] as [string, ReactNode];
   };
-  return <div className="page-stack">
-    <PageHeader title="知识任务" description="选择能力和来源，用本机 iCode 生成知识。产出会进入“产物审阅”，审阅后再发布给团队；已发布的索引，之后的更新自动发布。"
-      actions={<Button type="primary" icon={<PlusOutlined />} onClick={() => setForm({})}>新建任务</Button>} />
+  return <>
+    {toolbar(<Button type="primary" icon={<PlusOutlined />} onClick={() => setForm({})}>新建任务</Button>)}
     <div className="toolbar">
-      <Segmented value={tab} onChange={v => setTab(v as typeof tab)} options={[{ value: 'current', label: '当前任务（' + allCurrent + '）' }, { value: 'history', label: '历史（' + (st.tasks.length - allCurrent) + '）' }]} />
+      <Segmented value={tab} onChange={v => setTab(v as typeof tab)} options={[{ value: 'current', label: '当前任务（' + allCurrent + '）' }, { value: 'history', label: '历史（' + (mine.length - allCurrent) + '）' }]} />
       <span className="spacer" />
       <Segmented value={cat} onChange={v => setCat(v as string)} options={[{ value: 'all', label: '全部能力' }, ...st.categories.map(c => ({ value: c.id, label: c.name }))]} />
     </div>
@@ -84,8 +85,8 @@ export function Tasks() {
       </ItemCard>;
     })}</CardGrid> : <EmptyState>{tab === 'current' ? '没有运行中或等待运行的任务' : '没有历史任务'}</EmptyState>}
     {detail && task(st, detail) && <TaskDetail id={detail} onClose={() => setDetail(null)} onRun={() => run(detail)} />}
-    {form && <TaskForm preset={form} onClose={() => setForm(null)} onCreated={(id, started) => { setTab('current'); setForm(null); if (started) setDetail(id); else toast('已创建任务'); }} />}
-  </div>;
+    {form && <TaskForm level={pid} preset={form} onClose={() => setForm(null)} onCreated={(id, started) => { setTab('current'); setForm(null); if (started) setDetail(id); else toast('已创建任务'); }} />}
+  </>;
 }
 
 // ---------- Detail ----------
@@ -100,7 +101,7 @@ function TaskDetail({ id, onClose, onRun }: { id: string; onClose(): void; onRun
     : a.published ? '原产物的新版本，等待审阅后发布' : '新产物，等待审阅后发布');
   return <Drawer open width={560} onClose={onClose} title={<div><div className="caption">{cap.name}</div>{taskName(st, t)}</div>}
     footer={<div className="drawer-foot">{running ? <span className="ui-note">可以关闭此面板，任务会继续运行。</span> : <>
-      <span className="spacer" /><Button onClick={onRun}>立即运行</Button>{a?.draft && <Button type="primary" onClick={() => { onClose(); go('#/review?id=' + a.id); }}>去审阅</Button>}</>}</div>}>
+      <span className="spacer" /><Button onClick={onRun}>立即运行</Button>{a?.draft && <Button type="primary" onClick={() => { onClose(); go(levelHash(a.projectId, 'review', { id: a.id })); }}>去审阅</Button>}</>}</div>}>
     <div className="form-body">
       <Fields rows={[['能力', cap.name], ['来源', <>{sourceText(st, t)}{t.sessions && <Collapse ghost size="small" items={[{ key: 's', label: '查看会话', children: <ul className="file-lines">{t.sessions.map(sid => <li key={sid}>{session(st, sid)?.title ?? sid}</li>)}</ul> }]} />}</>],
         !!t.prs && ['PR', t.prs.map(n => '#' + n).join('、')], !!cap.update && ['方式', modeText(st, t)], ['时间', scheduleText(t)], ['状态', <ResultTag t={t} />]]} />
@@ -187,7 +188,8 @@ function PrPicker({ repoId, initial, onDone, onClose }: { repoId: string; initia
 
 // ---------- Form ----------
 interface Preset { cap?: string; source?: string; from?: string }
-function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): void; onCreated(id: string, started: boolean): void }) {
+/** level: the team (null) or project the task belongs to; undefined lets the user choose (from 知识能力). */
+export function TaskForm({ level: fixed, preset, onClose, onCreated }: { level?: string | null; preset: Preset; onClose(): void; onCreated(id: string, started: boolean, level: string | null): void }) {
   const { state: st, update, focusProject } = useTalents();
   // "重新提取" on an artifact: start from the task that built it.
   const fromArtifact = artifact(st, preset.from);
@@ -195,8 +197,8 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
   const presetSource = source(st, fromArtifact ? fromArtifact.sources[0] : preset.source);
   const [capId, setCapId] = useState(fromArtifact?.cap ?? preset.cap ?? (presetSource ? (presetSource.type === 'repo' ? 'miner-pr' : 'doc-extract') : 'traj'));
   const [chosen, setChosen] = useState<string | null>(presetSource?.id ?? null);
-  // The level the task belongs to: that of the artifact or source it starts from, else the project the user came for.
-  const [level, setLevel] = useState<string | null>(fromArtifact ? fromArtifact.projectId : presetSource ? presetSource.projectId ?? null : focusProject ?? st.projects[0]?.id ?? null);
+  // Chosen in the form only when not given: start with the project the user came for.
+  const [level, setLevel] = useState<string | null>(fixed !== undefined ? fixed : focusProject ?? st.projects[0]?.id ?? null);
   const [prs, setPrs] = useState<number[]>([]), [sessions, setSessions] = useState<string[]>([]);
   const [schedule, setSchedule] = useState<'now' | 'once' | 'daily'>('now'), [mode, setMode] = useState<'update' | 'build'>('update');
   const [at, setAt] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10) + 'T09:00'), [time, setTime] = useState('02:00'), [skip, setSkip] = useState(true);
@@ -235,7 +237,7 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
     if (cap.input === 'repo+pr') t.prs = prs.slice();
     if (t.schedule.kind === 'daily' && cap.input !== 'sessions') t.skipUnchanged = skip;
     update(d => { d.tasks.unshift(t); if (schedule === 'now') startRun(d, d.tasks[0]); });
-    onCreated(id, schedule === 'now');
+    onCreated(id, schedule === 'now', level);
   };
   const pickRow = (text: string, label: string, empty: boolean, onPick: () => void) =>
     <div className={'pick-summary' + (empty ? ' empty' : '')}><span>{text}</span><Button size="small" onClick={onPick}>{label}</Button></div>;
@@ -244,12 +246,12 @@ function TaskForm({ preset, onClose, onCreated }: { preset: Preset; onClose(): v
     return c && c.count ? '上次' + verb + '后' + what + '有变化：' + (docs ? versionLabel(c.from) + ' → ' + versionLabel(c.to) + '，' : '') + c.text : '上次' + verb + '后' + what + '没有变化';
   })();
 
-  return <Drawer open width={560} title="新建任务" onClose={onClose}
+  return <Drawer open width={560} title={fixed === undefined ? '新建任务' : <div><div className="caption">{levelName(st, level)}</div>新建任务</div>} onClose={onClose}
     footer={<div className="drawer-foot"><span className="ui-note">{hint}</span><span className="spacer" /><Button onClick={onClose}>取消</Button><Button type="primary" disabled={!ok} onClick={submit}>{schedule === 'now' ? '创建并运行' : '创建'}</Button></div>}>
     <div className="form-body">
-      <div className="field"><span className="label">所属</span>
+      {fixed === undefined && <div className="field"><span className="label">所属</span>
         <Select value={level ?? ''} onChange={v => changeLevel(v || null)} options={[{ value: '', label: '团队' }, ...st.projects.map(p => ({ value: p.id, label: p.name }))]} />
-        <span className="caption">任务只能使用{level ? '这个项目' : '团队级'}的来源，产出的知识也归属{level ? '这个项目' : '团队'}。</span></div>
+        <span className="caption">任务只能使用{level ? '这个项目' : '团队级'}的来源，产出的知识也归属{level ? '这个项目' : '团队'}。</span></div>}
       <div className="field"><span className="label">能力</span>
         <Select value={capId} onChange={changeCap} options={st.categories.map(c => ({ label: c.name, title: c.name, options: st.capabilities.filter(x => x.cat === c.id).map(x => ({ value: x.id, label: x.name })) }))} />
         <span className="caption">{cap.desc}</span></div>

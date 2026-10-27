@@ -1,14 +1,16 @@
-// 产物审阅：待审阅 / 已发布列表，以及整页的审阅工作台（内容、对比、对话修订、手动编辑、发布）。
+// 产物审阅：一个层级（团队或项目）的待审阅 / 已发布列表，以及整页的审阅工作台（内容、对比、对话修订、手动编辑、发布）。
 import { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Form, Input, Modal, Radio, Segmented, Select, Space } from 'antd';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
+import { levelHash } from '../navigation.ts';
 import type { Artifact, Basis, TalentsState } from '../types.ts';
 import { artifact, basisOf, capability, changesSince, levelName, source, task, type Changes } from '../demo/model.ts';
 import { hashId, now, versionLabel, when } from '../demo/format.ts';
 import * as K from '../demo/knowledge.ts';
 import { ArtifactStatus, CapIcon, CardGrid, EmptyState, Fields, FileMark, ItemCard, Section } from '../components/ui.tsx';
 import { DiffView, FileContent, FileList, IndexSummary, linkTarget } from '../components/files.tsx';
+import type { Toolbar } from './level.tsx';
 
 // ---------- List ----------
 /** Published knowledge whose source changed after it was built; the capability must be able to update. */
@@ -27,26 +29,27 @@ function basisRow(st: TalentsState, a: Artifact, basis: Basis | null | undefined
   return ['基于', src.name + '，' + (basis.version ? versionLabel(basis.version) : '提交 ' + basis.commit)];
 }
 
-export function Review() {
-  const { state: st, route, go } = useTalents();
-  if (route.params.id) return <Workbench key={route.params.id} id={route.params.id} />;
-  // Re-extract opens the task form prefilled from the task that built this artifact; it does not start a run.
-  const reExtract = (a: Artifact) => go('#/tasks?new=1&from=' + a.id);
+// Re-extract opens the task form prefilled from the task that built this artifact; it does not start a run.
+const reExtractHash = (a: Artifact) => levelHash(a.projectId, 'tasks', { new: '1', from: a.id });
+
+export function LevelReview({ pid, toolbar }: { pid: string | null; toolbar: Toolbar }) {
+  const { state: st, go } = useTalents();
+  const open = (a: Artifact) => go(levelHash(pid, 'review', { id: a.id }));
   const card = (a: Artifact) => {
     const cap = capability(st, a.cap), st_ = K.status(a), stale = staleChanges(st, a);
     const whenText = st_ === 'published' ? (a.published!.auto ? '自动发布于 ' : '发布于 ') + when(a.published!.at) : '生成于 ' + when(a.draft!.created);
-    return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={cap.name} extra={<ArtifactStatus a={a} />} onClick={() => go('#/review?id=' + a.id)}
-      caption={whenText} actions={<>{stale && <Button size="small" onClick={() => reExtract(a)}>重新提取</Button>}
-        <Button size="small" type={st_ === 'published' ? 'default' : 'primary'} onClick={() => go('#/review?id=' + a.id)}>{st_ === 'published' ? '查看' : '审阅'}</Button></>}>
+    return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={cap.name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
+      caption={whenText} actions={<>{stale && <Button size="small" onClick={() => go(reExtractHash(a))}>重新提取</Button>}
+        <Button size="small" type={st_ === 'published' ? 'default' : 'primary'} onClick={() => open(a)}>{st_ === 'published' ? '查看' : '审阅'}</Button></>}>
       <p className="ui-note">{a.desc}</p>{stale && <StaleNote st={st} a={a} c={stale} />}
     </ItemCard>;
   };
-  const pending = st.artifacts.filter(a => a.draft), done = st.artifacts.filter(a => !a.draft);
-  return <div className="page-stack">
-    <PageHeader title="产物审阅" description="审阅知识任务的产出，修订满意后发布。开发者只能看到已发布的内容。" />
+  const mine = st.artifacts.filter(a => a.projectId === pid), pending = mine.filter(a => a.draft), done = mine.filter(a => !a.draft);
+  return <>
+    {toolbar()}
     <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
     {done.length > 0 && <Section title="已发布" note={done.length + ' 个'}><CardGrid>{done.map(card)}</CardGrid></Section>}
-  </div>;
+  </>;
 }
 
 // ---------- Workbench ----------
@@ -67,7 +70,7 @@ const scriptsFor = (file: string) => CHAT_SCRIPTS.filter(s => s.file.test(file))
 const isMd = (key: string) => /\.md$/.test(key);
 interface Message { who: 'me' | 'icode' | 'busy'; text: string }
 
-function Workbench({ id }: { id: string }) {
+export function Workbench({ id }: { id: string }) {
   const { state: st, update, toast } = useTalents();
   const a = artifact(st, id);
   const which: K.Which = a?.draft ? 'current' : 'published';
@@ -79,7 +82,7 @@ function Workbench({ id }: { id: string }) {
   const [publishing, setPublishing] = useState(false);
   const chatBox = useRef<HTMLDivElement>(null);
   useEffect(() => { chatBox.current?.scrollTo(0, chatBox.current.scrollHeight); }, [chat]);
-  if (!a) return <EmptyState>找不到这个产物。<a href="#/review">返回产物审阅</a></EmptyState>;
+  if (!a) return <EmptyState>找不到这个产物。<a href="#/projects">返回项目</a></EmptyState>;
   const cap = capability(st, a.cap), files = K.isIndex(a) ? [] : K.files(a, which);
 
   const baseText = (key: string) => base === 'published' && !K.files(a, 'published').includes(key) ? null : K.text(a, base, key);
@@ -175,7 +178,7 @@ function PublishedSide({ st, a }: { st: TalentsState; a: Artifact }) {
   return <><h3>已发布</h3>
     <Fields rows={[['版本', 'v' + p.version], ['发布于', p.at], ['发布到', levelName(st, a.projectId)], basisRow(st, a, p.basis), ['交付方式', K.deliveryLabel[p.delivery]],
       ['适用智能体', K.audienceText(st, p.agents)], ['更新说明', p.note]]} />
-    {stale ? <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go('#/tasks?new=1&from=' + a.id)}>重新提取</Button></div></>
+    {stale ? <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go(reExtractHash(a))}>重新提取</Button></div></>
       : <p className="caption">{K.isIndex(a) ? '对应的知识任务运行后会自动发布新版本。' : '重新运行对应的知识任务后，新版本会出现在“待审阅”。'}</p>}
   </>;
 }

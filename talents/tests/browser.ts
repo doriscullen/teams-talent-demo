@@ -24,27 +24,39 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   const heading = (p: Page) => p.locator('.page-header h1').first();
+  const activeTab = (p: Page) => p.locator('.project-toolbar .ant-tabs-tab-active');
 
   // Entries Teams links to.
   await page.goto(origin + '/talents?role=member#/dev-knowledge?project=carddemo');
   await assert.doesNotReject(heading(page).filter({ hasText: '项目知识' }).waitFor());
   assert.equal(await page.locator('.compact-role-switch').innerText(), '陈晨 · 开发者端');
-  await page.goto(origin + '/talents?role=owner#/review?project=carddemo');
-  await heading(page).filter({ hasText: '产物审阅' }).waitFor();
-  await page.goto(origin + '/talents?role=owner#/tasks?project=carddemo');
-  await heading(page).filter({ hasText: '知识任务' }).waitFor();
+  for (const tab of ['review', 'tasks']) {
+    await page.goto(origin + '/talents?role=owner#/' + tab + '?project=carddemo');
+    await heading(page).filter({ hasText: '信用卡营销交付' }).waitFor();
+    await activeTab(page).filter({ hasText: tab === 'review' ? '产物审阅' : '知识任务' }).waitFor();
+  }
 
-  // Every page of both entries.
-  for (const [hash, title] of [['sources', '来源管理'], ['sources?project=carddemo', '信用卡营销交付'], ['capabilities', '知识能力'], ['tasks', '知识任务'], ['review', '产物审阅'], ['knowledge', '项目知识'], ['local', '本地索引']]) {
+  // Every page of both entries, and the tabs of the team and a project.
+  for (const [hash, title] of [['projects', '项目'], ['projects?project=carddemo', '信用卡营销交付'], ['team', '团队'], ['capabilities', '知识能力'], ['knowledge', '项目知识'], ['local', '本地索引']]) {
     await page.goto(origin + '/talents/#/' + hash);
     await heading(page).filter({ hasText: title }).waitFor();
   }
+  for (const level of ['team?', 'projects?project=carddemo&']) for (const [tab, label] of [['sources', '来源'], ['tasks', '知识任务'], ['review', '产物审阅']]) {
+    await page.goto(origin + '/talents/#/' + level + 'tab=' + tab);
+    await activeTab(page).filter({ hasText: label }).waitFor();
+  }
+  // Team-level knowledge is reviewed at team level, not in the project.
+  await page.goto(origin + '/talents/#/team?tab=review');
+  await page.locator('.item-card', { hasText: '银行编码规范要点' }).waitFor();
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=review');
+  await page.locator('.item-card', { hasText: '信用卡营销返现业务知识' }).waitFor();
+  assert.equal(await page.locator('.item-card', { hasText: '银行编码规范要点' }).count(), 0);
   // Unknown pages (e.g. the sidebar's account link) fall back to the entry's home.
   await page.goto(origin + '/talents/#account');
-  await heading(page).filter({ hasText: '项目知识' }).waitFor();
+  await heading(page).filter({ hasText: /^项目$/ }).waitFor();
 
   // 管理员端: diagnose sessions picked by iCode, then revise and publish the result.
-  await page.goto(origin + '/talents/#/tasks');
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=tasks');
   await page.getByRole('button', { name: '新建任务' }).click();
   await page.getByRole('button', { name: '选择会话…' }).click();
   await page.getByRole('button', { name: '对话轮次超过 50 的会话' }).click();
