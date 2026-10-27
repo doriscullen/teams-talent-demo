@@ -1,6 +1,7 @@
 package com.carddemo.installment.infrastructure.support;
 
 import com.carddemo.installment.application.InstallmentApplicationService;
+import com.carddemo.installment.application.RepaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,12 +14,15 @@ public class InstallmentReconciliationWorker {
     private static final Logger log = LoggerFactory.getLogger(InstallmentReconciliationWorker.class);
 
     private final InstallmentApplicationService applicationService;
+    private final RepaymentService repaymentService;
     private final boolean schedulingEnabled;
 
     public InstallmentReconciliationWorker(InstallmentApplicationService applicationService,
+                                           RepaymentService repaymentService,
                                            @org.springframework.beans.factory.annotation.Value(
                                                    "${installment.workers.enabled:true}") boolean schedulingEnabled) {
         this.applicationService = applicationService;
+        this.repaymentService = repaymentService;
         this.schedulingEnabled = schedulingEnabled;
     }
 
@@ -30,8 +34,10 @@ public class InstallmentReconciliationWorker {
         }
         try {
             int completed = applicationService.reconcilePending();
-            if (completed > 0) {
-                log.info("installment reconciliation resumed {} pending intent(s)", completed);
+            int repaid = repaymentService.reconcilePending();
+            if (completed > 0 || repaid > 0) {
+                log.info("installment reconciliation resumed {} intent(s), {} repayment(s)",
+                        completed, repaid);
             }
         } catch (RuntimeException ex) {
             log.warn("installment reconciliation round failed: {}", ex.getMessage());

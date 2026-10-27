@@ -65,7 +65,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | `/api/v1/installments/preview` | POST | 200 + `previewToken`/期次明细/总费/首期合计 | 404（越权/不属本账户）、409 `INSTALLMENT_NOT_ELIGIBLE`/`PRINCIPAL_EXCEEDS_LIMIT`/`ALREADY_INSTALLED`，400 `INVALID_TERM` |
 | `/api/v1/installments/eligibility` | GET | 200 `{eligible,reason,alreadyInstalled,existingPlanId,minAmount}` | 404（越权） |
 | `/api/v1/installments/bills/{accountId}` | GET | 200 `{billId,cycleStart,cycleEnd,billPrincipal,availablePrincipal,lines[]}` | 404（越权），503 |
-| `/api/v1/installments/{planId}/repayments` | POST | 200 `{remainingPrincipal,principalApplied,paidInstallments,replayed}` | 409 `REPAYMENT_NOT_ALLOWED`/`IDEMPOTENCY_KEY_CONFLICT`，400 `REPAYMENT_EXCEEDS_PRINCIPAL` |
+| `/api/v1/installments/{planId}/repayments` | POST | 200 `{remainingPrincipal,principalApplied,paidInstallments,replayed}`（本轮仅支持完整一期本金） | 409 `REPAYMENT_NOT_ALLOWED`/`IDEMPOTENCY_KEY_CONFLICT`/`SETTLEMENT_IN_PROGRESS`，400 `REPAYMENT_EXCEEDS_PRINCIPAL`/`UNSUPPORTED_REPAYMENT_AMOUNT` |
 | `/api/v1/installments/{planId}/settlement-quote` | GET | 200 `{remainingPrincipal,penaltyFee,feeRebate,settlementTotal}` | 409 `SETTLEMENT_NOT_ALLOWED` |
 | `/api/v1/installments` | POST | 201（同键重放 200） | 409 `ALREADY_INSTALLED`/`INSTALLMENT_LIMIT_EXCEEDED`/`PREVIEW_EXPIRED`/`IDEMPOTENCY_KEY_CONFLICT`，400 `AGREEMENT_REQUIRED`，503 `DOWNSTREAM_UNAVAILABLE` |
 | `/api/v1/installments` | GET | 200 `{items,page,size,total}` | 400 `INVALID_PARAMETER`，404（非本人） |
@@ -75,6 +75,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | `/api/v1/admin/installments/{planId}` | GET | 200 计划+还款计划+还款记录（写查看审计） | 403，404 |
 | `/api/v1/admin/installments/notifications` | GET | 200 发件箱状态/失败原因/投递文件数 | 403 |
 | `/api/v1/admin/installments/notifications/dispatch` | POST | 200 `{delivered}` | 403（非客服） |
+| `/api/v1/admin/installments/notifications/{id}/requeue` | POST | 200 `{delivered,status}`：对已耗尽自动重试（5 次）的通知显式幂等重排并投递一次 | 403（非客服） |
 | `/api/v1/admin/installments/notifications/sink` | POST | 200 `{sinkAvailable}`（本地投递目标可用性） | 403（非客服） |
 | `/api/v1/admin/installments/audit-retries/replay` | POST | 200 `{replayed,pending}` | 403（非客服） |
 | `/api/v1/admin/installments/exports` | POST | 200 `{exportId,rowCount,expiresAt}` | 403，400 |
@@ -100,17 +101,37 @@ services/installment-service/src/main/java/com/carddemo/installment/
 3. `installment_account_lock` 行级锁内**重查幂等键**（同键并发拿回同一意图）+ `count(ACTIVE)` ≥ 20 → 409 `INSTALLMENT_LIMIT_EXCEEDED`；随后落创建意图（`planId = IP + intentId`）。
 4. ledger 过账（`entryGroupId = planId`，幂等；分录**借贷平衡**：DEBIT 1100 应收 = 本金+手续费，CREDIT 2100 客户应付 = 本金，CREDIT 4001 手续费收入 = 手续费）。
 5. 独立事务内建计划 + 还款计划 + 占用记录（提交时**重新校验**来源入账状态、争议/逾期信号、本金占用与可分期本金），成功标记意图 COMPLETED。
-6. 失败处理：下游 503 → 意图保持可续跑（`last_error` 记录），同键重试或对账 worker 续跑；业务性失败（本金已占用等）→ 按同一 `planId` 过账冲正组（`planId-REV`）并置 REVERSED，不留「无计划的有效入账」。
+6. 失败处理：下游 503 → 意图保持可续跑（`last_error` 记录），同键重试或对账 worker 续跑；
+   业务性失败（本金已占用等）→ 按同一 `planId` 过账冲正组（`planId-REV`，稳定作用ID）；
+   **冲正调用本身失败时不置 REVERSED**，保持 PENDING/LEDGER_POSTED 由重试/对账继续，直到反向分录真实成功后
+   才终结为 REVERSED（A-R001），因此不会留下无法补偿的有效入账。
 7. 审计 + 通知发件箱（失败不回滚），通知由投递 worker 真实发送。
 
 **结清（US-005/AC-16/INS-08，A-001/A-005/A-006）**
 1. `feeRebate` 由服务端固定 0.00：请求携带非零减免 → 400 `INVALID_FEE_REBATE`（客户/客服都不能改价）。
 2. 计划行锁内建意图：非 ACTIVE → 409 `SETTLEMENT_NOT_ALLOWED`；同计划已有异键在途意图 → 409 `CONCURRENT_SETTLEMENT`（数据库部分唯一索引兜底）。
-3. 同 `settlementKey` 且 COMPLETED → 200 返回首次结果（金额分解来自意图表，不重算、不重复还款、不重复分录）；同键异内容 → 409。
-4. 步骤：ledger 过账（分组键 = `settlementKey`，平衡：DEBIT 1001 现金 = 本金+违约金，CREDIT 1100 应收 = 本金，CREDIT 4002 违约金收入 = 违约金）→ account `payments`（**effectId = `SETTLE-<settlementKey>`**，账户端去重）→ 计划 SETTLED + 意图 COMPLETED。任一步响应丢失都可在同键重试中续跑：ledger 幂等、账户端 effectId 去重，最终只有一次资金效果。
+3. 同 `settlementKey` 且 COMPLETED → 200 返回首次结果（金额分解来自意图表，不重算、不重复还款、不重复分录）；同键异内容 → 409；
+   意图 FAILED（已冲正）→ 409 `SETTLEMENT_FAILED`，需新键；在途判定只含 PENDING/LEDGER_POSTED/PAYMENT_APPLIED，
+   FAILED 不占在途（与部分唯一索引一致）。
+4. 步骤：ledger 过账（分组键 = `settlementKey`，平衡：DEBIT 1001 现金 = 本金+违约金，CREDIT 1100 应收 = 本金，CREDIT 4002 违约金收入 = 违约金）→ account `payments`（**effectId = `EffectIds.settlement(planId, settlementKey)`**，账户端去重）→ 计划 SETTLED + 意图 COMPLETED。任一步响应丢失都可在同键重试中续跑：ledger 幂等、账户端 effectId 去重，最终只有一次资金效果。
 5. ledger 失败：503，计划保持 ACTIVE、未还款；账户端失败：503 且意图保留在途，重试续跑。
 
-**一期还款（A-003）**：`POST /{planId}/repayments` 先落 `installment_repayment`（paymentKey 幂等）→ account 真实还款（effectId = paymentKey）→ 同一事务内减少 `remaining_principal`、把最早未还期次置 PAID（`remaining ≥ principal_due` 时）、写 `REPAY-<paymentKey>` 平衡分录（DEBIT 现金/CREDIT 应收）→ 标记 COMPLETED。900/3 还 300 → 剩余 600、第 1 期 PAID，随后结清 600+6−0=606。
+**一期还款（A-003 / A-R002/A-R003/A-R004）**：`POST /{planId}/repayments`
+1. 金额合同：本轮只支持「完整一期本金」。计划锁内取最早未还期次，金额必须等于该期 `principal_due`；
+   100/350 等不完整金额在任何远端资金动作之前返回 400 `UNSUPPORTED_REPAYMENT_AMOUNT`（不静默吞款、不新增部分还款政策）。
+2. 先落 `installment_repayment`（paymentKey 幂等；同键并发在计划锁后重核）→ account 真实还款
+   （effectId = `EffectIds.repayment(planId, paymentKey)`）→ ledger `REPAY-<effectId>` 平衡分录 →
+   同一事务内把该期置 PAID、减少 `remaining_principal`、标记 COMPLETED（回写金额恒等于扣款金额）。
+3. 失败语义：账户/账务 5xx 或超时 → 保持 PENDING（账户可能已扣），既阻止结清也由对账续跑；
+   账户业务拒绝（余额不足等）→ FAILED（无资金效果），同键可再次尝试。
+900/3 还 300 → 剩余 600、第 1 期 PAID，随后结清 600+6−0=606。
+
+**本金资金动作互斥（A-R003）**：同一计划的还款与结清共用互斥——建结清意图时若存在 PENDING 还款 → 409 `REPAYMENT_IN_PROGRESS`；
+建还款意图时若存在在途结清意图（PENDING/LEDGER_POSTED/PAYMENT_APPLIED）→ 409 `SETTLEMENT_IN_PROGRESS`。
+因此「账户已扣、本地未回写」的还款不会被按旧 remaining 再结清一次。
+
+**账户作用ID（A-R004）**：`EffectIds` 按「操作类型 + 计划 + 客户端键」生成 `REPAY-<sha256前40位>` / `SETTLE-<sha256前40位>`，
+服务端生成、操作命名空间分离，客户端键相同的还款与结清也不会碰撞；同键重放仍稳定。
 
 **并发**：计划 `@Version` 乐观锁 + 结清/还款的计划行锁；20 笔上限由账户锁串行化；同键创建由账户锁内重查 + 唯一约束串行化。
 
@@ -124,8 +145,8 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | 后台权限 | `installment_permission`：STAFF_ASSIST 可写、RISK_READONLY 只读；无权限 403；不因 `userType=A` 放行 |
 | 参数校验 | 金额/期数/枚举/分页在 controller + 领域双重校验；资格不从前端推导 |
 | 日志与响应 | 不返回完整卡号；日志仅输出计划号/账户号/金额；token 不落日志 |
-| 审计 | 创建/结清/还款/后台查询/后台详情/导出/导出下载写 `installment_audit_event`（actor/action/resource/payload/时间），写失败入 `installment_audit_retry`，由 `AuditRetryWorker` 真实重放后清空队列 |
-| 通知 | 本地投递适配器把通知真实写入投递目录（原子落盘）；目标不可用（`.offline` 标记）时状态为 FAILED 且记录 `last_error/attempts`，恢复后 worker 补发，达到 5 次上限停止；待发送不等于已发送 |
+| 审计 | 创建/结清/还款/后台查询/后台详情/导出/导出下载写 `installment_audit_event`（actor/action/resource/payload/时间）。**写入在业务提交后、独立事务（REQUIRES_NEW）中执行**：INSERT 失败只回滚它自己，业务事务照常提交；失败记录写 `installment_audit_retry`（另一个独立事务），由 `AuditRetryWorker` 重放后清空。整个库不可用时业务事务本身失败，不伪造成功。 |
+| 通知 | 本地投递适配器把通知真实写入投递目录（原子落盘）；目标不可用（`.offline` 标记）时状态为 FAILED 且记录 `last_error/attempts`。发件箱写入同样在提交后独立事务执行，INSERT 失败写 `installment_notification_retry` 并在下一轮重新入队。自动重试有界（5 次）；超过后由客服调用显式幂等重排接口（`notifications/{id}/requeue`）恢复，恢复后恰好投递一次，已 SENT 幂等无操作。待发送不等于已发送 |
 | 导出 | 后台 CSV 走与其它接口相同的 Bearer 认证（前端 fetch 带 token 下载），下载与创建都写审计；只读事务内不做审计写 |
 
 ## 9. NFR 应答
@@ -159,6 +180,11 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | REQ-INS-07 后台查询导出 | §5、§8 | US-008、AC-21 | AdminExportServiceTest、AccessGuardTest |
 | 权限/SoD | §8 | AC-14/15/21 | AccessGuardTest、TokenAuthenticationFilterTest、HmacTokenVerifierTest |
 | 跨服务幂等/补偿 | §7 | A-001/A-002 | SettlementServiceTest、InstallmentApplicationServiceTest、AccountApplicationServiceTest、LedgerPostingServiceTest |
+| 冲正失败可恢复 | §7 | A-R001 | InstallmentApplicationServiceTest（failedReversalKeepsIntentResumable…） |
+| 还款金额合同/互斥/作用ID | §7 | A-R002/A-R003/A-R004 | RepaymentServiceTest、SettlementServiceTest、EffectIds |
+| FAILED 不占在途 | §7 | A-R005 | SettlementServiceTest（failedIntentDoesNotBlockNewSettlementKey） |
+| 副作用事务边界（真实 PG 触发器） | §8 | R-C-01 | InstallmentSideEffectFailureTest（Testcontainers + 表级拒绝 INSERT） |
+| 通知显式重排 | §8 | R-C-03 | NotificationWorkerTest、InstallmentSideEffectFailureTest |
 | 一期还款回写 | §7 | A-003、US-005 | RepaymentServiceTest |
 | 通知投递/补发 | §8 | C-03 | NotificationWorkerTest |
 | 审计重试消费 | §8 | C-07 | AuditRetryWorkerTest |
@@ -169,5 +195,6 @@ services/installment-service/src/main/java/com/carddemo/installment/
 1. 正式费率/违约金/首期时点、占用口径正式签字、减免策略、账单与单笔叠加的产品规则、20 笔正式上限（PRD §12.3-1..5），仍按模拟值/测试口径实现。
 2. `idempotencyKey` 超过 30 分钟窗口：PRD §12-6 未定正式错误码，本期按「拒绝旧键、不新建」实现为 409 `IDEMPOTENCY_KEY_EXPIRED`，正式码值仍待确认。
 3. 生产鉴权（JWT/网关，§12-7）与统一权限中心（§12-8）未实施；本地权限表属演示实现。
-4. 通知已实现本地真实投递（文件落盘 + 失败可见 + 恢复补发），但未接入外部短信/推送厂商；正式通道与模板审核仍待 PRD §12 确认。
+4. 通知已实现本地真实投递（文件落盘 + 失败可见 + 自动补发 + 超限后客服显式重排），但未接入外部短信/推送厂商；正式通道与模板审核仍待 PRD §12 确认。
+6. 还款金额合同本轮限定为「完整一期本金」：部分还款（如 100/350）在资金动作前拒绝，正式部分还款/最低还款政策待 PRD 确认后再扩展。
 5. 性能指标（p95）未在本次单测阶段验证，需在隔离 Compose 环境压测（verify 节点）。

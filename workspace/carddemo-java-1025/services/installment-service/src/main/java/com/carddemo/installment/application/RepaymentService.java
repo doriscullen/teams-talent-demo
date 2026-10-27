@@ -12,11 +12,16 @@ import com.carddemo.installment.domain.model.InstallmentPlan;
 import com.carddemo.installment.domain.model.InstallmentRepayment;
 import com.carddemo.installment.domain.model.InstallmentSchedule;
 import com.carddemo.installment.domain.model.ScheduleStatus;
+import com.carddemo.installment.domain.model.SettlementIntent;
 import com.carddemo.installment.domain.repository.InstallmentPlanRepository;
 import com.carddemo.installment.domain.repository.InstallmentRepaymentRepository;
 import com.carddemo.installment.domain.repository.InstallmentScheduleRepository;
+import com.carddemo.installment.domain.repository.SettlementIntentRepository;
+import com.carddemo.installment.domain.service.EffectIds;
 import com.carddemo.installment.infrastructure.security.AccessGuard;
 import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,19 +30,26 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 一期还款（A-003 / US-005）：真实还款入口，把已实际归还的本金回写到计划与还款计划行。
+ * 一期还款（A-003 / US-005，本轮按 A-R002/A-R003/A-R004 收紧）：
  * <ol>
- *   <li>先落还款意图（paymentKey 幂等），再经 account-service 真实扣减欠款（effectId = paymentKey）；</li>
- *   <li>在同一本地事务内减少 remainingPrincipal、把最早未还期次置 PAID，并记录已还本金；</li>
- *   <li>同 paymentKey 重放返回首次结果，不二次扣款、不二次回写；</li>
- *   <li>分录按 paymentKey 幂等：DEBIT 现金 / CREDIT 分期应收，借贷平衡。</li>
+ *   <li>金额合同：本轮只支持「完整一期本金」还款；任何其它金额在任何远端资金动作之前拒绝（400）；
+ *       每一分都精确回写到 remaining 与还款计划行，不存在扣款与回写不一致；</li>
+ *   <li>同一计划的本金资金动作（还款/结清）共用互斥：计划锁内检查在途结清意图，
+ *       未完成还款（PENDING，账户可能已扣）也会阻止结清，避免按旧 remaining 重复付款；</li>
+ *   <li>账户作用ID由服务端按「操作类型+计划+客户端键」生成（{@link EffectIds}），
+ *       与结清命名空间分离，跨操作不会碰撞；</li>
+ *   <li>同 paymentKey 重放返回首次结果；账户/账务失败保持可续跑，对账可继续完成。</li>
  * </ol>
  */
 @Service
 public class RepaymentService {
 
+    private static final Logger log = LoggerFactory.getLogger(RepaymentService.class);
+
     private static final String CASH = "1001-CASH-COLLECTION";
     private static final String RECEIVABLE = "1100-INSTALLMENT-RECEIVABLE";
+    private static final List<String> SETTLEMENT_IN_FLIGHT = List.of(SettlementIntent.PENDING,
+            SettlementIntent.LEDGER_POSTED, SettlementIntent.PAYMENT_APPLIED);
 
     public record RepaymentCommand(String planId, String paymentKey, BigDecimal amount) {
     }
@@ -49,6 +61,7 @@ public class RepaymentService {
     private final InstallmentPlanRepository planRepository;
     private final InstallmentScheduleRepository scheduleRepository;
     private final InstallmentRepaymentRepository repaymentRepository;
+    private final SettlementIntentRepository settlementIntentRepository;
     private final AccountPort accountPort;
     private final LedgerPort ledgerPort;
     private final AuditPort auditPort;
@@ -60,6 +73,7 @@ public class RepaymentService {
     public RepaymentService(InstallmentPlanRepository planRepository,
                             InstallmentScheduleRepository scheduleRepository,
                             InstallmentRepaymentRepository repaymentRepository,
+                            SettlementIntentRepository settlementIntentRepository,
                             AccountPort accountPort,
                             LedgerPort ledgerPort,
                             AuditPort auditPort,
@@ -70,6 +84,7 @@ public class RepaymentService {
         this.planRepository = planRepository;
         this.scheduleRepository = scheduleRepository;
         this.repaymentRepository = repaymentRepository;
+        this.settlementIntentRepository = settlementIntentRepository;
         this.accountPort = accountPort;
         this.ledgerPort = ledgerPort;
         this.auditPort = auditPort;
@@ -83,51 +98,74 @@ public class RepaymentService {
         InstallmentPlan plan = planRepository.findById(command.planId())
                 .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
         accessGuard.requireWriteAccess(principal, plan.getAccountId());
-        requireValidAmount(command.amount());
 
         InstallmentRepayment existing = repaymentRepository.findById(command.paymentKey()).orElse(null);
-        final InstallmentRepayment repayment;
         if (existing != null) {
-            repayment = existing;
-            if (!repayment.getPlanId().equals(command.planId())
-                    || repayment.getAmount().compareTo(command.amount()) != 0) {
+            if (!existing.getPlanId().equals(command.planId())
+                    || existing.getAmount().compareTo(command.amount()) != 0) {
                 throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
                         "paymentKey is already used by a different repayment.");
             }
-            if (repayment.isCompleted()) {
-                return replay(command.planId(), repayment);
+            if (existing.isCompleted()) {
+                return replay(command.planId(), existing);
             }
+        }
+
+        final InstallmentRepayment repayment;
+        if (existing != null) {
+            repayment = existing;
         } else {
+            // 计划锁内：状态/在途结清/金额合同/并发同键重核（A-R002/A-R003）
             InstallmentRepayment created = transactionTemplate.execute(status -> {
                 InstallmentPlan locked = planRepository.findForUpdate(command.planId())
                         .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND",
                                 "Installment plan not found."));
-                requireActive(locked);
-                if (command.amount().compareTo(locked.getRemainingPrincipal()) > 0) {
-                    throw new BusinessRuleException("REPAYMENT_EXCEEDS_PRINCIPAL",
-                            "Repayment amount exceeds the remaining principal.");
+                InstallmentRepayment concurrent = repaymentRepository.findById(command.paymentKey()).orElse(null);
+                if (concurrent != null) {
+                    if (!concurrent.getPlanId().equals(command.planId())
+                            || concurrent.getAmount().compareTo(command.amount()) != 0) {
+                        throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
+                                "paymentKey is already used by a different repayment.");
+                    }
+                    if (!concurrent.isCompleted() && !InstallmentRepayment.PENDING.equals(concurrent.getStatus())) {
+                        throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
+                                "A previous repayment attempt with this key failed; please retry it explicitly.");
+                    }
                 }
-                return repaymentRepository.saveAndFlush(new InstallmentRepayment(command.paymentKey(),
+                if (concurrent == null) {
+                    requireActive(locked);
+                    requireSupportedAmount(locked, command.amount());
+                    requireNoSettlementInFlight(locked.getPlanId());
+                }
+                return concurrent != null ? concurrent
+                        : repaymentRepository.saveAndFlush(new InstallmentRepayment(command.paymentKey(),
                         command.planId(), command.amount(), clock.now()));
             });
             if (created == null) {
                 throw new IllegalStateException("repayment intent was not persisted");
             }
+            if (created.isCompleted()) {
+                return replay(command.planId(), created);
+            }
             repayment = created;
         }
 
+        String effectId = EffectIds.repayment(command.planId(), command.paymentKey());
         try {
-            accountPort.applyRepayment(plan.getAccountId(), command.amount(), command.paymentKey());
-            ledgerPort.postGroup("REPAY-" + command.paymentKey(), "INSTALLMENT_REPAYMENT", command.planId(),
+            accountPort.applyRepayment(plan.getAccountId(), command.amount(), effectId);
+            ledgerPort.postGroup("REPAY-" + effectId, "INSTALLMENT_REPAYMENT", command.planId(),
                     List.of(new LedgerPort.JournalLine(CASH, "DEBIT", command.amount(), "installment repayment"),
                             new LedgerPort.JournalLine(RECEIVABLE, "CREDIT", command.amount(),
                                     "installment principal repaid")));
+        } catch (BusinessRuleException ex) {
+            markFailed(repayment, ex.getMessage());
+            throw ex;
         } catch (RemoteServiceException ex) {
-            recordError(command.paymentKey(), ex.getMessage());
+            recordError(repayment, ex.getMessage());
             throw ex;
         }
 
-        RepaymentResult result = transactionTemplate.execute(status -> applyToPlan(principal, repayment));
+        RepaymentResult result = transactionTemplate.execute(status -> applyToPlan(repayment));
         auditPort.record(principal.userId(), "INSTALLMENT_REPAID", "INSTALLMENT_PLAN", command.planId(),
                 "paymentKey=" + command.paymentKey() + ",amount=" + command.amount());
         notificationPort.enqueue("SMS", plan.getAccountId(), "INSTALLMENT_REPAID",
@@ -135,7 +173,36 @@ public class RepaymentService {
         return result;
     }
 
-    private RepaymentResult applyToPlan(InstallmentPrincipal principal, InstallmentRepayment detached) {
+    /** 对账补偿（A-R003）：续跑账户可能已扣但尚未回写的还款（PENDING）。 */
+    public int reconcilePending() {
+        List<InstallmentRepayment> stale = repaymentRepository.findByStatusInAndUpdatedAtBefore(
+                List.of(InstallmentRepayment.PENDING), clock.now().minusSeconds(5));
+        int completed = 0;
+        for (InstallmentRepayment repayment : stale) {
+            try {
+                InstallmentPlan plan = planRepository.findById(repayment.getPlanId()).orElse(null);
+                if (plan == null) {
+                    continue;
+                }
+                String effectId = EffectIds.repayment(repayment.getPlanId(), repayment.getPaymentKey());
+                accountPort.applyRepayment(plan.getAccountId(), repayment.getAmount(), effectId);
+                ledgerPort.postGroup("REPAY-" + effectId, "INSTALLMENT_REPAYMENT", repayment.getPlanId(),
+                        List.of(new LedgerPort.JournalLine(CASH, "DEBIT", repayment.getAmount(),
+                                        "installment repayment"),
+                                new LedgerPort.JournalLine(RECEIVABLE, "CREDIT", repayment.getAmount(),
+                                        "installment principal repaid")));
+                transactionTemplate.execute(status -> applyToPlan(repayment));
+                completed++;
+            } catch (RuntimeException ex) {
+                log.warn("repayment reconciliation failed: paymentKey={} error={}",
+                        repayment.getPaymentKey(), ex.getMessage());
+                recordError(repayment, ex.getMessage());
+            }
+        }
+        return completed;
+    }
+
+    private RepaymentResult applyToPlan(InstallmentRepayment detached) {
         InstallmentRepayment repayment = repaymentRepository.findById(detached.getPaymentKey())
                 .orElseThrow(() -> new IllegalStateException("repayment intent disappeared"));
         if (repayment.isCompleted()) {
@@ -146,33 +213,59 @@ public class RepaymentService {
                 .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
         requireActive(locked);
 
-        BigDecimal remaining = repayment.getAmount();
-        int paidInstallments = 0;
-        List<InstallmentSchedule> schedules =
-                scheduleRepository.findByPlanIdOrderByInstallmentNo(repayment.getPlanId());
-        for (InstallmentSchedule schedule : schedules) {
-            if (remaining.signum() == 0) {
-                break;
-            }
-            if (schedule.getStatus() == ScheduleStatus.PAID) {
-                continue;
-            }
-            if (remaining.compareTo(schedule.getPrincipalDue()) < 0) {
-                break;
-            }
-            schedule.markPaid(clock.now());
-            scheduleRepository.save(schedule);
-            remaining = remaining.subtract(schedule.getPrincipalDue());
-            paidInstallments++;
+        InstallmentSchedule target = nextUnpaidSchedule(locked.getPlanId());
+        if (target == null || repayment.getAmount().compareTo(target.getPrincipalDue()) != 0) {
+            // 金额合同在锁内被破坏（计划已变化）→ 显式失败，不静默吞款
+            throw new BusinessRuleException("REPAYMENT_AMOUNT_CHANGED",
+                    "The plan schedule changed; please retry with the current period amount.");
         }
-        BigDecimal applied = repayment.getAmount().subtract(remaining);
-        if (applied.signum() > 0) {
-            locked.repayPrincipal(applied);
-            planRepository.saveAndFlush(locked);
-        }
-        repayment.markCompleted(applied, clock.now());
+        target.markPaid(clock.now());
+        scheduleRepository.save(target);
+        locked.repayPrincipal(repayment.getAmount());
+        planRepository.saveAndFlush(locked);
+        repayment.markCompleted(repayment.getAmount(), clock.now());
         repaymentRepository.saveAndFlush(repayment);
-        return new RepaymentResult(locked, applied, paidInstallments, false);
+        return new RepaymentResult(locked, repayment.getAmount(), 1, false);
+    }
+
+    private void requireSupportedAmount(InstallmentPlan plan, BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new BusinessRuleException("INVALID_PARAMETER", "Repayment amount must be greater than zero.");
+        }
+        if (amount.stripTrailingZeros().scale() > 2) {
+            throw new BusinessRuleException("INVALID_PARAMETER", "Repayment amount supports 2 decimal places.");
+        }
+        if (amount.compareTo(plan.getRemainingPrincipal()) > 0) {
+            throw new BusinessRuleException("REPAYMENT_EXCEEDS_PRINCIPAL",
+                    "Repayment amount exceeds the remaining principal.");
+        }
+        InstallmentSchedule next = nextUnpaidSchedule(plan.getPlanId());
+        if (next == null) {
+            throw new BusinessRuleException("REPAYMENT_NOT_ALLOWED", "There is no unpaid period to repay.");
+        }
+        if (amount.compareTo(next.getPrincipalDue()) != 0) {
+            // A-R002：本轮只支持完整期次本金；在任何远端资金动作前拒绝不支持的金额
+            throw new BusinessRuleException("UNSUPPORTED_REPAYMENT_AMOUNT",
+                    "Only a full period principal of " + next.getPrincipalDue().toPlainString()
+                            + " can be repaid at a time.");
+        }
+    }
+
+    private InstallmentSchedule nextUnpaidSchedule(String planId) {
+        for (InstallmentSchedule schedule : scheduleRepository.findByPlanIdOrderByInstallmentNo(planId)) {
+            if (schedule.getStatus() != ScheduleStatus.PAID) {
+                return schedule;
+            }
+        }
+        return null;
+    }
+
+    private void requireNoSettlementInFlight(String planId) {
+        settlementIntentRepository.findFirstByPlanIdAndStatusIn(planId, SETTLEMENT_IN_FLIGHT)
+                .ifPresent(intent -> {
+                    throw new BusinessRuleException("SETTLEMENT_IN_PROGRESS",
+                            "A settlement is in progress for this plan; retry that settlement instead.");
+                });
     }
 
     private RepaymentResult replay(String planId, InstallmentRepayment repayment) {
@@ -181,24 +274,23 @@ public class RepaymentService {
         return new RepaymentResult(plan, repayment.getPrincipalApplied(), 0, true);
     }
 
-    private static void requireValidAmount(BigDecimal amount) {
-        if (amount == null || amount.signum() <= 0) {
-            throw new BusinessRuleException("INVALID_PARAMETER", "Repayment amount must be greater than zero.");
-        }
-        if (amount.stripTrailingZeros().scale() > 2) {
-            throw new BusinessRuleException("INVALID_PARAMETER", "Repayment amount supports 2 decimal places.");
-        }
-    }
-
     private static void requireActive(InstallmentPlan plan) {
         if (!plan.isActive()) {
             throw new BusinessRuleException("REPAYMENT_NOT_ALLOWED", "Only ACTIVE plans accept repayments.");
         }
     }
 
-    private void recordError(String paymentKey, String message) {
+    private void recordError(InstallmentRepayment repayment, String message) {
         transactionTemplate.executeWithoutResult(status ->
-                repaymentRepository.findById(paymentKey).ifPresent(fresh -> {
+                repaymentRepository.findById(repayment.getPaymentKey()).ifPresent(fresh -> {
+                    fresh.recordError(message, clock.now());
+                    repaymentRepository.saveAndFlush(fresh);
+                }));
+    }
+
+    private void markFailed(InstallmentRepayment repayment, String message) {
+        transactionTemplate.executeWithoutResult(status ->
+                repaymentRepository.findById(repayment.getPaymentKey()).ifPresent(fresh -> {
                     fresh.markFailed(message, clock.now());
                     repaymentRepository.saveAndFlush(fresh);
                 }));

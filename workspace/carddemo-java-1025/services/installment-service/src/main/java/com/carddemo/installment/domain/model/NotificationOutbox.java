@@ -92,6 +92,14 @@ public class NotificationOutbox {
         this.updatedAt = at;
     }
 
+    /** 显式人工恢复（R-C-03）：把已耗尽自动重试的通知重新排队，仍按同一 notificationId 投递一次。 */
+    public void requeue(LocalDateTime at) {
+        this.status = PENDING;
+        this.attempts = 0;
+        this.lastError = null;
+        this.updatedAt = at;
+    }
+
     public Long getNotificationId() {
         return notificationId;
     }

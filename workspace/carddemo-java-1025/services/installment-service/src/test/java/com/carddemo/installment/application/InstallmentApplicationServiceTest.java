@@ -457,4 +457,36 @@ class InstallmentApplicationServiceTest {
         verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
         verify(planRepository, never()).save(any());
     }
+
+    @Test
+    void failedReversalKeepsIntentResumableAndReconcilesToSingleReversal() {
+        when(allocationRepository.existsByTransactionId(TXN)).thenReturn(true);
+        // 第1次 create 过账成功；第2次反向过账失败；对账时 create 重复提交（duplicate）；反向过账成功
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RemoteServiceException("ledger-service", "ledger down"))
+                .doNothing()
+                .doNothing()
+                .when(ledgerPort).postGroup(anyString(), anyString(), anyString(), any());
+
+        assertThatThrownBy(() -> service.create(CUSTOMER, command("key-rev", new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("ALREADY_INSTALLED");
+
+        InstallmentApplicationIntent intent = intentsByKey.get("key-rev");
+        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.LEDGER_POSTED);
+        assertThat(intent.isResumable()).isTrue();
+        assertThat(intent.getLastError()).contains("reversal pending");
+
+        when(intentRepository.findByStatusInAndUpdatedAtBefore(any(), any())).thenReturn(List.of(intent));
+        service.reconcilePending();
+
+        assertThat(intent.getStatus()).isEqualTo(InstallmentApplicationIntent.REVERSED);
+        ArgumentCaptor<String> groups = ArgumentCaptor.forClass(String.class);
+        verify(ledgerPort, org.mockito.Mockito.atLeast(4))
+                .postGroup(groups.capture(), anyString(), anyString(), any());
+        assertThat(groups.getAllValues().stream().filter(group -> group.endsWith("-REV")).count())
+                .isEqualTo(2); // 失败一次 + 成功一次，均为同一稳定反向作用ID
+        verify(planRepository, never()).save(any());
+    }
 }

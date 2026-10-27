@@ -8,10 +8,12 @@ import com.carddemo.installment.application.port.NotificationPort;
 import com.carddemo.installment.domain.exception.BusinessRuleException;
 import com.carddemo.installment.domain.exception.RemoteServiceException;
 import com.carddemo.installment.domain.model.InstallmentPlan;
+import com.carddemo.installment.domain.model.InstallmentRepayment;
 import com.carddemo.installment.domain.model.InstallmentPolicy;
 import com.carddemo.installment.domain.model.SettlementIntent;
 import com.carddemo.installment.domain.model.SourceType;
 import com.carddemo.installment.domain.repository.InstallmentPlanRepository;
+import com.carddemo.installment.domain.repository.InstallmentRepaymentRepository;
 import com.carddemo.installment.domain.repository.InstallmentPolicyRepository;
 import com.carddemo.installment.domain.repository.SettlementIntentRepository;
 import com.carddemo.installment.domain.service.SettlementCalculator;
@@ -54,6 +56,7 @@ class SettlementServiceTest {
 
     private InstallmentPlanRepository planRepository;
     private SettlementIntentRepository intentRepository;
+    private InstallmentRepaymentRepository repaymentRepository;
     private LedgerPort ledgerPort;
     private AccountPort accountPort;
     private AuditPort auditPort;
@@ -64,6 +67,7 @@ class SettlementServiceTest {
     void setUp() {
         planRepository = mock(InstallmentPlanRepository.class);
         intentRepository = mock(SettlementIntentRepository.class);
+        repaymentRepository = mock(InstallmentRepaymentRepository.class);
         InstallmentPolicyRepository policyRepository = mock(InstallmentPolicyRepository.class);
         ledgerPort = mock(LedgerPort.class);
         accountPort = mock(AccountPort.class);
@@ -96,8 +100,8 @@ class SettlementServiceTest {
                 Optional.ofNullable(lastSavedIntent));
 
         service = new SettlementService(planRepository, policyRepository, intentRepository,
-                new SettlementCalculator(), ledgerPort, accountPort, auditPort, notificationPort,
-                accessGuard, clock, txManager);
+                repaymentRepository, new SettlementCalculator(), ledgerPort, accountPort, auditPort,
+                notificationPort, accessGuard, clock, txManager);
     }
 
     private SettlementIntent lastSavedIntent;
@@ -114,7 +118,7 @@ class SettlementServiceTest {
         assertThat(plan.getStatus().name()).isEqualTo("SETTLED");
         assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("0.00");
 
-        verify(accountPort).applyRepayment(ACCOUNT, new BigDecimal("600.00"), "SETTLE-settle-1");
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("600.00")), anyString());
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<LedgerPort.JournalLine>> captor = ArgumentCaptor.forClass(List.class);
@@ -171,7 +175,7 @@ class SettlementServiceTest {
     void differentKeyWithInFlightIntentIsRejected() {
         SettlementIntent inflight = new SettlementIntent("settle-other", PLAN_ID, new BigDecimal("600.00"),
                 new BigDecimal("6.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("606.00"), NOW);
-        when(intentRepository.findFirstByPlanIdAndStatusNot(PLAN_ID, SettlementIntent.COMPLETED))
+        when(intentRepository.findFirstByPlanIdAndStatusIn(eq(PLAN_ID), any()))
                 .thenReturn(Optional.of(inflight));
 
         assertThatThrownBy(() -> service.settle(CUSTOMER,
@@ -196,7 +200,7 @@ class SettlementServiceTest {
 
     @Test
     void lostPaymentResponseThenRetryKeepsSingleFinancialEffect() {
-        when(accountPort.applyRepayment(ACCOUNT, new BigDecimal("600.00"), "SETTLE-settle-4"))
+        when(accountPort.applyRepayment(eq(ACCOUNT), eq(new BigDecimal("600.00")), anyString()))
                 .thenThrow(new RemoteServiceException("account-service", "timeout"))
                 .thenReturn(new BigDecimal("1844.75"));
 
@@ -210,13 +214,13 @@ class SettlementServiceTest {
 
         assertThat(result.replayed()).isFalse();
         assertThat(plan.getStatus().name()).isEqualTo("SETTLED");
-        verify(accountPort, times(2)).applyRepayment(ACCOUNT, new BigDecimal("600.00"), "SETTLE-settle-4");
+        verify(accountPort, times(2)).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("600.00")), anyString());
         verify(ledgerPort, times(2)).postGroup(eq("settle-4"), anyString(), anyString(), any());
     }
 
     @Test
     void accountBusinessRejectionReversesLedgerAndRequiresNewKey() {
-        when(accountPort.applyRepayment(ACCOUNT, new BigDecimal("600.00"), "SETTLE-settle-5"))
+        when(accountPort.applyRepayment(eq(ACCOUNT), eq(new BigDecimal("600.00")), anyString()))
                 .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
 
         assertThatThrownBy(() -> service.settle(CUSTOMER,
@@ -238,7 +242,7 @@ class SettlementServiceTest {
 
     @Test
     void reversalGroupIsBalanced() {
-        when(accountPort.applyRepayment(ACCOUNT, new BigDecimal("600.00"), "SETTLE-settle-6"))
+        when(accountPort.applyRepayment(eq(ACCOUNT), eq(new BigDecimal("600.00")), anyString()))
                 .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
 
         assertThatThrownBy(() -> service.settle(CUSTOMER,
@@ -254,5 +258,34 @@ class SettlementServiceTest {
                 .map(LedgerPort.JournalLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(debit).isEqualByComparingTo(credit);
         assertThat(debit).isEqualByComparingTo("606.00");
+    }
+
+    @Test
+    void settlementIsRejectedWhileRepaymentIsInFlight() {
+        when(repaymentRepository.existsByPlanIdAndStatus(PLAN_ID, InstallmentRepayment.PENDING))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.settle(CUSTOMER,
+                new SettlementService.SettlementCommand(PLAN_ID, "settle-7", BigDecimal.ZERO)))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_IN_PROGRESS");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+        verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void failedIntentDoesNotBlockNewSettlementKey() {
+        SettlementIntent failed = new SettlementIntent("settle-old", PLAN_ID, new BigDecimal("600.00"),
+                new BigDecimal("6.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("606.00"), NOW.minusMinutes(2));
+        failed.markFailed("insufficient balance", NOW.minusMinutes(2));
+        when(intentRepository.findFirstByPlanIdAndStatusIn(eq(PLAN_ID), any())).thenReturn(Optional.empty());
+
+        SettlementService.SettlementResult result = service.settle(CUSTOMER,
+                new SettlementService.SettlementCommand(PLAN_ID, "settle-new", BigDecimal.ZERO));
+
+        assertThat(result.replayed()).isFalse();
+        assertThat(plan.getStatus().name()).isEqualTo("SETTLED");
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("600.00")), anyString());
     }
 }

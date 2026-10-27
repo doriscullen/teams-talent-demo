@@ -66,6 +66,12 @@ public class InstallmentRepayment {
         this.updatedAt = at;
     }
 
+    /** 结果未知（超时/5xx）时只记录错误，保持 PENDING 可续跑，同时阻止结清按旧本金付款。 */
+    public void recordError(String error, LocalDateTime at) {
+        this.lastError = error == null ? null : error.substring(0, Math.min(error.length(), 200));
+        this.updatedAt = at;
+    }
+
     public void markFailed(String error, LocalDateTime at) {
         this.status = FAILED;
         this.lastError = error == null ? null : error.substring(0, Math.min(error.length(), 200));

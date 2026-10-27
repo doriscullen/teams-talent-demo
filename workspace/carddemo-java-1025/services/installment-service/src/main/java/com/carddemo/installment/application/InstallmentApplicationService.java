@@ -321,19 +321,29 @@ public class InstallmentApplicationService {
         return completed;
     }
 
-    /** 冲正（A-002 补偿边界）：同一 planId 反向分录，冲正后不再有「无计划的有效入账」。 */
+    /**
+     * 冲正（A-002 / A-R001 补偿边界）：同一 planId 反向分录（稳定作用ID，重复调用只冲正一次）。
+     * 冲正失败时不进入不可续跑的 REVERSED，而是保持 PENDING/LEDGER_POSTED 由同键重试或对账继续，
+     * 直到反向分录真实成功才终结为 REVERSED。
+     */
     private void compensate(InstallmentApplicationIntent intent, String reason) {
+        boolean reversed;
         try {
             postReversalLedger(intent);
+            reversed = true;
         } catch (RemoteServiceException ex) {
-            log.warn("installment compensation posting failed, left for reconciliation: planId={}",
-                    intent.getPlanId());
+            log.warn("installment compensation posting failed, kept resumable: planId={}", intent.getPlanId());
+            reversed = false;
         }
-        transactionTemplate.executeWithoutResult(status ->
-                intentRepository.findById(intent.getIntentId()).ifPresent(fresh -> {
-                    fresh.markReversed(reason, clock.now());
-                    intentRepository.saveAndFlush(fresh);
-                }));
+        if (reversed) {
+            transactionTemplate.executeWithoutResult(status ->
+                    intentRepository.findById(intent.getIntentId()).ifPresent(fresh -> {
+                        fresh.markReversed(reason, clock.now());
+                        intentRepository.saveAndFlush(fresh);
+                    }));
+        } else {
+            recordError(intent, "reversal pending: " + reason);
+        }
     }
 
     private void postCreateLedger(InstallmentApplicationIntent intent) {

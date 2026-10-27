@@ -167,6 +167,20 @@ public class AdminInstallmentController {
         return Map.of("delivered", sent, "sinkAvailable", notificationSender.isAvailable());
     }
 
+    @Operation(summary = "显式重排已耗尽的通知",
+            description = "仅客服；对未投递成功的通知重置自动重试计数并立即投递一次，已 SENT 的幂等无操作（R-C-03）。")
+    @PostMapping("/notifications/{notificationId}/requeue")
+    public Map<String, Object> requeueNotification(
+            @RequestAttribute(name = InstallmentPrincipal.ATTRIBUTE, required = false) InstallmentPrincipal principal,
+            @PathVariable Long notificationId) {
+        requirePrincipal(principal);
+        requireAssistWrite(principal);
+        boolean delivered = notificationWorker.requeueAndDispatch(notificationId);
+        NotificationOutbox row = notificationRepository.findById(notificationId).orElse(null);
+        return Map.of("delivered", delivered,
+                "status", row == null ? "MISSING" : row.getStatus());
+    }
+
     @Operation(summary = "切换本地通知投递目标可用性", description = "仅客服；故障注入/恢复验证用。")
     @PostMapping("/notifications/sink")
     public Map<String, Object> toggleNotificationSink(

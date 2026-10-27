@@ -2,7 +2,9 @@ package com.carddemo.installment.infrastructure.support;
 
 import com.carddemo.installment.application.port.ClockProvider;
 import com.carddemo.installment.domain.model.NotificationOutbox;
+import com.carddemo.installment.domain.model.NotificationRetry;
 import com.carddemo.installment.domain.repository.NotificationOutboxRepository;
+import com.carddemo.installment.domain.repository.NotificationRetryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,13 +36,16 @@ class NotificationWorkerTest {
     Path deliveryDir;
 
     private NotificationOutboxRepository repository;
+    private NotificationRetryRepository retryRepository;
     private LocalNotificationSender sender;
     private NotificationWorker worker;
     private final Map<Long, NotificationOutbox> rows = new HashMap<>();
+    private final Map<Long, NotificationRetry> retries = new HashMap<>();
 
     @BeforeEach
     void setUp() {
         repository = mock(NotificationOutboxRepository.class);
+        retryRepository = mock(NotificationRetryRepository.class);
         sender = new LocalNotificationSender(deliveryDir.toString());
         ClockProvider clock = mock(ClockProvider.class);
         when(clock.now()).thenReturn(NOW);
@@ -55,11 +60,25 @@ class NotificationWorkerTest {
                 Optional.ofNullable(rows.get(invocation.getArgument(0))));
         when(repository.findByStatusInOrderByNotificationIdAsc(any())).thenAnswer(invocation ->
                 List.copyOf(rows.values()));
+        when(retryRepository.findAllByOrderByRetryIdAsc()).thenAnswer(invocation ->
+                List.copyOf(retries.values()));
+        when(retryRepository.findById(anyLong())).thenAnswer(invocation ->
+                Optional.ofNullable(retries.get(invocation.getArgument(0))));
+        when(retryRepository.saveAndFlush(any(NotificationRetry.class))).thenAnswer(invocation -> {
+            NotificationRetry row = invocation.getArgument(0);
+            retries.put(row.getRetryId(), row);
+            return row;
+        });
+        org.mockito.Mockito.doAnswer(invocation -> {
+            NotificationRetry row = invocation.getArgument(0);
+            retries.remove(row.getRetryId());
+            return null;
+        }).when(retryRepository).delete(org.mockito.ArgumentMatchers.<NotificationRetry>any());
 
         PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
         when(txManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
 
-        worker = new NotificationWorker(repository, sender, clock, txManager, true);
+        worker = new NotificationWorker(repository, retryRepository, sender, clock, txManager, true);
     }
 
     private NotificationOutbox pending(long id) {
@@ -119,5 +138,51 @@ class NotificationWorkerTest {
 
         assertThat(worker.dispatchDue()).isZero();
         assertThat(row.getAttempts()).isEqualTo(5);
+    }
+
+    @Test
+    void exhaustedNotificationIsRequeuedExplicitlyAndDeliveredExactlyOnce() {
+        NotificationOutbox row = pending(4L);
+        for (int attempt = 0; attempt < 5; attempt++) {
+            row.markFailed("sink offline", NOW);
+        }
+        assertThat(worker.dispatchDue()).isZero();
+        assertThat(row.getStatus()).isEqualTo(NotificationOutbox.FAILED);
+
+        assertThat(worker.requeueAndDispatch(4L)).isTrue();
+        assertThat(row.getStatus()).isEqualTo(NotificationOutbox.SENT);
+        assertThat(row.getAttempts()).isEqualTo(1);
+        assertThat(sender.deliveredFileCount()).isEqualTo(1);
+
+        // 幂等：已 SENT 的通知不会被再次投递，也不会产生第二个文件
+        assertThat(worker.requeueAndDispatch(4L)).isFalse();
+        assertThat(sender.deliveredFileCount()).isEqualTo(1);
+    }
+
+    @Test
+    void failedEnqueueRecordIsRequeuedIntoOutboxThenDelivered() {
+        NotificationRetry retry = new NotificationRetry("SMS", "00000000006", "INSTALLMENT_CREATED",
+                "planId=IP9", "insert denied", NOW);
+        try {
+            var field = NotificationRetry.class.getDeclaredField("retryId");
+            field.setAccessible(true);
+            field.set(retry, 1L);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
+        retries.put(1L, retry);
+        when(repository.saveAndFlush(any(NotificationOutbox.class))).thenAnswer(invocation -> {
+            NotificationOutbox outbox = invocation.getArgument(0);
+            setField(outbox, 9L);
+            rows.put(9L, outbox);
+            return outbox;
+        });
+
+        int delivered = worker.dispatchDue();
+
+        assertThat(retries).isEmpty();
+        assertThat(delivered).isEqualTo(1);
+        assertThat(rows.get(9L).getStatus()).isEqualTo(NotificationOutbox.SENT);
+        assertThat(sender.deliveredFileCount()).isEqualTo(1);
     }
 }

@@ -10,8 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 /**
- * 审计落库（§6.1）。写失败不得回滚业务：转为本地补偿队列（§11.1），队列也失败时仅记录错误。
+ * 审计落库（§6.1 / R-C-01）：业务提交后写审计，写失败不得影响业务，
+ * 也不得在已中止的事务里入队——失败记录通过独立事务写入 {@code installment_audit_retry}，
+ * 由 {@link AuditRetryWorker} 真实重放。
  */
 @Component
 public class AuditEventWriter implements AuditPort {
@@ -21,27 +25,42 @@ public class AuditEventWriter implements AuditPort {
     private final AuditEventRepository auditEventRepository;
     private final AuditRetryRepository auditRetryRepository;
     private final ClockProvider clock;
+    private final SideEffectTransactions sideEffects;
 
     public AuditEventWriter(AuditEventRepository auditEventRepository,
                             AuditRetryRepository auditRetryRepository,
-                            ClockProvider clock) {
+                            ClockProvider clock,
+                            SideEffectTransactions sideEffects) {
         this.auditEventRepository = auditEventRepository;
         this.auditRetryRepository = auditRetryRepository;
         this.clock = clock;
+        this.sideEffects = sideEffects;
     }
 
     @Override
     public void record(String actor, String action, String resourceType, String resourceId, String payload) {
+        sideEffects.afterCommit(() -> recordNow(actor, action, resourceType, resourceId, payload));
+    }
+
+    void recordNow(String actor, String action, String resourceType, String resourceId, String payload) {
+        LocalDateTime now = clock.now();
         try {
-            auditEventRepository.save(new AuditEvent(actor, action, resourceType, resourceId, payload, clock.now()));
+            sideEffects.inNewTransaction(() -> auditEventRepository.save(
+                    new AuditEvent(actor, action, resourceType, resourceId, payload, now)));
         } catch (RuntimeException ex) {
             log.warn("audit write failed, queueing retry: action={} resource={}", action, resourceId);
-            try {
-                auditRetryRepository.save(new AuditRetry(actor, action, resourceType, resourceId, payload,
-                        truncate(ex.getMessage()), clock.now()));
-            } catch (RuntimeException retryFailure) {
-                log.error("audit retry queue write also failed for action={} resource={}", action, resourceId);
-            }
+            queueRetry(actor, action, resourceType, resourceId, payload, ex, now);
+        }
+    }
+
+    private void queueRetry(String actor, String action, String resourceType, String resourceId,
+                            String payload, RuntimeException failure, LocalDateTime now) {
+        try {
+            sideEffects.inNewTransaction(() -> auditRetryRepository.save(new AuditRetry(actor, action,
+                    resourceType, resourceId, payload, truncate(failure.getMessage()), now)));
+        } catch (RuntimeException ex) {
+            // 整个库不可用时业务事务本身也已失败，这里只显式记录，不伪造成功
+            log.error("audit retry queue write also failed for action={} resource={}", action, resourceId, ex);
         }
     }
 

@@ -752,6 +752,8 @@ async function installmentEntry(txn) {
 /* ---------------- 页面：我的账单（C-04） ---------------- */
 
 function pageBilling() {
+    const query = hashQuery();
+    const initialAccount = query.get('accountId') || '00000000006';
     shell({
         active: 'billing',
         title: '我的账单',
@@ -760,7 +762,7 @@ function pageBilling() {
             <div class="card">
                 <form class="inline-form" id="bill-lookup">
                     <label class="field grow"><span>账户号（11 位）</span>
-                        <input id="bill-account" value="00000000006" maxlength="11" pattern="\\d{11}" required></label>
+                        <input id="bill-account" value="${esc(initialAccount)}" maxlength="11" pattern="\\d{11}" required></label>
                     <button class="btn primary" type="submit">查询账单</button>
                 </form>
                 <div id="bill-result"></div>
@@ -948,7 +950,7 @@ function pageBillPay() {
                         <label class="checkbox"><input type="checkbox" name="confirm" id="bill-confirm"> 我确认执行全额还款</label>
                         <div class="form-actions">
                             <button class="btn primary" type="submit" id="bill-submit">执行支付</button>
-                            <a class="btn ghost" href="#/billing">账单分期</a>
+                            <a class="btn ghost" id="bill-installment-link" href="#/billing">账单分期</a>
                         </div>
                         <div id="bill-msg"></div>
                     </form>
@@ -965,6 +967,8 @@ function pageBillPay() {
         try {
             const account = await api(`/api/v1/accounts/${encodeURIComponent(accountId)}`);
             current = account;
+            const link = document.getElementById('bill-installment-link');
+            if (link) link.href = `#/billing?accountId=${encodeURIComponent(account.accountId)}`;
             const available = Number(account.creditLimit) - Number(account.currentBalance);
             info.innerHTML = `
                 <div class="grid cols-2 mt-16">

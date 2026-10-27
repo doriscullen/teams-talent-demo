@@ -10,10 +10,13 @@ import com.carddemo.installment.domain.exception.NotFoundException;
 import com.carddemo.installment.domain.exception.RemoteServiceException;
 import com.carddemo.installment.domain.model.InstallmentPlan;
 import com.carddemo.installment.domain.model.InstallmentPolicy;
+import com.carddemo.installment.domain.model.InstallmentRepayment;
 import com.carddemo.installment.domain.model.SettlementIntent;
 import com.carddemo.installment.domain.repository.InstallmentPlanRepository;
+import com.carddemo.installment.domain.repository.InstallmentRepaymentRepository;
 import com.carddemo.installment.domain.repository.InstallmentPolicyRepository;
 import com.carddemo.installment.domain.repository.SettlementIntentRepository;
+import com.carddemo.installment.domain.service.EffectIds;
 import com.carddemo.installment.domain.service.SettlementCalculator;
 import com.carddemo.installment.infrastructure.security.AccessGuard;
 import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
@@ -44,6 +47,9 @@ public class SettlementService {
     private static final String RECEIVABLE = "1100-INSTALLMENT-RECEIVABLE";
     private static final String PENALTY_INCOME = "4002-SETTLEMENT-PENALTY-INCOME";
     private static final String REVERSAL_SUFFIX = "-REV";
+    /** 在途结清状态（FAILED/COMPLETED 不占在途，A-R005）。 */
+    private static final List<String> IN_FLIGHT_SETTLEMENT_STATUSES = List.of(SettlementIntent.PENDING,
+            SettlementIntent.LEDGER_POSTED, SettlementIntent.PAYMENT_APPLIED);
 
     public record SettlementCommand(String planId, String settlementKey, BigDecimal feeRebate) {
     }
@@ -55,6 +61,7 @@ public class SettlementService {
     private final InstallmentPlanRepository planRepository;
     private final InstallmentPolicyRepository policyRepository;
     private final SettlementIntentRepository intentRepository;
+    private final InstallmentRepaymentRepository repaymentRepository;
     private final SettlementCalculator calculator;
     private final LedgerPort ledgerPort;
     private final AccountPort accountPort;
@@ -67,6 +74,7 @@ public class SettlementService {
     public SettlementService(InstallmentPlanRepository planRepository,
                              InstallmentPolicyRepository policyRepository,
                              SettlementIntentRepository intentRepository,
+                             InstallmentRepaymentRepository repaymentRepository,
                              SettlementCalculator calculator,
                              LedgerPort ledgerPort,
                              AccountPort accountPort,
@@ -78,6 +86,7 @@ public class SettlementService {
         this.planRepository = planRepository;
         this.policyRepository = policyRepository;
         this.intentRepository = intentRepository;
+        this.repaymentRepository = repaymentRepository;
         this.calculator = calculator;
         this.ledgerPort = ledgerPort;
         this.accountPort = accountPort;
@@ -112,12 +121,13 @@ public class SettlementService {
                 throw new BusinessRuleException("SETTLEMENT_NOT_ALLOWED", "Only ACTIVE plans can be settled.");
             }
             SettlementIntent inflight = intentRepository
-                    .findFirstByPlanIdAndStatusNot(command.planId(), SettlementIntent.COMPLETED)
+                    .findFirstByPlanIdAndStatusIn(command.planId(), IN_FLIGHT_SETTLEMENT_STATUSES)
                     .orElse(null);
             if (inflight != null && !inflight.getSettlementKey().equals(command.settlementKey())) {
                 throw new BusinessRuleException("CONCURRENT_SETTLEMENT",
                         "Another settlement is in progress for this plan.");
             }
+            requireNoRepaymentInFlight(command.planId());
             SettlementIntent again = intentRepository.findById(command.settlementKey()).orElse(null);
             if (again != null) {
                 return again;
@@ -168,7 +178,7 @@ public class SettlementService {
 
             // ② 真实还款（effectId = SETTLE-<key>，账户端去重，响应丢失重试不会二次扣款）
             accountPort.applyRepayment(planAccountId(intent.getPlanId()), quote.remainingPrincipal(),
-                    "SETTLE-" + intent.getSettlementKey());
+                    EffectIds.settlement(intent.getPlanId(), intent.getSettlementKey()));
             markPaymentApplied(intent);
 
             // ③ 状态落库：计划 SETTLED + 意图 COMPLETED
@@ -241,6 +251,14 @@ public class SettlementService {
                     "settlement penalty"));
         }
         return lines;
+    }
+
+    /** A-R003：账户可能已扣但尚未回写的还款（PENDING）必须先恢复，不能按旧 remaining 再结清。 */
+    private void requireNoRepaymentInFlight(String planId) {
+        if (repaymentRepository.existsByPlanIdAndStatus(planId, InstallmentRepayment.PENDING)) {
+            throw new BusinessRuleException("REPAYMENT_IN_PROGRESS",
+                    "A repayment is still in progress for this plan; resume it before settling.");
+        }
     }
 
     private void requireServerSideRebate(BigDecimal feeRebate) {
