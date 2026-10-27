@@ -4,6 +4,7 @@ import { Card, Empty, Tag } from 'antd';
 import { BranchesOutlined, CodeOutlined, ExperimentOutlined, FileSearchOutlined, FileTextOutlined, FolderOpenOutlined, MessageOutlined, ProjectOutlined, ToolOutlined } from '@ant-design/icons';
 import type { Artifact, Capability, Source } from '../types.ts';
 import { status } from '../demo/knowledge.ts';
+import { isDiagnosis, pendingCount } from '../demo/suggestions.ts';
 
 const capIcons: Record<string, ReactNode> = { index: <FileSearchOutlined />, doc: <FileTextOutlined />, code: <CodeOutlined />, traj: <ExperimentOutlined /> };
 export const CapIcon = ({ cap }: { cap: Capability }) => <>{capIcons[cap.cat] ?? <FileTextOutlined />}</>;
@@ -34,6 +35,7 @@ export const EmptyState = ({ title, children }: { title?: ReactNode; children?: 
   <Empty className="talents-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={<>{title && <b>{title}</b>}{children && <span>{children}</span>}</>} />;
 
 export function ArtifactStatus({ a }: { a: Artifact }) {
+  if (isDiagnosis(a)) return pendingCount(a) ? <Tag color="warning">待应用</Tag> : <Tag color="success">建议已处理</Tag>;
   const st = status(a);
   if (st === 'draft') return <Tag color="warning">待审阅</Tag>;
   if (st === 'update') return <Tag color="warning">新版本待审阅</Tag>;

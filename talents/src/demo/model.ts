@@ -22,13 +22,16 @@ export const projectRepos = (st: TalentsState, pid: string) => levelSources(st, 
 /** Sessions a task of the level can analyse: the project's, or at team level those of every project. */
 export const levelSessions = (st: TalentsState, pid: string | null) => pid ? st.sessions.filter(s => s.projectId === pid) : st.sessions;
 
-/** Files of a development-pattern library: index, then per spec 范式总结, 代码分析报告 and its PR records (see content/miner/pr-map.json). */
+/** Files of a development-pattern library: index, then per spec 范式总结, 代码分析报告, its PR records (PR mode)
+ *  or its mining metadata (diff mode: meta.json records the scenario, repository and engine; see content/miner). */
 export function minerFiles(names: string[]) {
   const map: Record<string, string> = JSON.parse(content('miner/pr-map.json') ?? '{}');
   const out = ['miner/index.md'];
   names.forEach(n => {
     out.push('miner/' + n + '/summary.md', 'miner/' + n + '/analyzer.md');
-    Object.keys(map).filter(pr => map[pr] === n).forEach(pr => out.push('miner/' + n + '/input/prs/' + pr + '/metadata.json'));
+    const prs = Object.keys(map).filter(pr => map[pr] === n);
+    if (prs.length) prs.forEach(pr => out.push('miner/' + n + '/input/prs/' + pr + '/metadata.json'));
+    else if (content('miner/' + n + '/meta.json') != null) out.push('miner/' + n + '/meta.json');
   });
   return out;
 }

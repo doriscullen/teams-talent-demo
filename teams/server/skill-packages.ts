@@ -7,6 +7,7 @@ import { DomainError } from '../src/domain.js';
 import { workspace, runtimeDir } from './config.js';
 import { atomicJson } from './store.js';
 import { sha256, skillPackageDigest, validateSkillPackage, type NativeSkillPackage, type SkillPackageFile } from './skill-installation.js';
+import { projectSkillVersions } from './shared-data.js';
 
 function item(id: string) {
   const found=inventory.find(skill=>skill.name===id);
@@ -34,6 +35,15 @@ export async function loadSourceSkillPackage(id:string,sourceDirectory=join(work
   const declared=body.match(/^\|\s*version\s*\|\s*([^|\s]+)\s*\|/m)?.[1]??body.match(/^version:\s*["']?([^\s"']+)/m)?.[1];
   if(declared!==metadata.version)throw new Error(`Skill 元数据与正文版本不一致：${id} (${metadata.version} / ${declared??'未声明'})`);
   const pkg={id,name:id,version:metadata.version,sha256:skillPackageDigest(entries),files:entries};validateSkillPackage(pkg);return pkg;
+}
+/** A project skill as the project uses it now: the source package with the files of the latest version Talents wrote for the project. */
+export async function currentProjectSkillPackage(projectId:string,id:string):Promise<NativeSkillPackage> {
+  const pkg=await loadSourceSkillPackage(id),written=(await projectSkillVersions(projectId)).find(version=>version.skillId===id);
+  if(!written)return pkg;
+  const files=new Map(pkg.files.map(file=>[file.path,file]));
+  for(const file of written.files)if(file.content!==null){const bytes=Buffer.from(file.content);files.set(file.path,{path:file.path,sha256:sha256(bytes),executable:files.get(file.path)?.executable??false,bytes});}
+  const list=[...files.values()].sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+  const result={...pkg,version:written.version,sha256:skillPackageDigest(list),files:list};validateSkillPackage(result);return result;
 }
 function entry(pkg:NativeSkillPackage):SkillCatalogEntry {
   const metadata=item(pkg.id),owner=projectSkillIds.includes(pkg.id);

@@ -4,15 +4,16 @@ import type { Artifact, Draft, RunPlan, TalentsState, Task } from '../types.ts';
 import { content } from '../content.ts';
 import { hashId, now, uid, versionLabel } from './format.ts';
 import { basisOf, capability, changesSince, latestVersion, minerFiles, session, source, sourceState } from './model.ts';
+import { report } from './suggestions.ts';
 
-const sameSet = (x?: string[], y?: string[]) => !!x && !!y && x.length === y.length && x.every(v => y.includes(v));
 
-/** The artifact a run of this task would build or update (same level, same capability on the same input). */
+/** The artifact a run of this task would build or update (same level, same capability on the same input);
+ *  every diagnosis run makes a new one. */
 export function existingArtifact(st: TalentsState, t: Pick<Task, 'projectId' | 'cap' | 'sources' | 'sessions'>) {
   return st.artifacts.find(x => {
     if (x.projectId !== t.projectId) return false;
     if (x.cap !== t.cap && !(t.cap === 'miner-diff' && x.cap === 'miner-pr')) return false;
-    if (t.cap === 'traj') return sameSet(x.sessions, t.sessions);
+    if (t.cap === 'traj') return false;
     return x.sources[0] === t.sources[0];
   }) ?? null;
 }
@@ -34,15 +35,12 @@ export function runPlan(st: TalentsState, t: Task): RunPlan {
     return { seconds: Math.min(24, 10 + n * 2), steps: ['读取会话轨迹', '诊断过程错误', '生成报告与改进建议'], logs };
   }
   if (t.cap === 'codegraph') {
-    const repo = src!.path, base = update ? t.input!.from : null;
-    const head = '[codegraph] 代码版本：分支 ' + src!.branch + '，提交 ' + (src!.commit ? src!.commit.sha : 'HEAD') + '；上次成功的构建或更新：' + (base ? '提交 ' + base : '无记录');
-    return update
-      ? { seconds: 6, steps: ['自检', '同步代码变化', '校验索引'], logs: [head, '[codegraph] 自检通过：codegraph 1.6.0',
-          '[codegraph] 运行：codegraph sync ' + repo, ch && ch.count ? 'Syncing ' + ch.count + ' commits, 14 changed files...' : 'No changes since last sync', 'Resolving refs...', '◆  Synced in 0.6s',
-          '[codegraph] 完成：' + repo + ' 的索引已校验通过（sync）'] }
-      : { seconds: 9, steps: ['自检', '建立索引', '校验索引'], logs: [head, '[codegraph] 自检通过：codegraph 1.6.0',
-          '[codegraph] 运行：codegraph init ' + repo + ' --yes', 'Scanning files...', 'Parsing code...', 'Resolving refs...', 'Linking dynamic dispatch...',
-          '◆  Indexed 1,284 files', '●  41,206 nodes, 152,883 edges in 1.4s', '[codegraph] 完成：' + repo + ' 的索引已校验通过（init）'] };
+    const a = existingArtifact(st, t);
+    return { seconds: 3, steps: ['读取演示快照', '展示归档统计'], logs: [
+      '[codegraph] 演示使用已归档的真实扫描结果，不执行 init / sync。',
+      ...(a?.stats ?? []).map(([label, value]) => `[codegraph] ${label}：${value}`),
+      '[codegraph] 可在产物详情中浏览图谱；需要替换演示数据时手动导出新快照。',
+    ] };
   }
   if (t.cap === 'doc-index') {
     const l1 = '[rag] 文档版本：' + versionLabel(latestVersion(src)) + '；上次构建：' + (update ? versionLabel(t.input!.from) : '无记录');
@@ -117,15 +115,9 @@ export function finishRun(st: TalentsState, t: Task) {
   return a;
 }
 
+/** The report of the diagnosed session (only sessions with a report can be diagnosed). */
 function trajTopic(st: TalentsState, ids: string[]) {
-  const topics = st.trajTopics;
-  let best = Object.keys(topics)[0], bestScore = -1;
-  Object.keys(topics).forEach(k => {
-    let score = 0;
-    ids.forEach(id => { const s = session(st, id); if (s) topics[k].keywords.forEach(w => { if (s.title.includes(w)) score++; }); });
-    if (score > bestScore) { best = k; bestScore = score; }
-  });
-  return best;
+  return Object.keys(st.trajTopics).find(k => ids.includes(st.trajTopics[k].session)) ?? Object.keys(st.trajTopics)[0];
 }
 // Indexes are not reviewed after their first publish: each later run publishes itself, and an update that
 // finds no change keeps the current version.
@@ -144,6 +136,7 @@ function autoPublish(st: TalentsState, a: Artifact, t: Task) {
 export function produce(st: TalentsState, t: Task): Artifact {
   const cap = capability(st, t.cap);
   let a = existingArtifact(st, t);
+  if (a?.id === 'a-cg-java') { t.unchanged = true; return a; }
   const draft: Draft = { created: now(), task: t.id, revisions: [], basis: sourceState(source(st, t.sources[0])) };
   if (a) {
     if (a.folder === 'miner') {
@@ -161,19 +154,18 @@ export function produce(st: TalentsState, t: Task): Artifact {
   const src = source(st, t.sources[0])!;
   a = { id: uid('a'), projectId: t.projectId, cap: cap.id, sources: t.sources.slice(), published: null, draft, name: '', desc: '', kind: 'files' };
   if (t.cap === 'traj') {
-    const ids = t.sessions ?? [];
-    const topic = trajTopic(st, ids), tp = st.trajTopics[topic];
-    const first = session(st, ids[0]);
-    a.name = '会话轨迹诊断：' + (ids.length > 1 ? tp.title + '（' + ids.length + ' 个会话）' : first?.title ?? '');
-    a.desc = '经验规则，以及 Skill ' + tp.skill + ' 的改进建议。';
-    a.sessions = ids.slice(); a.topic = topic; a.folder = '经验规则';
-    a.files = ['trajectory/' + topic + '/轨迹诊断报告.html', 'trajectory/' + topic + '/改进建议.md', 'trajectory/' + topic + '/Skill改进-' + tp.skill + '.md'];
-    a.skillPatch = tp.skill;
+    // A diagnosis: the report and its suggestions, each applied or declined on its own (see suggestions.ts).
+    const ids = t.sessions ?? [], topic = trajTopic(st, ids), r = report(topic);
+    a.name = '会话轨迹诊断：' + st.trajTopics[topic].title;
+    a.desc = r ? r.chains + ' 条问题链，' + r.suggestions.length + ' 条优化建议。' : '';
+    a.kind = 'diagnosis'; a.sessions = ids.slice(); a.topic = topic;
+    a.files = ['trajectory/' + topic + '/轨迹诊断报告.html'];
+    a.suggestions = (r?.suggestions ?? []).map(s => ({ id: s.id, status: 'pending' }));
   } else if (cap.cat === 'index') {
     a.name = src.name + (cap.id === 'codegraph' ? ' CodeGraph' : ' RAG 检索');
     a.desc = cap.id === 'codegraph' ? '查询 ' + src.name + ' 中的代码定义与调用关系。' : '按问题检索 ' + src.name + ' 中的相关段落。';
     a.kind = 'index';
-    a.stats = cap.id === 'codegraph' ? [['文件', '1,068'], ['节点', '33,914'], ['关系', '120,537']] : [['文档', String(src.files || 30)], ['片段', '1,402'], ['向量维度', '1,024']];
+    a.stats = cap.id === 'codegraph' ? [] : [['文档', String(src.files || 30)], ['片段', '1,402'], ['向量维度', '1,024']];
     a.mcpName = cap.id === 'codegraph' ? 'codegraph' : 'docs-rag';
   } else if (cap.cat === 'doc') {
     a.name = src.name + ' 业务知识';

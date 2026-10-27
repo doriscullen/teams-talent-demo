@@ -36,11 +36,18 @@ export interface Published {
 export interface Draft { created: string; task?: string; revisions: { file: string; text: string; [key: string]: unknown }[]; basis?: unknown }
 /** Tasks and artifacts belong to a project (projectId) or to the team (null), as their sources do. */
 export interface Artifact {
-  id: string; projectId: string | null; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files';
+  id: string; projectId: string | null; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files' | 'diagnosis';
   files?: string[]; specs?: string[]; stats?: [string, string][]; folder?: string; skills?: string[];
+  /** A project's AGENTS.md rules (see src/types.ts); its published text is generated from them. */
+  rules?: { text: string; version: number }[];
   published: Published | null; draft: Draft | null; [key: string]: unknown;
 }
 export interface Capability { id: string; cat: string; name: string; [key: string]: unknown }
+/** A new version of a project skill written by applying a trajectory diagnosis suggestion (see src/types.ts). */
+export interface SkillVersion {
+  projectId: string; skillId: string; version: string; basedOn: { version: string; sha256?: string }; at: string; note: string;
+  from: { artifact: string; suggestion: string }; files: { path: string; text: string }[];
+}
 
 /** Everything Talents persists. Team, members, projects, Teams sources and sessions are never stored here. */
 export interface TalentsState {
@@ -54,10 +61,11 @@ export interface TalentsState {
   prs: Record<string, { number: number; title: string; merged: string }[]>;
   tasks: Record<string, unknown>[];
   artifacts: Artifact[];
-  trajTopics: Record<string, { skill: string; title: string; keywords: string[] }>;
+  trajTopics: Record<string, { title: string; session: string }>;
+  skillVersions: SkillVersion[];
   dev: { applied: Record<string, unknown>; local: Record<string, unknown>[] };
 }
 /** Keys of TalentsState the front-end may change through PUT /api/state, taken as they come. */
-export const CLIENT_OWNED_KEYS = ['role', 'agents', 'categories', 'capabilities', 'prs', 'tasks', 'artifacts', 'trajTopics', 'dev'] as const;
+export const CLIENT_OWNED_KEYS = ['role', 'agents', 'categories', 'capabilities', 'prs', 'tasks', 'artifacts', 'trajTopics', 'skillVersions', 'dev'] as const;
 
 export class HttpError extends Error { constructor(message: string, readonly status = 400) { super(message); } }

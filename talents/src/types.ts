@@ -24,6 +24,8 @@ export interface Source {
 export interface Session {
   id: string; title: string; updated: string; turns: number; messages: number; tokens: number; files: number;
   owner: string; ownerName?: string; projectId: string; agent?: string; model?: string; cwd?: string; requirementId?: string; summary?: string;
+  /** Teams has collected the session's transcript; only such sessions can be diagnosed. */
+  transcript?: boolean;
 }
 
 export interface Category { id: string; name: string; desc: string }
@@ -55,11 +57,24 @@ export interface Published {
   agents?: string[];
   files?: string[]; specs?: string[]; over?: Record<string, Over>; basis?: Basis | null; auto?: boolean;
 }
+/** kind: index (queried online), files (knowledge files), or diagnosis (a trajectory diagnosis: a report and
+ *  improvement suggestions, applied one by one instead of being reviewed and published). */
 export interface Artifact {
-  id: string; projectId: string | null; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files';
+  id: string; projectId: string | null; cap: string; name: string; desc: string; sources: string[]; kind: 'index' | 'files' | 'diagnosis';
   files?: string[]; specs?: string[]; stats?: [string, string][]; folder?: string; skills?: string[]; usage?: string; mcpName?: string;
-  sessions?: string[]; topic?: string; skillPatch?: string;
+  sessions?: string[]; topic?: string;
+  /** A diagnosis: how each suggestion of the report (content/trajectory/<topic>/report.json) was handled. */
+  suggestions?: SuggestionState[];
+  /** A project's AGENTS.md rules: each applied suggestion adds a rule and publishes the next version. */
+  rules?: AgentRule[];
   published: Published | null; draft: Draft | null;
+}
+export interface SuggestionState { id: string; status: 'pending' | 'applied' | 'declined'; at?: string; result?: string; reason?: string }
+export interface AgentRule { id: string; text: string; version: number; at: string; from: { artifact: string; suggestion: string } }
+/** A new version of a project skill, written by applying a diagnosis suggestion; Teams reads it from the shared directory. */
+export interface SkillVersion {
+  projectId: string; skillId: string; version: string; basedOn: { version: string; sha256?: string }; at: string; note: string;
+  from: { artifact: string; suggestion: string }; files: { path: string; text: string }[];
 }
 
 export type Scope = { kind: 'repo'; repos: string[] } | { kind: 'global'; dir: 'chrys' | 'agents' } | { kind: 'agent'; agents: string[] };
@@ -74,7 +89,9 @@ export interface TalentsState {
   prs: Record<string, { number: number; title: string; merged: string }[]>;
   tasks: Task[];
   artifacts: Artifact[];
-  trajTopics: Record<string, { skill: string; title: string; keywords: string[] }>;
+  /** Diagnosis reports available in content/trajectory/<topic>/, each for the session it analysed. */
+  trajTopics: Record<string, { title: string; session: string }>;
+  skillVersions: SkillVersion[];
   dev: { applied: Record<string, Applied>; local: LocalDir[] };
   team: Team; projects: Project[]; sources: Source[]; sessions: Session[];
 }

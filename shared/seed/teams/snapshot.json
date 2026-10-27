@@ -223,6 +223,21 @@
   ],
   "sessions": [
     {
+      "id": "6b82c08d-eb3b-4bdc-b373-54fed16a7fcd",
+      "memberId": "member",
+      "title": "CardDemo 迁移与扩建（19 轮）",
+      "updatedAt": "2026-10-26 23:58",
+      "turns": 19,
+      "agent": "Code Agent",
+      "model": "deepseek-pro",
+      "requirementId": "DEMO-MKT-001",
+      "summary": "从 COBOL 业务提取与微服务迁移起步，扩展到 Web 界面、银行业务模块，第 18 轮重建高端卡多月消费返现能力。",
+      "transcript": true,
+      "projectId": "carddemo",
+      "memberName": "陈晨",
+      "cwd": "workspace/carddemo-java-1025"
+    },
+    {
       "id": "3f2a9c41d7e0",
       "memberId": "member",
       "title": "返现明细查询：分页游标与重复记录",

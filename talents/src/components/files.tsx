@@ -62,8 +62,9 @@ function MinerMeta({ text }: { text: string }) {
 }
 
 export function FileContent({ st, a, file, text }: { st: TalentsState; a: Artifact; file: string; text: string | null }) {
+  // A report renders itself with scripts; one too large to bundle is served by the Talents service.
+  if (/\.html$/.test(file)) return <iframe title="预览" sandbox="allow-scripts" {...(text == null ? { src: '/api/content?key=' + encodeURIComponent(file) } : { srcDoc: text })} />;
   if (text == null) return <div className="index-summary"><p className="ui-note">内容暂不可预览。</p></div>;
-  if (/\.html$/.test(file)) return <iframe title="预览" sandbox="" srcDoc={K.reportHtml(st, a, text)} />;
   if (/\/input\/prs\/\d+\/metadata\.json$/.test(file)) return <PrRecord text={text} />;
   if (/\/meta\.json$/.test(file)) return <MinerMeta text={text} />;
   if (/\.md$/.test(file)) return <article className="markdown"><Markdown text={text} /></article>;
@@ -113,7 +114,6 @@ export function ArtifactPreview({ st, a, which = 'published', onClose }: { st: T
   const [file, setFile] = useState(() => list.find(f => !/index\.md$/.test(f)) ?? list[0]);
   const cap = capability(st, a.cap);
   const title = <div><div className="caption">{cap.name}</div>{a.name}</div>;
-  if (K.isIndex(a)) return <Modal open title={title} footer={null} onCancel={onClose} width={640}><IndexSummary a={a} /></Modal>;
   if (K.isIndex(a)) return <Modal open title={title} footer={null} onCancel={onClose} width={a.id === 'a-cg-java' ? 1280 : 640} destroyOnHidden><IndexSummary a={a} /></Modal>;
   const groups: FileGroup[] = K.fileGroups(a, list).map((g, i) => ({ title: g.title || (i ? '' : '内容'), items: g.items.map(f => ({ key: f, label: K.fileLabel(f), indent: !!g.title && a.folder === 'miner' })) }));
   (a.skills ?? []).forEach(name => groups.push({ title: '配套 Skill：' + name, items: skillTree(name).map(f => ({ key: 'skills/' + name + '/' + f, label: f, indent: f.includes('/') })) }));

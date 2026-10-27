@@ -6,13 +6,15 @@ import { minerFiles } from './content.ts';
 import type { TalentsState } from './model.ts';
 
 /** Bump when the seed changes shape or content; a stored state from another seed version is replaced. */
-export const SEED_VERSION = 10;
+export const SEED_VERSION = 11;
 
 export const PROJECT_ID = 'carddemo';
 /** Source ids derived from the Teams snapshot (see teams-data.ts): repository id, and one document set per project. */
 export const REPO_ID = 'repository:carddemo:carddemo-java-1025';
 export const DOCSET_ID = 'docset:carddemo';
 export const STD_ID = 's-std';
+/** The diagnosed iCode session (Teams shares it; content/trajectory/carddemo-19 holds its report). */
+export const TRAJ_SESSION = '6b82c08d-eb3b-4bdc-b373-54fed16a7fcd';
 
 const MINER_DIFF = ['消费返现与奖励发放', '跨服务幂等入账与失败重试', '活动资格判定与有效期控制', '账户余额乐观锁更新', '用户维护与删除保护'];
 const MINER_PR = ['统一错误码与异常处理'];
@@ -103,6 +105,7 @@ export function seedState(): TalentsState {
       { id: 't-miner-eligibility', projectId: PROJECT_ID, name: '活动资格判定与有效期控制', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 17:50', duration: '7 分 48 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 17:48' },
       { id: 't-miner-lock', projectId: PROJECT_ID, name: '账户余额乐观锁更新', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 18:45', duration: '6 分 31 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 18:43' },
       { id: 't-miner-user', projectId: PROJECT_ID, name: '用户维护与删除保护', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 18:50', duration: '5 分 54 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 18:48' },
+      { id: 't-traj', projectId: PROJECT_ID, name: '', cap: 'traj', sources: ['s-sessions'], sessions: [TRAJ_SESSION], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 01:21', duration: '42 分 18 秒', artifact: 'a-traj', created: '2026-10-27 00:38' },
     ],
     // published: what developers see; draft: the latest run, waiting for review (revisions are added while reviewing).
     // basis: the source state the artifact was built from (a document version, or a commit for code).
@@ -125,12 +128,16 @@ export function seedState(): TalentsState {
         specs: MINER_SPECS, files: minerFiles(MINER_SPECS), skills: ['find-reference-spec'], usage: '开发新需求或修改现有功能前，用 find-reference-spec 查找可参考的范式',
         published: { version: 2, at: '2026-10-27 18:50', note: '新增 5 个代码片段挖掘的开发范式，保留「统一错误码与异常处理」', delivery: 'local', specs: MINER_SPECS, files: minerFiles(MINER_SPECS) },
         history: [{ version: 1, specs: ['统一错误码与异常处理'] }], draft: null },
+      // A diagnosis is not published: its suggestions are applied one by one (src/demo/suggestions.ts).
+      { id: 'a-traj', projectId: PROJECT_ID, cap: 'traj', name: '会话轨迹诊断：CardDemo 迁移与扩建（19 轮）', desc: '6 条问题链，3 条优化建议。', sources: ['s-sessions'], kind: 'diagnosis',
+        sessions: [TRAJ_SESSION], topic: 'carddemo-19', files: ['trajectory/carddemo-19/轨迹诊断报告.html'],
+        suggestions: ['change-01', 'change-02', 'change-03'].map(id => ({ id, status: 'pending' })),
+        published: null, draft: { created: '2026-10-27 01:21', task: 't-traj', revisions: [], basis: null } },
     ],
-    // Trajectory reports are picked by matching the selected sessions' titles; the first topic is the default.
-    trajTopics: {
-      platinum: { skill: 'dev-backend-service', title: '白金卡返现交付', keywords: ['白金卡', '返现', '资格', '卡片等级', '期间', '0.5%'] },
-      reward: { skill: 'dev-api-integration', title: '营销奖励幂等', keywords: ['幂等', '重复', '冲正', '回滚', '入账'] },
-    },
+    // Diagnosis reports in content/trajectory/<topic>/, each for the session it analysed.
+    trajTopics: { 'carddemo-19': { title: 'CardDemo 迁移与扩建（19 轮）', session: TRAJ_SESSION } },
+    // New versions of project skills written by applying diagnosis suggestions.
+    skillVersions: [],
     // The developer's own machine.
     dev: {
       applied: {

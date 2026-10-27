@@ -58,3 +58,23 @@ test('writes knowledge.json and the files, and removes versions no longer publis
   assert.deepEqual(await readdir(join(dir, 'talents', 'files', 'a-std')), ['v2']);
   await assert.rejects(access(join(dir, 'talents', 'files', 'a-miner')));
 });
+
+test('exports the AGENTS.md rules as published and the project skill versions Talents wrote', async () => {
+  const state = seedState();
+  state.artifacts.push({ id: 'a-rules-carddemo', projectId: 'carddemo', cap: 'traj', name: 'AGENTS.md 规则', desc: '', sources: [], kind: 'files', files: ['rules/AGENTS.md'],
+    rules: [{ text: '规则一', version: 1 }, { text: '规则二', version: 2 }], published: { version: 1, at: '2026-10-27 21:00', note: '规则一', delivery: 'local', files: ['rules/AGENTS.md'] }, draft: null });
+  state.skillVersions.push({ projectId: 'carddemo', skillId: 'arch-adr-writing', version: '1.1.0', basedOn: { version: '1.0.0' }, at: '2026-10-27 21:00', note: '统一章节契约',
+    from: { artifact: 'a-traj', suggestion: 'change-02' }, files: [{ path: 'SKILL.md', text: '| version | 1.1.0 |\n' }] });
+  const data = buildExport(state);
+  assert.ok(!data.knowledge.artifacts.some(a => a.id === 'a-traj'), 'a diagnosis is not exported');
+  const rules = data.files.get('a-rules-carddemo/v1')![0].text;
+  assert.match(rules, /1\. 规则一/);
+  assert.doesNotMatch(rules, /规则二/, 'only the rules of the published version');
+  assert.deepEqual(data.knowledge.skills!.map(s => [s.skillId, s.version, s.files.map(f => f.path)]), [['arch-adr-writing', '1.1.0', ['SKILL.md']]]);
+  const dir = await mkdtemp(join(tmpdir(), 'talents-export-'));
+  await writeExport(dir, data);
+  assert.equal(await readFile(join(dir, 'talents', 'skills', 'arch-adr-writing', '1.1.0', 'SKILL.md'), 'utf8'), '| version | 1.1.0 |\n');
+  state.skillVersions = [];
+  await writeExport(dir, buildExport(state));
+  await assert.rejects(access(join(dir, 'talents', 'skills', 'arch-adr-writing')), 'a reset removes the skill versions');
+});

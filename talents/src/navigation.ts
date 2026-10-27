@@ -17,11 +17,11 @@ export const roleLabel: Record<Role, string> = { admin: '管理员端', dev: '�
 /** Teams links to #/dev-knowledge for the developer's project knowledge. */
 const aliases: Record<string, string> = { 'dev-knowledge': 'knowledge' };
 
-export const levelTabs = [{ key: 'sources', label: '来源' }, { key: 'tasks', label: '知识任务' }, { key: 'review', label: '产物审阅' }] as const;
+export const levelTabs = [{ key: 'review', label: '产物管理' }, { key: 'tasks', label: '知识任务' }, { key: 'sources', label: '来源' }] as const;
 export type LevelTab = typeof levelTabs[number]['key'];
 /** A tab of a level: #/projects?project=<id>&tab=<tab>, or #/team?tab=<tab> for the team; extra parameters follow. */
-export function levelHash(pid: string | null, tab: LevelTab = 'sources', extra: Record<string, string> = {}) {
-  const query = new URLSearchParams({ ...(pid ? { project: pid } : {}), ...(tab === 'sources' ? {} : { tab }), ...extra }).toString();
+export function levelHash(pid: string | null, tab: LevelTab = 'review', extra: Record<string, string> = {}) {
+  const query = new URLSearchParams({ ...(pid ? { project: pid } : {}), ...(tab === 'review' ? {} : { tab }), ...extra }).toString();
   return '#/' + (pid ? 'projects' : 'team') + (query ? '?' + query : '');
 }
 

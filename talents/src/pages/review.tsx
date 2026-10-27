@@ -1,13 +1,14 @@
-// 产物审阅：一个层级（团队或项目）的待审阅 / 已发布列表，以及整页的审阅工作台（内容、对比、对话修订、手动编辑、发布）。
-import { useEffect, useRef, useState } from 'react';
-import { Button, Checkbox, Form, Input, Modal, Radio, Segmented, Select, Space } from 'antd';
+// 产物管理：一个层级（团队或项目）的待审阅、轨迹诊断和已发布列表，以及知识产物的审阅工作台（内容、与线上版本对比、发布）。
+import { useState } from 'react';
+import { Button, Checkbox, Form, Input, Modal, Radio, Segmented, Space } from 'antd';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
 import { levelHash } from '../navigation.ts';
 import type { Artifact, Basis, TalentsState } from '../types.ts';
-import { artifact, basisOf, capability, changesSince, levelName, source, task, type Changes } from '../demo/model.ts';
-import { hashId, now, versionLabel, when } from '../demo/format.ts';
+import { artifact, basisOf, capability, changesSince, levelName, levelSources, source, type Changes } from '../demo/model.ts';
+import { now, versionLabel, when } from '../demo/format.ts';
 import * as K from '../demo/knowledge.ts';
+import { isDiagnosis, pendingCount } from '../demo/suggestions.ts';
 import { ArtifactStatus, CapIcon, CardGrid, EmptyState, Fields, FileMark, ItemCard, Section } from '../components/ui.tsx';
 import { DiffView, FileContent, FileList, IndexSummary, linkTarget } from '../components/files.tsx';
 import type { Toolbar } from './level.tsx';
@@ -15,6 +16,8 @@ import type { Toolbar } from './level.tsx';
 // ---------- List ----------
 /** Published knowledge whose source changed after it was built; the capability must be able to update. */
 function staleChanges(st: TalentsState, a: Artifact) {
+  // The demo graph is a committed snapshot shown independently of workspace changes.
+  if (a.id === 'a-cg-java') return null;
   if (a.draft || !capability(st, a.cap).update) return null;
   const c = changesSince(source(st, a.sources[0]), basisOf(a));
   return c && c.count ? c : null;
@@ -36,6 +39,7 @@ export function LevelReview({ pid, toolbar }: { pid: string | null; toolbar: Too
   const { state: st, go } = useTalents();
   const open = (a: Artifact) => go(levelHash(pid, 'review', { id: a.id }));
   const card = (a: Artifact) => {
+    if (isDiagnosis(a)) return diagnosisCard(a);
     const cap = capability(st, a.cap), st_ = K.status(a), stale = staleChanges(st, a);
     const whenText = st_ === 'published' ? (a.published!.auto ? '自动发布于 ' : '发布于 ') + when(a.published!.at) : '生成于 ' + when(a.draft!.created);
     return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={cap.name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
@@ -44,83 +48,55 @@ export function LevelReview({ pid, toolbar }: { pid: string | null; toolbar: Too
       <p className="ui-note">{a.desc}</p>{stale && <StaleNote st={st} a={a} c={stale} />}
     </ItemCard>;
   };
-  const mine = st.artifacts.filter(a => a.projectId === pid), pending = mine.filter(a => a.draft), done = mine.filter(a => !a.draft);
+  // A diagnosis is not reviewed and published: its card tells how many suggestions wait to be applied.
+  const diagnosisCard = (a: Artifact) => {
+    const n = pendingCount(a);
+    return <ItemCard key={a.id} icon={<CapIcon cap={capability(st, a.cap)} />} title={a.name} subtitle={capability(st, a.cap).name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
+      caption={'诊断于 ' + when(a.draft?.created)} actions={<Button size="small" type={n ? 'primary' : 'default'} onClick={() => open(a)}>{n ? '查看建议' : '查看'}</Button>}>
+      <p className="ui-note">{a.desc}</p>
+      {n > 0 && <div className="update-note"><b>{n} 条优化建议待应用</b><span className="caption">应用后写入项目 Skill 或 AGENTS.md 规则</span></div>}
+    </ItemCard>;
+  };
+  const mine = st.artifacts.filter(a => a.projectId === pid), knowledge = mine.filter(a => !isDiagnosis(a)), diagnoses = mine.filter(isDiagnosis);
+  const pending = knowledge.filter(a => a.draft), done = knowledge.filter(a => !a.draft);
   return <>
     {toolbar()}
-    <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
+    <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : mine.length === 0 && levelSources(st, pid).length === 0
+      ? <EmptyState title="还没有产物">先登记来源，再创建知识任务生成产物。<Button type="link" onClick={() => go(levelHash(pid, 'sources'))}>登记来源</Button></EmptyState>
+      : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
+    {diagnoses.length > 0 && <Section title="轨迹诊断" note={diagnoses.length + ' 个'}><CardGrid>{diagnoses.map(card)}</CardGrid></Section>}
     {done.length > 0 && <Section title="已发布" note={done.length + ' 个'}><CardGrid>{done.map(card)}</CardGrid></Section>}
   </>;
 }
 
 // ---------- Workbench ----------
-const CHAT_SCRIPTS = [
-  { file: /业务规则目录/, match: /BR-CASH-02|期间|边界|包含|不含/,
-    prompt: 'BR-CASH-02 的期间边界不对，请对照 cashback-contract.md 改成开始含、结束不含',
-    edit: (text: string) => text.split('\n').map(l => l.startsWith('| BR-CASH-02 |')
-      ? l.replace(/2026-11-01 00:00:00 \+08:00 至 2027-02-01 00:00:00 \+08:00（两端均包含）/, '2026-11-01 00:00:00 +08:00（含）至 2027-02-01 00:00:00 +08:00（不含）') : l).join('\n'),
-    summary: '修正 BR-CASH-02 的期间边界',
-    reply: '已对照 cashback-contract.md 修正 BR-CASH-02：消费期间改为 2026-11-01 00:00（含）至 2027-02-01 00:00（不含），与 Campaign.isActiveAt() 的 [startAt, endAt) 判定一致。其他规则没有改动。' },
-  { file: /改进建议/, match: /判定链|第 ?3 ?条|绝对|确认/,
-    prompt: '第 3 条规则太绝对，改成“沿用参考实现的判定链前，须逐条对照新需求并经人确认”',
-    edit: (text: string) => text.replace(/^3\.\s+\*\*[^*]+\*\*/m, '3. **沿用参考实现的判定链前，须逐条对照新需求并经人确认。**'),
-    summary: '放宽第 3 条经验规则',
-    reply: '已改写第 3 条规则：允许沿用参考实现的资格判定链，但要求先逐条对照新需求，并经人确认。' },
-];
-const scriptsFor = (file: string) => CHAT_SCRIPTS.filter(s => s.file.test(file));
+// The artifact is shown as it was produced; a new version of published knowledge can be compared with the
+// version online. The admin publishes it as it is (there is no revising in this first version).
 const isMd = (key: string) => /\.md$/.test(key);
-interface Message { who: 'me' | 'icode' | 'busy'; text: string }
 
 export function Workbench({ id }: { id: string }) {
-  const { state: st, update, toast } = useTalents();
+  const { state: st } = useTalents();
   const a = artifact(st, id);
   const which: K.Which = a?.draft ? 'current' : 'published';
   const [file, setFile] = useState(() => a && !K.isIndex(a) ? (K.files(a, which).find(f => !/index\.md$/.test(f)) ?? a.files?.[0] ?? null) : null);
   const [tab, setTab] = useState<'content' | 'diff'>('content');
-  const [base, setBase] = useState<'published' | 'original'>(a?.published && a.draft ? 'published' : 'original');
-  const [side, setSide] = useState<'chat' | 'edit'>('chat');
-  const [chat, setChat] = useState<Message[]>([]), [say, setSay] = useState(''), [busy, setBusy] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const chatBox = useRef<HTMLDivElement>(null);
-  useEffect(() => { chatBox.current?.scrollTo(0, chatBox.current.scrollHeight); }, [chat]);
   if (!a) return <EmptyState>找不到这个产物。<a href="#/projects">返回项目</a></EmptyState>;
   const cap = capability(st, a.cap), files = K.isIndex(a) ? [] : K.files(a, which);
-
-  const baseText = (key: string) => base === 'published' && !K.files(a, 'published').includes(key) ? null : K.text(a, base, key);
+  // Only a new version of published knowledge has something to compare with.
+  const comparable = !!a.draft && !!a.published && !K.isIndex(a);
+  const online = (key: string) => K.files(a, 'published').includes(key) ? K.text(a, 'published', key) : null;
   const mark = (key: string) => {
-    if (!a.draft || !isMd(key)) return null;
-    const before = baseText(key);
+    if (!comparable || !isMd(key)) return null;
+    const before = online(key);
     if (before == null) return <FileMark kind="new" />;
     return before !== K.text(a, 'current', key) ? <FileMark kind="mod" /> : null;
-  };
-  const send = (text: string) => {
-    text = text.trim();
-    if (!text || busy || !file) return;
-    setChat(c => [...c, { who: 'me', text }, { who: 'busy', text: 'iCode 正在修改…' }]); setSay(''); setBusy(true);
-    setTimeout(() => {
-      const key = file, script = scriptsFor(key).find(s => s.match.test(text));
-      const before = K.text(a, 'current', key) ?? '';
-      let after: string | null = null, reply: string, summary: string | undefined;
-      if (!isMd(key)) reply = '这个文件是报告，不直接修改。可以切换到“改进建议”或其他文档后再提修改要求。';
-      else if (script) { after = script.edit(before); reply = script.reply; summary = script.summary; }
-      else {
-        const lines = before.split('\n'), at = lines.findIndex(l => /^#\s/.test(l));
-        lines.splice(at + 1, 0, '', '> 审阅修订：' + text);
-        after = lines.join('\n');
-        reply = '已按要求修改「' + K.fileLabel(key) + '」，在开头补充了说明。可以在“对比”中查看改动。';
-      }
-      if (after != null && after !== before) {
-        update(d => { artifact(d, id)!.draft!.revisions.push({ kind: 'chat', file: key, text: after!, prompt: text, summary: summary ?? '按审阅意见修订「' + K.fileLabel(key) + '」', at: now() }); });
-        setTab('diff');
-        if (!a.published) setBase('original');
-      }
-      setChat(c => [...c.filter(m => m.who !== 'busy'), { who: 'icode', text: reply }]); setBusy(false);
-    }, 1600);
   };
 
   let main;
   if (K.isIndex(a)) main = <IndexSummary a={a} />;
   else if (!file) main = null;
-  else if (tab === 'diff' && a.draft) main = isMd(file) ? <div className="diff-wrap"><DiffView before={baseText(file)} after={K.text(a, 'current', file)} /></div>
+  else if (tab === 'diff' && comparable) main = isMd(file) ? <div className="diff-wrap"><DiffView before={online(file)} after={K.text(a, 'current', file)} /></div>
     : <div className="index-summary"><p className="ui-note">这个文件不支持对比，请切换到“内容”查看。</p></div>;
   else main = <FileContent st={st} a={a} file={file} text={K.text(a, which, file)} />;
 
@@ -129,47 +105,22 @@ export function Workbench({ id }: { id: string }) {
     <div className={'wb-body' + (files.length ? '' : ' no-files')}>
       {files.length > 0 && <FileList current={file} onSelect={setFile} groups={K.fileGroups(a, files).map(g => ({ title: g.title, items: g.items.map(f => ({ key: f, indent: !!g.title, label: <>{K.fileLabel(f)}{mark(f)}</> })) }))} />}
       <section className="wb-main">
-        {a.draft && !K.isIndex(a) && <div className="wb-toolbar">
-          <Segmented value={tab} onChange={v => setTab(v as typeof tab)} options={[{ value: 'content', label: '内容' }, { value: 'diff', label: '对比' }]} />
-          {tab === 'diff' && <Select value={base} onChange={setBase} popupMatchSelectWidth={false} options={[...(a.published ? [{ value: 'published' as const, label: '与线上版本（v' + a.published.version + '）对比' }] : []), { value: 'original' as const, label: '与原始产物对比' }]} />}
+        {comparable && <div className="wb-toolbar">
+          <Segmented value={tab} onChange={v => setTab(v as typeof tab)} options={[{ value: 'content', label: '内容' }, { value: 'diff', label: '与线上版本（v' + a.published!.version + '）对比' }]} />
         </div>}
         <div className="wb-view" key={file + tab} onClick={e => { const target = file && linkTarget(e, file); if (target && a.files?.includes(target)) setFile(target); }}>{main}</div>
       </section>
       <aside className="wb-side"><div className="side-body">
-        {!a.draft ? <PublishedSide st={st} a={a} /> : K.isIndex(a)
-          ? <>{basisRow(st, a, a.draft.basis) && <Fields rows={[basisRow(st, a, a.draft.basis)]} />}<p className="ui-note">索引类产物不需要修订，确认后直接发布。发布后，之后的每次更新都会自动发布，不再需要审阅。</p></>
-          : <>
-            <Segmented block value={side} onChange={v => setSide(v as typeof side)} options={[{ value: 'chat', label: '和 iCode 对话' }, { value: 'edit', label: '手动编辑' }]} />
-            {side === 'chat' ? <>
-              <p className="caption">接着挖掘时的 iCode 会话继续，会话 <code>{hashId(task(st, a.draft.task)?.id ?? a.id)}</code></p>
-              <div className="chat" ref={chatBox}>
-                <div className="msg icode">告诉我哪里需要修改，我会直接修改产物，修改结果可以在“对比”中查看。</div>
-                {chat.map((m, i) => <div key={i} className={'msg ' + (m.who === 'busy' ? 'icode busy' : m.who)}>{m.text}</div>)}
-              </div>
-              {file && scriptsFor(file).length > 0 && <div className="ai-examples">{scriptsFor(file).map(s => <Button key={s.prompt} size="small" onClick={() => send(s.prompt)}>{s.prompt}</Button>)}</div>}
-              <div className="chat-input"><Input.TextArea rows={2} value={say} onChange={e => setSay(e.target.value)} placeholder="说明需要修改的地方"
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(say); } }} />
-                <Button type="primary" loading={busy} onClick={() => send(say)}>发送</Button></div>
-            </> : file && isMd(file) ? <ManualEdit key={file + a.draft.revisions.length} text={K.text(a, 'current', file) ?? ''} label={K.fileLabel(file)} onSave={text => {
-              if (text === K.text(a, 'current', file)) { toast('内容没有变化'); return; }
-              update(d => { artifact(d, id)!.draft!.revisions.push({ kind: 'manual', file, text, at: now() }); });
-              setTab('diff'); toast('已保存修订 ' + (a.draft!.revisions.length + 1));
-            }} /> : <p className="ui-note">这个文件不能手动编辑，可以通过对话修订。</p>}
-            <div className="history"><div className="caption">修订记录</div><ol>
-              <li><b>原始产物</b><span className="caption">{when(a.draft.created)}</span></li>
-              {a.draft.revisions.map((r, i) => <li key={i}><b>修订 {i + 1}（{r.kind === 'chat' ? '对话' : '手动'}）</b><span className="caption">{K.fileLabel(r.file)}</span></li>)}
-            </ol></div>
-          </>}
+        {!a.draft ? <PublishedSide st={st} a={a} /> : <>
+          <h3>{a.published ? '新版本待审阅' : '待审阅'}</h3>
+          <Fields rows={[['生成于', when(a.draft.created)], basisRow(st, a, a.draft.basis), !!a.published && ['线上版本', 'v' + a.published.version + '，发布于 ' + when(a.published.at)]]} />
+          <p className="ui-note">{K.isIndex(a) ? '索引确认后直接发布。发布后，之后的每次更新都会自动发布，不再需要审阅。'
+            : '确认内容后发布，开发者就能在“项目知识”中看到并应用。' + (a.published ? '可以切换到“对比”查看与线上版本的差异。' : '')}</p>
+        </>}
       </div></aside>
     </div>
     {publishing && <PublishDialog a={a} onClose={() => setPublishing(false)} />}
   </div>;
-}
-
-function ManualEdit({ text, label, onSave }: { text: string; label: string; onSave(text: string): void }) {
-  const [value, setValue] = useState(text);
-  return <><p className="caption">正在编辑：{label}</p><Input.TextArea className="editor-area" value={value} onChange={e => setValue(e.target.value)} autoSize={{ minRows: 14, maxRows: 30 }} />
-    <div className="actions end"><Button type="primary" onClick={() => onSave(value)}>保存修订</Button></div></>;
 }
 
 function PublishedSide({ st, a }: { st: TalentsState; a: Artifact }) {

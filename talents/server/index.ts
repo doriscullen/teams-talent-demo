@@ -8,6 +8,7 @@ import { Store } from './store.ts';
 import { HttpError } from './model.ts';
 import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.ts';
 import { KnowledgeExporter } from './export.ts';
+import { readContent } from './content.ts';
 import { codegraphSnapshot, withCodegraph } from './codegraph.ts';
 
 const store = new Store(); await store.init();
@@ -57,6 +58,12 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
       }
       if (method === 'GET' && path === '/api/health') { json(200, { app: 'talents-carddemo', service: 'talents', workspaceRoot: root, stateRoot: runtimeDir, sharedDir, version: '0.1.0', pid: process.pid, origin, teamsOrigin }); return; }
       if (method === 'GET' && path === '/api/bootstrap') { json(200, await bootstrap()); return; }
+      // Content files too large to bundle into the page, e.g. a trajectory diagnosis report (see tools/bundle-content.mjs).
+      if (method === 'GET' && path === '/api/content') {
+        const key = url.searchParams.get('key') ?? '', text = readContent(key);
+        if (text == null) throw new HttpError('内容不存在', 404);
+        response.writeHead(200, { 'Content-Type': (TYPES[extname(key)] ?? 'text/plain') + '; charset=utf-8', 'Cache-Control': 'no-cache' }); response.end(text); return;
+      }
       if (method === 'GET' && path === '/api/skill') { json(200, await readSkill((await readTeamsData()).snapshot, url.searchParams.get('project') ?? '', url.searchParams.get('id') ?? '')); return; }
       if (method === 'GET' && path === '/api/codegraph/carddemo') {
         const { sources, ...graph } = codegraphSnapshot();

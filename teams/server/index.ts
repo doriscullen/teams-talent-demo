@@ -18,7 +18,7 @@ import { toolsStatus, writeContext, foundationSkill, launch } from './native.js'
 import { createSourcePluginCatalog } from '../src/source-plugins.js';
 import type { WorkspaceAction } from '../src/workspace.js';
 import { headers, bodyJson, staticFile, readFixtures } from './http-shared.js';
-import { exportTeamsSnapshot, knowledgeVersion, projectKnowledge, readTalentsFile } from './shared-data.js';
+import { exportTeamsSnapshot, knowledgeVersion, projectKnowledge, projectSkillVersions, readTalentsFile } from './shared-data.js';
 import { transition } from '../src/domain.js';
 import { isTraceApi, proxyTrace, startTraceService, stopTraceService } from './trace-service.js';
 import { ProjectWorkService } from './project-work.js';
@@ -64,7 +64,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && path === '/api/health') { json(200, { app: 'teams-talent-carddemo', service: 'teams', workspaceRoot: root, stateRoot: runtimeDir, version: '0.2.0', pid: process.pid, origin, talentOrigin }); return; }
     if (request.method === 'GET' && path === '/api/bootstrap') { await syncKnowledge(); json(200, { token, state: store.state, data: fixtures }); return; }
     if (request.method === 'GET' && path === '/api/state') { await syncKnowledge(); json(200, store.state); return; }
-    if (request.method === 'GET' && path === '/api/talents/knowledge') { json(200, { talentsOrigin: talentOrigin, artifacts: await projectKnowledge(url.searchParams.get('project') ?? 'carddemo') }); return; }
+    if (request.method === 'GET' && path === '/api/talents/knowledge') { const project = url.searchParams.get('project') ?? 'carddemo'; json(200, { talentsOrigin: talentOrigin, artifacts: await projectKnowledge(project), skills: await projectSkillVersions(project) }); return; }
     if (request.method === 'GET' && path === '/api/talents/file') { json(200, await readTalentsFile(url.searchParams.get('artifact') ?? '', Number(url.searchParams.get('version')), url.searchParams.get('path') ?? '')); return; }
     if (request.method === 'GET' && path === '/api/project-work') {
       const { role, ...target } = Object.fromEntries(url.searchParams);

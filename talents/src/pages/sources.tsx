@@ -5,18 +5,19 @@ import { App, AutoComplete, Button, Collapse, Drawer, Form, Input, Modal, Space,
 import { ExportOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTalents } from '../store.tsx';
 import { levelHash } from '../navigation.ts';
-import type { DocVersion, ProjectSkill, Session, Source, TalentsState } from '../types.ts';
+import type { DocVersion, ProjectSkill, Session, SkillVersion, Source, TalentsState } from '../types.ts';
 import { changeCounts, knownFiles, latestVersion, levelName, levelSessions, levelSources, memberName, project, source, sourceFiles } from '../demo/model.ts';
 import { now, tokens, uid, when } from '../demo/format.ts';
 import { getSkill } from '../api.ts';
 import { Markdown } from '../components/files.tsx';
+import { currentSkill } from '../demo/suggestions.ts';
 import { CardGrid, EmptyState, Fields, FileMark, ItemCard, Section, SourceIcon } from '../components/ui.tsx';
 import type { Toolbar } from './level.tsx';
 
 const fromText = (s: Source) => s.from ? { teams: '来自 iCode Teams', git: '来自 Git 仓库', shared: '来自共享目录' }[s.from.kind] : '';
 
 export function LevelSources({ pid, toolbar }: { pid: string | null; toolbar: Toolbar }) {
-  const { state: st } = useTalents();
+  const { state: st, teamsLink } = useTalents();
   const [open, setOpen] = useState<string | null>(null), [registering, setRegistering] = useState(false);
   const [collection, setCollection] = useState<'sessions' | 'skills' | null>(null);
   const list = levelSources(st, pid), p = project(st, pid);
@@ -26,15 +27,15 @@ export function LevelSources({ pid, toolbar }: { pid: string | null; toolbar: To
     {s.desc && <p>{s.desc}</p>}
     <Fields rows={s.type === 'repo' ? [['分支', s.branch]] : [['文件', s.files + ' 个' + (fromText(s) ? '，' + fromText(s) : '')], !!latestVersion(s) && ['最近变化', when(latestVersion(s))]]} />
   </ItemCard>;
-  const section = (type: Source['type'], title: string, empty: string) => {
+  const section = (type: Source['type'], title: string, empty: ReactNode) => {
     const items = list.filter(s => s.type === type);
     return <Section title={title} note={items.length + ' 个'}>{items.length ? <CardGrid>{items.map(card)}</CardGrid> : <EmptyState>{empty}</EmptyState>}</Section>;
   };
   return <>
     {toolbar(<Button type="primary" icon={<PlusOutlined />} onClick={() => setRegistering(true)}>登记本地文档来源</Button>)}
     {p ? <>
-      {section('repo', '代码仓', '这个 iCode Teams 项目还没有本机代码仓。')}
-      {section('docs', '文档集', '还没有文档。设计文档在 iCode Teams 项目中添加，也可以登记本地文档目录。')}
+      {section('repo', '代码仓', <>这个项目还没有本机代码仓。<a href={teamsLink(p.id)}>去 Teams 添加代码仓</a></>)}
+      {section('docs', '文档集', <>还没有文档。可以登记本地文档目录，或<a href={teamsLink(p.id)}>去 Teams 添加设计文档</a>。</>)}
       <TeamsCollections p={p} sessions={levelSessions(st, p.id)} onOpen={setCollection} />
     </> : section('docs', '文档集', '还没有团队级的来源。可以登记行内规范等全团队通用的本地文档目录。')}
     {open && source(st, open) && <SourceDrawer id={open} onClose={() => setOpen(null)} />}
@@ -101,21 +102,26 @@ function SessionsDrawer({ sessions, onClose }: { sessions: Session[]; onClose():
 }
 
 function SkillsDrawer({ pid, skills, onClose }: { pid: string; skills: ProjectSkill[]; onClose(): void }) {
+  const { state: st } = useTalents();
+  // A skill Talents wrote a new version of shows that version (Teams takes it up from the shared directory).
+  const written = (s: ProjectSkill) => currentSkill(st, pid, s.id)?.written ?? null;
   return <ListDrawer<ProjectSkill> title="项目 Skill" items={skills} onClose={onClose}
     search={(s, q) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)}
     columns={[
       { title: '名称', width: 220, render: (_, s) => <code>{s.name}</code> },
-      { title: '版本', dataIndex: 'version', width: 80 },
+      { title: '版本', width: 130, render: (_, s) => written(s) ? <>{written(s)!.version} <Tag color="purple">Talents 改进</Tag></> : s.version },
       { title: '说明', dataIndex: 'description', ellipsis: true },
     ]}
-    detail={s => ({ title: s.name, body: <SkillDetail pid={pid} skill={s} /> })} />;
+    detail={s => ({ title: s.name, body: <SkillDetail pid={pid} skill={s} written={written(s)} /> })} />;
 }
-function SkillDetail({ pid, skill }: { pid: string; skill: ProjectSkill }) {
+function SkillDetail({ pid, skill, written }: { pid: string; skill: ProjectSkill; written: SkillVersion | null }) {
   const [text, setText] = useState<string | null>(null), [error, setError] = useState('');
-  useEffect(() => { getSkill(pid, skill.id).then(s => setText(s.content), e => setError((e as Error).message)); }, [pid, skill.id]);
+  const writtenText = written?.files.find(f => f.path === 'SKILL.md')?.text;
+  useEffect(() => { if (writtenText) setText(writtenText); else getSkill(pid, skill.id).then(s => setText(s.content), e => setError((e as Error).message)); }, [pid, skill.id, writtenText]);
   return <div className="form-body">
-    <Fields rows={[['版本', skill.version], ['说明', skill.description], ['路径', <span className="path">{skill.path}</span>]]} />
-    <p className="caption">项目 Skill 在 iCode Teams 中管理，在 Talents 中只读。</p>
+    <Fields rows={written ? [['版本', <>{written.version} <Tag color="purple">Talents 改进</Tag></>], ['基于', skill.version], ['说明', skill.description], ['改进', written.note + '，' + when(written.at)],
+      ['修改的文件', written.files.map(f => f.path).join('、')]] : [['版本', skill.version], ['说明', skill.description], ['路径', <span className="path">{skill.path}</span>]]} />
+    <p className="caption">{written ? '由会话轨迹诊断的优化建议写入，iCode Teams 读取后成为这个项目 Skill 的新版本。' : '项目 Skill 在 iCode Teams 中管理，在 Talents 中只读。'}</p>
     {error ? <p className="hint">{error}</p> : text === null ? <p className="ui-note">正在读取 SKILL.md…</p> : <article className="markdown"><Markdown text={text} /></article>}
   </div>;
 }

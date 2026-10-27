@@ -10,6 +10,7 @@ import { existingArtifact, runPlan, runProgress, startRun } from '../demo/runs.t
 import { askICode } from '../demo/ask-icode.ts';
 import { now, tokens, uid, versionLabel, when } from '../demo/format.ts';
 import { CapIcon, CardGrid, EmptyState, Fields, ItemCard } from '../components/ui.tsx';
+import { isDiagnosis, pendingCount } from '../demo/suggestions.ts';
 import type { Toolbar } from './level.tsx';
 
 function ResultTag({ t }: { t: Task }) {
@@ -65,7 +66,7 @@ export function LevelTasks({ pid, toolbar }: { pid: string | null; toolbar: Tool
   const list = tab === 'current' ? current : history;
   const produced = (t: Task) => {
     const a = artifact(st, t.produced ?? t.artifact);
-    return a && ['产出', <><a onClick={e => { e.stopPropagation(); go(levelHash(pid, 'review', { id: a.id })); }}>{a.name}</a>（{a.draft ? '待审阅' : '已发布 v' + a.published!.version}）</>] as [string, ReactNode];
+    return a && ['产出', <><a onClick={e => { e.stopPropagation(); go(levelHash(pid, 'review', { id: a.id })); }}>{a.name}</a>（{isDiagnosis(a) ? (pendingCount(a) ? pendingCount(a) + ' 条建议待应用' : '建议已处理') : a.draft ? '待审阅' : '已发布 v' + a.published!.version}）</>] as [string, ReactNode];
   };
   return <>
     {toolbar(<Button type="primary" icon={<PlusOutlined />} onClick={() => setForm({})}>新建任务</Button>)}
@@ -97,11 +98,11 @@ function TaskDetail({ id, onClose, onRun }: { id: string; onClose(): void; onRun
   const p = running ? runProgress(t, clock) : null;
   const a = artifact(st, t.produced ?? t.artifact);
   useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight; });
-  const outcome = a && (!a.draft ? (t.unchanged ? '来源没有变化，保持 v' + a.published!.version : (a.published!.auto ? '已自动发布 v' : '已发布 v') + a.published!.version)
+  const outcome = a && (isDiagnosis(a) ? '诊断完成，' + (a.suggestions ?? []).length + ' 条优化建议，' + pendingCount(a) + ' 条待应用' : !a.draft ? (t.unchanged ? '来源没有变化，保持 v' + a.published!.version : (a.published!.auto ? '已自动发布 v' : '已发布 v') + a.published!.version)
     : a.published ? '原产物的新版本，等待审阅后发布' : '新产物，等待审阅后发布');
   return <Drawer open width={560} onClose={onClose} title={<div><div className="caption">{cap.name}</div>{taskName(st, t)}</div>}
     footer={<div className="drawer-foot">{running ? <span className="ui-note">可以关闭此面板，任务会继续运行。</span> : <>
-      <span className="spacer" /><Button onClick={onRun}>立即运行</Button>{a?.draft && <Button type="primary" onClick={() => { onClose(); go(levelHash(a.projectId, 'review', { id: a.id })); }}>去审阅</Button>}</>}</div>}>
+      <span className="spacer" /><Button onClick={onRun}>立即运行</Button>{a?.draft && <Button type="primary" onClick={() => { onClose(); go(levelHash(a.projectId, 'review', { id: a.id })); }}>{isDiagnosis(a) ? '查看建议' : '去审阅'}</Button>}</>}</div>}>
     <div className="form-body">
       <Fields rows={[['能力', cap.name], ['来源', <>{sourceText(st, t)}{t.sessions && <Collapse ghost size="small" items={[{ key: 's', label: '查看会话', children: <ul className="file-lines">{t.sessions.map(sid => <li key={sid}>{session(st, sid)?.title ?? sid}</li>)}</ul> }]} />}</>],
         !!t.prs && ['PR', t.prs.map(n => '#' + n).join('、')], !!cap.update && ['方式', modeText(st, t)], ['时间', scheduleText(t)], ['状态', <ResultTag t={t} />]]} />
@@ -135,7 +136,8 @@ function SessionPicker({ level, initial, onDone, onClose }: { level: string | nu
     setPrompt(text); setBusy(true); setQ(''); setMember('all'); setInProject('all');
     setTimeout(() => { setAi(askICode(st, text, all)); setBusy(false); }, 1400 + Math.random() * 800);
   };
-  const toggle = (ids: string[], on: boolean) => setSelected(prev => { const next = new Set(prev); ids.forEach(id => on ? next.add(id) : next.delete(id)); return next; });
+  // Only sessions whose transcript Teams collected can be diagnosed.
+  const toggle = (ids: string[], on: boolean) => setSelected(prev => { const next = new Set(prev); ids.filter(id => !on || session(st, id)?.transcript).forEach(id => on ? next.add(id) : next.delete(id)); return next; });
   return <Modal open width={1000} title="选择会话" onCancel={onClose} className="picker-modal"
     footer={<div className="drawer-foot"><span className="ui-note">已选 <b>{selected.size}</b> 个会话</span><Button type="link" onClick={() => setSelected(new Set())}>清空</Button><span className="spacer" />
       <Button onClick={onClose}>取消</Button><Button type="primary" disabled={!selected.size} onClick={() => { onDone(all.filter(s => selected.has(s.id)).map(s => s.id)); onClose(); }}>确定</Button></div>}>
@@ -152,8 +154,9 @@ function SessionPicker({ level, initial, onDone, onClose }: { level: string | nu
       </div>
       <Table<Session> size="small" rowKey="id" pagination={false} scroll={{ y: 360 }} dataSource={busy ? [] : visible} loading={busy && { tip: 'iCode 正在筛选会话…' }}
         locale={{ emptyText: busy ? ' ' : '没有匹配的会话' }}
-        rowSelection={{ selectedRowKeys: [...selected], onSelect: (s, on) => toggle([s.id], on), onSelectAll: on => toggle(visible.map(s => s.id), on) }}
-        onRow={s => ({ onClick: () => toggle([s.id], !selected.has(s.id)), className: 'row-click' })}
+        rowSelection={{ selectedRowKeys: [...selected], onSelect: (s, on) => toggle([s.id], on), onSelectAll: on => toggle(visible.filter(s => s.transcript).map(s => s.id), on),
+          getCheckboxProps: s => ({ disabled: !s.transcript, title: s.transcript ? undefined : '没有会话原文，不能分析' }) }}
+        onRow={s => ({ onClick: () => s.transcript && toggle([s.id], !selected.has(s.id)), className: s.transcript ? 'row-click' : 'row-disabled', title: s.transcript ? undefined : '没有会话原文，不能分析' })}
         columns={[
           { title: '名称', dataIndex: 'title' },
           ...(level === null ? [{ title: '项目', width: 130, ellipsis: true, render: (_: unknown, s: Session) => project(st, s.projectId)?.name ?? s.projectId }] : []),

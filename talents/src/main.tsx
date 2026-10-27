@@ -36,7 +36,7 @@ function Shell({ mode, onToggleTheme }: { mode: UiThemeMode; onToggleTheme(): vo
   // The level shown (a project, or the team) and the artifact open in its review tab.
   const focus = page.id === 'projects' ? project(st, route.params.project) : null;
   const level = focus || page.id === 'team' ? focus?.id ?? null : undefined;
-  const opened = level !== undefined && route.params.tab === 'review' ? artifact(st, route.params.id) : null;
+  const opened = level !== undefined && (!route.params.tab || route.params.tab === 'review') ? artifact(st, route.params.id) : null;
   const crumbs: { label: string; href?: string }[] = focus ? [{ label: page.title, href: '#/projects' }, { label: focus.name }] : [{ label: page.title }];
   if (opened) { crumbs[crumbs.length - 1].href = levelHash(level!, 'review'); crumbs.push({ label: opened.name }); }
   const resetDemo = () => reset().then(() => { go('#/' + home[role]); toast('已恢复初始数据'); }, e => toast('重置失败：' + (e as Error).message));

@@ -3,7 +3,7 @@
 // Starts its own Talents service with throwaway state. Usage: npm run test:e2e (needs Google Chrome).
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 
@@ -33,7 +33,7 @@ try {
   for (const tab of ['review', 'tasks']) {
     await page.goto(origin + '/talents?role=owner#/' + tab + '?project=carddemo');
     await heading(page).filter({ hasText: '信用卡营销交付' }).waitFor();
-    await activeTab(page).filter({ hasText: tab === 'review' ? '产物审阅' : '知识任务' }).waitFor();
+    await activeTab(page).filter({ hasText: tab === 'review' ? '产物管理' : '知识任务' }).waitFor();
   }
 
   // Every page of both entries, and the tabs of the team and a project.
@@ -41,7 +41,7 @@ try {
     await page.goto(origin + '/talents/#/' + hash);
     await heading(page).filter({ hasText: title }).waitFor();
   }
-  for (const level of ['team?', 'projects?project=carddemo&']) for (const [tab, label] of [['sources', '来源'], ['tasks', '知识任务'], ['review', '产物审阅']]) {
+  for (const level of ['team?', 'projects?project=carddemo&']) for (const [tab, label] of [['sources', '来源'], ['tasks', '知识任务'], ['review', '产物管理']]) {
     await page.goto(origin + '/talents/#/' + level + 'tab=' + tab);
     await activeTab(page).filter({ hasText: label }).waitFor();
   }
@@ -55,36 +55,61 @@ try {
   await page.goto(origin + '/talents/#account');
   await heading(page).filter({ hasText: /^项目$/ }).waitFor();
 
-  // 管理员端: diagnose sessions picked by iCode, then revise and publish the result.
-  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=tasks');
-  await page.getByRole('button', { name: '新建任务' }).click();
-  await page.getByRole('button', { name: '选择会话…' }).click();
-  await page.getByRole('button', { name: '对话轮次超过 50 的会话' }).click();
-  await page.getByText(/^iCode：/).waitFor({ timeout: 5000 });
-  await page.getByRole('button', { name: '全部选中' }).click();
-  // antd spaces out two-character button labels (确 定).
-  await page.locator('.picker-modal').getByRole('button', { name: /^确\s?定$/ }).click();
-  await page.getByRole('button', { name: '创建并运行' }).click();
-  await page.getByText('可以关闭此面板，任务会继续运行。').waitFor();
-  await page.getByRole('button', { name: '去审阅' }).waitFor({ timeout: 40000 });
-  await page.getByRole('button', { name: '去审阅' }).click();
+  // 管理员端: publish the new version of the business knowledge as it is (no revising).
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=review');
+  await page.locator('.item-card', { hasText: '信用卡营销返现业务知识' }).getByRole('button', { name: /^审\s?阅$/ }).click();
   await page.locator('.wb').waitFor();
-  await page.locator('.file-item', { hasText: '改进建议' }).click();
-  await page.getByRole('button', { name: /^第 3 条规则太绝对/ }).click();
-  await page.locator('.diff-line.add').first().waitFor({ timeout: 5000 });
+  assert.equal(await page.getByText('和 iCode 对话').count(), 0);
   await page.locator('.wb .page-header').getByRole('button', { name: /^发\s?布$/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: /^发\s?布$/ }).click();
-  await page.getByText(/已发布 v1 到信用卡营销交付/).waitFor();
+  await page.getByText(/已发布 v2 到信用卡营销交付/).waitFor();
 
-  // 开发者端: the new knowledge is there to apply.
+  // 管理员端: the finished diagnosis shows its suggestions; apply two and decline one.
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=review');
+  const diagnosis = page.locator('.item-card', { hasText: '会话轨迹诊断' });
+  await diagnosis.getByText('3 条优化建议待应用').waitFor();
+  await diagnosis.getByRole('button', { name: '查看建议' }).click();
+  await page.locator('.wb iframe').waitFor();
+  assert.equal((await fetch(origin + '/api/content?key=' + encodeURIComponent('trajectory/carddemo-19/轨迹诊断报告.html'))).status, 200);
+  const apply = async (title: string, result: string) => {
+    await page.locator('.file-item', { hasText: title }).click();
+    await page.getByRole('button', { name: '应用优化' }).click();
+    await page.locator('.ant-modal-confirm').getByRole('button', { name: /^应\s?用$/ }).click();
+    await page.getByText('已应用：' + result).first().waitFor();
+  };
+  await apply('统一 ADR Skill', 'arch-adr-writing 1.1.0');
+  await apply('为完成声明补充', 'AGENTS.md 规则 v1');
+  await page.locator('.file-item', { hasText: '现有 zsh 调用' }).click();
+  await page.getByRole('button', { name: '暂不采纳' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /暂不采纳/ }).click();
+  await page.getByText('已标记为暂不采纳').waitFor();
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=review');
+  await diagnosis.getByText('建议已处理').waitFor();
+  // The project skill now shows the version Talents wrote.
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=sources');
+  await page.locator('.item-card', { hasText: '项目 Skill' }).click();
+  await page.locator('.ant-drawer tr', { hasText: 'arch-adr-writing' }).getByText('Talents 改进').waitFor();
+  await page.keyboard.press('Escape');
+  // Only the session with a transcript can be picked for a new diagnosis.
+  await page.goto(origin + '/talents/#/projects?project=carddemo&tab=tasks');
+  await page.getByRole('button', { name: '新建任务' }).click();
+  // 会话轨迹诊断 is the capability a new task starts with.
+  await page.getByRole('button', { name: '选择会话…' }).click();
+  assert.equal(await page.locator('.picker-modal tr[data-row-key] .ant-checkbox-input:not([disabled])').count(), 1);
+  await page.locator('.picker-modal').getByRole('button', { name: /^取\s?消$/ }).click();
+  await page.locator('.ant-drawer').getByRole('button', { name: /^取\s?消$/ }).click();
+
+  // 开发者端: the AGENTS.md rules are there to apply to the repository.
   await page.locator('.compact-role-switch').click();
   await page.getByTitle('陈晨 · 开发者端').click();
   await heading(page).filter({ hasText: '项目知识' }).waitFor();
-  const card = page.locator('.item-card', { hasText: '会话轨迹诊断' });
+  assert.equal(await page.locator('.item-card', { hasText: '会话轨迹诊断：' }).count(), 0, 'a diagnosis is not published to developers');
+  const card = page.locator('.item-card', { hasText: 'AGENTS.md 规则' });
   await card.getByRole('button', { name: /^应\s?用$/ }).click();
   await card.getByText('已应用').waitFor();
   await card.getByText('查看改动').click();
   await page.getByText('应用到本机 iCode 的改动').waitFor();
+  await page.getByText(/AGENTS\.md/).first().waitFor();
   await page.keyboard.press('Escape');
   // Team knowledge is listed in the project; knowledge meant for some agents is applied to those agents.
   await page.locator('.talents-section', { hasText: '团队知识' }).locator('.item-card', { hasText: '银行编码规范要点' }).waitFor();
@@ -94,7 +119,11 @@ try {
 
   // Saved on the service, and published to the shared directory for Teams.
   const boot = await (await fetch(origin + '/api/bootstrap')).json();
-  assert.ok(boot.state.artifacts.some((a: { cap: string; published: unknown }) => a.cap === 'traj' && a.published));
+  assert.ok(boot.state.artifacts.some((a: { id: string; published: unknown }) => a.id === 'a-rules-carddemo' && a.published));
+  assert.deepEqual(boot.state.skillVersions.map((v: { skillId: string; version: string }) => v.skillId + ' ' + v.version), ['arch-adr-writing 1.1.0']);
+  const knowledge = JSON.parse(await readFile(join(dir, 'shared', 'talents', 'knowledge.json'), 'utf8'));
+  assert.equal(knowledge.skills[0].version, '1.1.0');
+  assert.match(await readFile(join(dir, 'shared', 'talents', 'skills', 'arch-adr-writing', '1.1.0', 'SKILL.md'), 'utf8'), /\| version \| 1\.1\.0 \|/);
   assert.deepEqual(errors, []);
   console.log('Talents 浏览器冒烟测试通过');
 } finally {

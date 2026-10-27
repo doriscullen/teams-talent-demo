@@ -3,6 +3,7 @@
 import type { Artifact, Scope, TalentsState } from '../types.ts';
 import { content, skillTree } from '../content.ts';
 import { agent, levelName, projectRepos, source } from './model.ts';
+import { RULES_FILE, rulesAt, rulesMarkdown } from './suggestions.ts';
 
 const TALENTS_HOME = '~/.icode-talents';
 const SKILL_DIRS = { chrys: '~/.chrys/skills', agents: '~/.agents/skills' };
@@ -11,7 +12,7 @@ const TEAM_MCP = 'talents-team';
 export type Which = 'published' | 'original' | 'current';
 export const isIndex = (a: Artifact) => a.kind === 'index';
 export const kind = (a: Artifact) => a.kind === 'index' ? 'mcp' : a.cap === 'traj' ? 'memory' : 'skill';
-export const kindLabel = { mcp: '在线查询（MCP）', skill: 'Skill', memory: '经验规则' };
+export const kindLabel = { mcp: '在线查询（MCP）', skill: 'Skill', memory: '项目规则' };
 export const deliveryLabel = { local: '同步到本地', cloud: '云端查询' };
 /** The agents published knowledge is meant for (Published.agents). */
 export const audienceText = (st: TalentsState, agents?: string[]) => agents ? agents.map(id => agent(st, id)?.name ?? id).join('、') : '全部智能体';
@@ -33,6 +34,7 @@ export function minerIndex(specs: string[] = []) {
 }
 function baseText(a: Artifact, which: Which, key: string) {
   if (key === 'miner/index.md') return minerIndex(specsOf(a, which));
+  if (key === RULES_FILE) return rulesMarkdown(rulesAt(a, which === 'published' ? a.published?.version : undefined));
   const over = which === 'published' ? a.published?.over?.[key] : undefined;
   if (over) return typeof over === 'string' ? content(over) : over.text;
   return content(key);
@@ -44,14 +46,8 @@ export function text(a: Artifact, which: Which, key: string) {
   }
   return baseText(a, which === 'published' ? 'published' : 'original', key);
 }
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-/** The report names the session it focuses on; when several sessions were analysed, say so. */
-export function reportHtml(st: TalentsState, a: Artifact, html: string) {
-  if (!a.sessions || a.sessions.length < 2 || !a.topic) return html;
-  const line = '分析了 ' + a.sessions.length + ' 个会话，其中与「' + st.trajTopics[a.topic].title + '」相关的问题最典型，以下是该会话的诊断。';
-  return html.replace(/<p class="small">[\s\S]*?<\/p>/, m => '<p class="small">' + escapeHtml(line) + '</p>' + m);
-}
 export function fileLabel(key: string) {
+  if (key === RULES_FILE) return 'AGENTS.md 规则';
   const parts = key.split('/');
   const name = parts.pop()!;
   if (name === 'summary.md') return '范式总结';
@@ -59,7 +55,6 @@ export function fileLabel(key: string) {
   if (name === 'metadata.json') return 'PR #' + parts.pop();
   if (name === 'meta.json') return parts[1] ? parts[1] + '：挖掘元数据' : '挖掘元数据';
   if (name === 'index.md') return parts[0] === 'miner' ? '范式索引' : '索引';
-  if (/^Skill改进-/.test(name)) return 'Skill 改进：' + name.replace(/^Skill改进-|\.md$/g, '');
   return name.replace(/\.(md|html)$/, '');
 }
 /** Miner artifacts list files per spec: 范式总结, 代码分析报告, then PR records (PR mode) or mining metadata (diff mode). */
@@ -96,10 +91,6 @@ export function diffLines(oldText: string | null, newText: string | null): DiffO
 }
 
 // ---------- Applying on the developer's machine ----------
-export function rules(a: Artifact) {
-  const body = content('trajectory/' + a.topic + '/改进建议.md') ?? '';
-  return [...body.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map(m => m[1]);
-}
 /** Local clones of this artifact's project code repositories; none for team-level knowledge. */
 export function localRepos(st: TalentsState, a: Artifact) {
   const repoIds = a.projectId ? projectRepos(st, a.projectId).map(r => r.id) : [];
@@ -110,7 +101,7 @@ export function scopeOptions(st: TalentsState, a: Artifact) {
   const k = kind(a);
   return {
     repo: k === 'mcp' ? '索引通过智能体的在线查询使用，只能应用到指定智能体' : (localRepos(st, a).length ? '' : '本机还没有这个项目的代码仓'),
-    global: k === 'mcp' ? '索引通过智能体的在线查询使用，只能应用到指定智能体' : k === 'memory' ? '经验规则只能写入代码仓或指定智能体' : '',
+    global: k === 'mcp' ? '索引通过智能体的在线查询使用，只能应用到指定智能体' : k === 'memory' ? '项目规则只能写入代码仓或指定智能体' : '',
     agent: '',
   };
 }
@@ -135,7 +126,7 @@ export function scopeText(st: TalentsState, scope: Scope) {
 export function sentence(st: TalentsState, a: Artifact, scope: Scope) {
   const k = kind(a), target = scopeText(st, scope);
   if (k === 'mcp') return '在 ' + target + ' 中可以在线查询「' + a.name + '」。';
-  if (k === 'memory') return '把 ' + rules(a).length + ' 条经验规则加入 ' + target + ' 的记忆，并按建议更新 Skill「' + a.skillPatch + '」。';
+  if (k === 'memory') return '把 ' + rulesAt(a, a.published?.version).length + ' 条项目规则写入 ' + target + (scope.kind === 'repo' ? ' 的 AGENTS.md。' : ' 的记忆。');
   const how = a.published?.delivery === 'cloud' ? '在线查询' : '同步到本机';
   return '「' + a.name + '」' + how + '，在 ' + target + ' 中可用' + (a.skills ? '，配套 Skill「' + a.skills.join('、') + '」' : '') + '。';
 }
@@ -171,17 +162,11 @@ export function changes(st: TalentsState, a: Artifact, scope: Scope): FileChange
   if (!cloud && k !== 'memory' && !inRepo) add(knowledgeDir, '新增', specLines(a));
 
   if (k === 'memory') {
-    const ruleLines = rules(a).map(r => '- ' + r);
-    const patch = (content('trajectory/' + a.topic + '/Skill改进-' + a.skillPatch + '.md') ?? '').split(/\r?\n/)
-      .filter(l => /^\+/.test(l)).map(l => '+ ' + l.slice(1).trim());
-    if (scope.kind === 'repo') scope.repos.forEach(rid => {
-      add(localPath(st, rid) + '/AGENTS.md', '更新', block('经验规则', ruleLines));
-      add(localPath(st, rid) + '/.agents/skills/' + a.skillPatch + '/SKILL.md', '更新', patch);
-    });
+    const ruleLines = rulesAt(a, a.published?.version).map(r => '- ' + r.text);
+    if (scope.kind === 'repo') scope.repos.forEach(rid => add(localPath(st, rid) + '/AGENTS.md', '更新', block('项目规则', ruleLines)));
     else {
-      add(TALENTS_HOME + '/memory/经验规则.md', '新增', ruleLines.map(l => '+ ' + l));
-      agents.forEach(g => add('~/.chrys/agents/' + g + '.yaml', '更新', ['memory:', '  files:', '+   - ' + TALENTS_HOME + '/memory/经验规则.md']));
-      add(SKILL_DIRS.chrys + '/' + a.skillPatch + '/SKILL.md', '更新', patch);
+      add(TALENTS_HOME + '/memory/项目规则.md', '新增', ruleLines.map(l => '+ ' + l));
+      agents.forEach(g => add('~/.chrys/agents/' + g + '.yaml', '更新', ['memory:', '  files:', '+   - ' + TALENTS_HOME + '/memory/项目规则.md']));
     }
   } else if (scope.kind === 'repo') {
     scope.repos.forEach(rid => {

@@ -5,7 +5,7 @@ import { sharedDir, sharedSeedDir } from './config.js';
 import { DomainError, type DemoState } from '../src/domain.js';
 import type { Presentation } from '../src/api.js';
 import type { SourcePluginCatalog } from '../src/source-plugins.js';
-import { sharedPaths, type PublishedArtifact, type SharedProject, type SharedSession, type SharedSkill, type TalentsKnowledge, type TeamsSnapshot } from '../../shared/contracts.js';
+import { sharedPaths, type PublishedArtifact, type PublishedSkillVersion, type SharedProject, type SharedSession, type SharedSkill, type TalentsKnowledge, type TeamsSnapshot } from '../../shared/contracts.js';
 import teamSessions from '../fixtures/team-sessions.json' with { type: 'json' };
 
 /** Reads a shared file written by the other project, falling back to the committed seed copy. */
@@ -49,7 +49,8 @@ function sessions(state: DemoState): SharedSession[] {
         projectId: record.projectId, requirementId: record.taskId, title: task?.title ?? '白金卡消费返现需求',
         memberId: task?.assigneeId ?? state.assigneeId ?? 'member', memberName: members.get(task?.assigneeId ?? state.assigneeId ?? 'member') ?? '项目成员',
         updatedAt: localMinute(session.lastAt), turns: 0, agent: session.tool, model: '未提供',
-        cwd: task?.workDirectory ?? repositoryPath(state.workspace.project.repository), summary: session.nodeIds.join('、') });
+        cwd: task?.workDirectory ?? repositoryPath(state.workspace.project.repository), summary: session.nodeIds.join('、'),
+        transcript: !!record.collection.reporting.receipt?.documentHashes?.some(document => document.sessionId === session.sessionId) });
     }
   }
   const delivery = teamSessions.delivery;
@@ -94,6 +95,13 @@ export function knowledgeVersion(artifacts: PublishedArtifact[]) {
   const sorted = [...artifacts].sort((a, b) => Number(a.projectId === null) - Number(b.projectId === null) || a.id.localeCompare(b.id));
   const main = sorted.find(artifact => artifact.capability === 'doc-extract') ?? sorted[0];
   return main ? `${main.name} v${main.version}` : undefined;
+}
+/** The latest version Talents wrote of each of the project's skills (applying a trajectory diagnosis suggestion), with its files. */
+export async function projectSkillVersions(projectId: string) {
+  const latest = new Map<string, PublishedSkillVersion>();
+  for (const version of (await readTalentsKnowledge()).skills ?? []) if (version.projectId === projectId) latest.set(version.skillId, version);
+  return Promise.all([...latest.values()].map(async version => ({ ...version, files: await Promise.all(version.files.map(async file =>
+    ({ ...file, content: (await readShared(sharedPaths.talentsSkillFile(version.skillId, version.version, file.path)))?.toString('utf8') ?? null }))) })));
 }
 export async function readTalentsFile(artifactId: string, version: number, path: string) {
   const artifact = (await readTalentsKnowledge()).artifacts.find(item => item.id === artifactId && item.version === version);

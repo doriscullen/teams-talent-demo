@@ -75,7 +75,7 @@ function wiggle(seed: number, spread: number) { const x = Math.sin(seed * 9301 +
 function session(s: SharedSession, i: number) {
   const qa = s.agent === 'Q&A Agent';
   return { id: s.id, title: s.title, updated: s.updatedAt, created: s.updatedAt, cwd: s.cwd, turns: s.turns, agent: s.agent, model: s.model,
-    owner: s.memberId, ownerName: s.memberName, projectId: s.projectId, requirementId: s.requirementId, summary: s.summary,
+    owner: s.memberId, ownerName: s.memberName, projectId: s.projectId, requirementId: s.requirementId, summary: s.summary, transcript: !!s.transcript,
     messages: Math.round(s.turns * (2.2 + wiggle(i, 1.4))),
     tokens: Math.round(s.turns * (28000 + wiggle(i + 7, 36000))),
     files: qa ? 0 : Math.max(1, Math.round(s.turns * (0.12 + wiggle(i + 3, 0.2)))) };

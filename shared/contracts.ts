@@ -4,6 +4,7 @@
  *   teams/snapshot.json            written by Teams, read by Talents
  *   talents/knowledge.json         written by Talents, read by Teams
  *   talents/files/<id>/v<n>/<path> published artifact files, written by Talents
+ *   talents/skills/<id>/<version>/<path>  project skill versions written by Talents
  * shared/seed/ holds committed copies of the same files, used when a writer has not started yet.
  * Paths inside the payloads are relative to the repository root.
  */
@@ -19,6 +20,8 @@ export interface SharedSession {
   id: string; projectId: string; title: string; memberId: string; memberName: string;
   updatedAt: string; turns: number; agent: string; model: string; cwd: string;
   requirementId?: string; summary?: string;
+  /** Teams has collected the session's transcript (after the delivery was accepted); only such sessions can be diagnosed. */
+  transcript?: boolean;
 }
 export interface TeamsSnapshot {
   schemaVersion: 1; exportedAt: string;
@@ -37,10 +40,17 @@ export interface PublishedArtifact {
   /** Ids of the agents the knowledge is meant for; absent when it is meant for every agent. */
   agents?: string[];
 }
-export interface TalentsKnowledge { schemaVersion: 1; exportedAt: string; artifacts: PublishedArtifact[] }
+/** A new version of a project skill, written by Talents when a trajectory diagnosis suggestion is applied. Its files
+ *  (paths inside the skill, e.g. SKILL.md) replace the skill's files of the same path; the other files are unchanged. */
+export interface PublishedSkillVersion {
+  projectId: string; skillId: string; version: string; basedOn: { version: string; sha256?: string };
+  publishedAt: string; note: string; files: PublishedFile[];
+}
+export interface TalentsKnowledge { schemaVersion: 1; exportedAt: string; artifacts: PublishedArtifact[]; skills?: PublishedSkillVersion[] }
 
 export const sharedPaths = {
   teamsSnapshot: 'teams/snapshot.json',
   talentsKnowledge: 'talents/knowledge.json',
   talentsFile: (artifactId: string, version: number, path: string) => `talents/files/${artifactId}/v${version}/${path}`,
+  talentsSkillFile: (skillId: string, version: string, path: string) => `talents/skills/${skillId}/${version}/${path}`,
 };

@@ -1,4 +1,5 @@
 // Bundles content/ into src/generated/content.json; the page imports it to preview artifact text without extra requests.
+// Files over SERVED_BYTES (e.g. a trajectory diagnosis report) are left out; the service serves them (GET /api/content).
 // Usage: node tools/bundle-content.mjs (run by npm run build and npm run typecheck)
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join, relative, sep, extname, dirname } from 'node:path';
@@ -9,6 +10,7 @@ const contentDir = join(root, 'content');
 const outFile = join(root, 'src', 'generated', 'content.json');
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.py', '.yaml', '.yml', '.json', '.html']);
 const MAX_BYTES = 1.5 * 1024 * 1024;
+const SERVED_BYTES = 1024 * 1024;
 
 function walk(dir) {
   const out = [];
@@ -16,7 +18,7 @@ function walk(dir) {
     if (name.startsWith('.') || name === '__pycache__') continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) out.push(...walk(full));
-    else if (TEXT_EXTENSIONS.has(extname(name).toLowerCase())) out.push(full);
+    else if (TEXT_EXTENSIONS.has(extname(name).toLowerCase()) && statSync(full).size <= SERVED_BYTES) out.push(full);
   }
   return out;
 }

@@ -5,7 +5,7 @@ import type { TalentTaskInputs } from '../src/talent-contract.js';
 import { mainTask, taskAutomation } from '../src/task-automation.js';
 import { requireCurrentTaskMember, taskAssigneeId, taskAssigneeName } from '../src/task-assignment.js';
 import { selectedSkillBindings } from '../src/resource-sharing.js';
-import { loadNativeSkillPackage, loadSourceSkillPackage } from './skill-packages.js';
+import { currentProjectSkillPackage, loadNativeSkillPackage, loadSourceSkillPackage } from './skill-packages.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -58,9 +58,10 @@ export async function collaborationContext(state: DemoState, data: Presentation,
   let skills: {id:string;scope:string;version:string;path:string|null;content:string|null;availability:string;loadedByAgent:boolean;sha256?:string|null;contentSha256?:string|null;files?:{path:string;sha256:string;executable:boolean}[];error?:string}[] = await Promise.all(selectedSkills.map(async id => {
     const user = userSkillExamples.find(s => s.id === id), project = data.skills.find(s => s.name === id);
     if (user) return {id,scope:'user',version:id==='teams-collaboration'?'demo-cli-v1':'example-v1',path:id==='teams-collaboration'?collaborationSkillPath:null,content:id==='teams-collaboration'?await readFile(collaborationSkillPath,'utf8'):user.content,availability:id==='teams-collaboration'?'demo-local-cli':'example-only',loadedByAgent:false};
-    const binding = bindings.find(item=>item.id===id), expectedVersion = binding?.version ?? (frozen && id==='dev-frontend-ui' ? frozen.skillVersion : project?.version);
+    // Before the context is frozen a project skill is used at its current version, including one Talents wrote; a frozen context keeps its version.
+    const binding = bindings.find(item=>item.id===id), expectedVersion = binding?.version ?? (frozen ? (id==='dev-frontend-ui' ? frozen.skillVersion : project?.version) : undefined);
     try {
-      const pkg=binding?.sha256 ? await loadNativeSkillPackage(id,binding.version,binding.sha256) : await loadSourceSkillPackage(id);
+      const pkg=binding?.sha256 ? await loadNativeSkillPackage(id,binding.version,binding.sha256) : frozen ? await loadSourceSkillPackage(id) : await currentProjectSkillPackage(scope.projectId,id);
       if(expectedVersion && pkg.version!==expectedVersion) throw new Error('冻结版本与实际文件版本不一致');
       const primary=pkg.files.find(file=>file.path==='SKILL.md')!;
       if(binding?.contentSha256 && primary.sha256!==binding.contentSha256)throw new Error('冻结正文摘要与内容包不一致');
