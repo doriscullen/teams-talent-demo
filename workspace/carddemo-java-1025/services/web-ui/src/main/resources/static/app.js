@@ -132,6 +132,8 @@ const NAV_GROUPS = [
             { key: 'cards', href: '#/cards', icon: '💳', label: '信用卡' },
             { key: 'transactions', href: '#/transactions', icon: '📄', label: '交易查询' },
             { key: 'transaction-new', href: '#/transactions/new', icon: '➕', label: '交易录入' },
+            { key: 'installments', href: '#/installments', icon: '🧮', label: '我的分期' },
+            { key: 'billing', href: '#/billing', icon: '📄', label: '我的账单' },
             { key: 'bill-pay', href: '#/bill-pay', icon: '💸', label: '账单支付' },
             { key: 'reports', href: '#/reports', icon: '📊', label: '交易报表' },
             { key: 'authorizations', href: '#/authorizations', icon: '🛡️', label: '授权管理' }
@@ -149,6 +151,7 @@ const NAV_GROUPS = [
         adminOnly: true,
         items: [
             { key: 'users', href: '#/users', icon: '👥', label: '用户管理' },
+            { key: 'admin-installments', href: '#/admin/installments', icon: '📑', label: '分期后台' },
             { key: 'campaigns', href: '#/campaigns', icon: '📣', label: '活动管理' }
         ]
     }
@@ -310,6 +313,8 @@ function pageMenu() {
         { href: '#/cards', icon: '💳', title: '信用卡管理', text: '按账户查询卡片、查看详情与维护卡状态' },
         { href: '#/transactions', icon: '📄', title: '交易查询', text: '按交易号/卡号/账户检索交易明细' },
         { href: '#/transactions/new', icon: '➕', title: '交易录入', text: '人工补录交易，支持类型与类别选择' },
+        { href: '#/installments', icon: '🧮', title: '我的分期', text: '消费/账单分期试算、提交、还款计划与提前结清' },
+        { href: '#/billing', icon: '📄', title: '我的账单', text: '查看当期真实账单、可分期本金并发起账单分期' },
         { href: '#/bill-pay', icon: '💸', title: '账单支付', text: '全额还款，实时更新账户余额' },
         { href: '#/reports', icon: '📊', title: '交易报表', text: '按日期区间生成交易明细与合计' },
         { href: '#/authorizations', icon: '🛡️', title: '授权管理', text: '待授权汇总、明细与欺诈标记' },
@@ -376,6 +381,9 @@ function pageAccounts() {
                     .catch(() => null);
             }
             const available = Number(account.creditLimit) - Number(account.currentBalance);
+            // 原文 §8.1 / US-004：账户额度视图的分期占用（= ACTIVE 计划剩余本金合计）
+            const limitView = await api(`/api/v1/installments/accounts/${encodeURIComponent(accountId)}/limit-view`)
+                .catch(() => null);
             box.innerHTML = `
                 <div class="grid cols-3 mt-16">
                     <div class="card">
@@ -385,13 +393,15 @@ function pageAccounts() {
                             <dt>当前欠款余额</dt><dd class="mono">${money(account.currentBalance)}</dd>
                             <dt>信用额度</dt><dd class="mono">${money(account.creditLimit)}</dd>
                             <dt>可用额度</dt><dd class="mono"><strong>${money(available)}</strong></dd>
+                            <dt>分期占用</dt><dd class="mono">${limitView ? money(limitView.installmentOccupied) : '—'}</dd>
                             <dt>现金额度</dt><dd class="mono">${money(account.cashCreditLimit)}</dd>
                             <dt>本期贷 / 借</dt><dd class="mono">${money(account.currentCycleCredit)} / ${money(account.currentCycleDebit)}</dd>
                             <dt>开户 / 到期</dt><dd>${dateText(account.openDate)} / ${dateText(account.expirationDate)}</dd>
                             <dt>重发日</dt><dd>${dateText(account.reissueDate)}</dd>
                             <dt>账户组</dt><dd class="mono">${esc(account.groupId || '—')}</dd>
                         </dl>
-                        <div class="hint mt-16">可用额度 = 信用额度 − 当前欠款（授权时还会扣除待授权占用）。</div>
+                        <div class="hint mt-16">可用额度 = 信用额度 − 当前欠款（授权时还会扣除待授权占用）。
+                            分期占用为生效计划剩余本金合计，已含在欠款中，不重复扣减。</div>
                     </div>
                     <div class="card">
                         <h3>客户</h3>
@@ -417,6 +427,7 @@ function pageAccounts() {
                         </div>
                         <div class="hint mt-16">
                             欠款 ${money(account.currentBalance)} / 额度 ${money(account.creditLimit)}<br>
+                            分期占用 ${limitView ? money(limitView.installmentOccupied) : '—'}（本金口径）<br>
                             卡片 ${cards.length} 张
                         </div>
                     </div>
@@ -685,6 +696,7 @@ async function pageTransactionDetail(transactionId) {
     const box = document.getElementById('txn-detail');
     try {
         const txn = await api(`/api/v1/transactions/${encodeURIComponent(transactionId)}`);
+        const entry = await installmentEntry(txn);
         box.innerHTML = `
             <dl class="dl">
                 <dt>交易号</dt><dd class="mono">${esc(txn.transactionId)}</dd>
@@ -700,12 +712,113 @@ async function pageTransactionDetail(transactionId) {
                 <dt>处理时间</dt><dd>${dateTimeText(txn.processedTimestamp)}</dd>
             </dl>
             <div class="form-actions">
+                ${entry}
                 <a class="btn ghost" href="#/transactions">返回列表</a>
                 <a class="btn ghost" href="#/bill-pay">去账单支付</a>
             </div>`;
     } catch (error) {
         box.innerHTML = errBox(error);
     }
+}
+
+
+/* ---------------- 分期入口资格（C-01：服务端判定，不靠前端金额推导） ---------------- */
+
+const INSTALLMENT_REASON_TEXT = {
+    NOT_PURCHASE: '该交易不是消费交易，不能分期',
+    NOT_POSTED: '交易尚未入账，不能分期',
+    DISPUTED: '该交易存在争议，暂不可分期',
+    DELINQUENT: '账户该笔交易存在逾期，暂不可分期',
+    BELOW_MIN_AMOUNT: '交易金额低于最低分期金额'
+};
+
+async function installmentEntry(txn) {
+    const params = new URLSearchParams({ accountId: txn.accountId, transactionId: txn.transactionId });
+    try {
+        const eligibility = await api(`/api/v1/installments/eligibility?${params.toString()}`);
+        if (eligibility.alreadyInstalled) {
+            const planId = eligibility.existingPlanId;
+            return `<span class="badge ok">已分期</span>
+                ${planId ? `<a class="btn ghost" href="#/installments/${encodeURIComponent(planId)}">查看分期计划 ${esc(planId)}</a>` : ''}`;
+        }
+        if (eligibility.eligible) {
+            return `<a class="btn primary" href="#/installments/new?sourceType=TRANSACTION&accountId=${encodeURIComponent(txn.accountId)}&sourceId=${encodeURIComponent(txn.transactionId)}&amount=${encodeURIComponent(eligibility.amount)}">申请分期</a>`;
+        }
+        const reason = INSTALLMENT_REASON_TEXT[eligibility.reason] || '暂不可分期';
+        const detail = eligibility.reason === 'BELOW_MIN_AMOUNT'
+            ? `${reason}（最低 ${money(eligibility.minAmount)}）`
+            : reason;
+        return `<span class="btn primary" aria-disabled="true" title="${esc(detail)}" style="opacity:.5;cursor:not-allowed">申请分期</span>
+            <span class="hint">${esc(detail)}</span>`;
+    } catch (error) {
+        return `<span class="hint">分期资格不可用：${esc(error.message || '查询失败')}</span>`;
+    }
+}
+
+/* ---------------- 页面：我的账单（C-04） ---------------- */
+
+function pageBilling() {
+    const query = hashQuery();
+    const initialAccount = query.get('accountId') || '00000000006';
+    shell({
+        active: 'billing',
+        title: '我的账单',
+        subtitle: '真实当期账单与可分期本金（REQ-INS-02）',
+        content: `
+            <div class="card">
+                <form class="inline-form" id="bill-lookup">
+                    <label class="field grow"><span>账户号（11 位）</span>
+                        <input id="bill-account" value="${esc(initialAccount)}" maxlength="11" pattern="\\d{11}" required></label>
+                    <button class="btn primary" type="submit">查询账单</button>
+                </form>
+                <div id="bill-result"></div>
+            </div>`
+    });
+    const result = document.getElementById('bill-result');
+
+    const load = async () => {
+        const accountId = document.getElementById('bill-account').value.trim();
+        result.innerHTML = '<div class="empty">加载中…</div>';
+        try {
+            const bill = await api(`/api/v1/installments/bills/${encodeURIComponent(accountId)}`);
+            const available = Number(bill.availablePrincipal);
+            const minBill = Number(bill.minBillAmount || 0);
+            let entry;
+            if (available <= 0) {
+                entry = '<span class="hint">当期账单没有可分期本金（可能已全部占用或含争议/逾期交易）</span>';
+            } else if (available < minBill) {
+                entry = `<span class="btn primary" aria-disabled="true" style="opacity:.5;cursor:not-allowed">账单分期</span>
+                    <span class="hint">可分期本金低于账单分期最低金额 ${money(minBill)}</span>`;
+            } else {
+                entry = `<a class="btn primary" href="#/installments/new?sourceType=BILL&accountId=${encodeURIComponent(bill.accountId)}&sourceId=${encodeURIComponent(bill.billId)}&amount=${encodeURIComponent(bill.availablePrincipal)}">账单分期（可分期 ${money(bill.availablePrincipal)}）</a>`;
+            }
+            result.innerHTML = `
+                <div class="grid cols-3 mt-16">
+                    <div class="stat"><div class="label">账单本金</div><div class="value">${money(bill.billPrincipal)}</div></div>
+                    <div class="stat"><div class="label">可分期本金</div><div class="value">${money(bill.availablePrincipal)}</div></div>
+                    <div class="stat"><div class="label">账期</div><div class="value">${dateText(bill.cycleStart)} ~ ${dateText(bill.cycleEnd)}</div></div>
+                </div>
+                <div class="hint mt-16">账单号 <span class="mono">${esc(bill.billId)}</span> · 账户 <span class="mono">${esc(bill.accountId)}</span></div>
+                <div class="table-wrap mt-16"><table class="table">
+                    <thead><tr><th>交易号</th><th>入账日期</th><th class="num">金额</th><th>描述</th></tr></thead>
+                    <tbody>${bill.lines.map((line) => `
+                        <tr><td class="mono">${esc(line.transactionId)}</td>
+                            <td>${dateText(line.postedDate)}</td>
+                            <td class="num mono">${money(line.amount)}</td>
+                            <td>${esc(line.description)}</td></tr>`).join('')
+                        || '<tr><td colspan="4"><div class="empty">当期账单没有消费交易</div></td></tr>'}
+                    </tbody></table></div>
+                <div class="form-actions">${entry}</div>`;
+        } catch (error) {
+            result.innerHTML = errBox(error);
+        }
+    };
+
+    document.getElementById('bill-lookup').addEventListener('submit', (event) => {
+        event.preventDefault();
+        load();
+    });
+    load();
 }
 
 /* ---------------- 页面：交易录入 ---------------- */
@@ -843,6 +956,7 @@ function pageBillPay() {
                         <label class="checkbox"><input type="checkbox" name="confirm" id="bill-confirm"> 我确认执行全额还款</label>
                         <div class="form-actions">
                             <button class="btn primary" type="submit" id="bill-submit">执行支付</button>
+                            <a class="btn ghost" id="bill-installment-link" href="#/billing">账单分期</a>
                         </div>
                         <div id="bill-msg"></div>
                     </form>
@@ -859,6 +973,8 @@ function pageBillPay() {
         try {
             const account = await api(`/api/v1/accounts/${encodeURIComponent(accountId)}`);
             current = account;
+            const link = document.getElementById('bill-installment-link');
+            if (link) link.href = `#/billing?accountId=${encodeURIComponent(account.accountId)}`;
             const available = Number(account.creditLimit) - Number(account.currentBalance);
             info.innerHTML = `
                 <div class="grid cols-2 mt-16">
@@ -1901,6 +2017,588 @@ async function pageUserEdit(userId) {
     }
 }
 
+/* ---------------- 页面：我的分期 / 分期申请 / 分期详情 ---------------- */
+
+function hashQuery() {
+    const hash = location.hash || '';
+    const index = hash.indexOf('?');
+    return new URLSearchParams(index < 0 ? '' : hash.slice(index + 1));
+}
+
+function planStatusBadge(status) {
+    if (status === 'ACTIVE') return '<span class="badge ok">ACTIVE</span>';
+    if (status === 'SETTLED') return '<span class="badge">SETTLED</span>';
+    if (status === 'CANCELLED') return '<span class="badge warn">CANCELLED</span>';
+    return esc(status);
+}
+
+function pageInstallments() {
+    shell({
+        active: 'installments',
+        title: '我的分期',
+        subtitle: '消费/账单分期列表、还款计划与提前结清（REQ-INS-05）',
+        content: `
+            <div class="card">
+                <form class="inline-form" id="ins-filter">
+                    <label class="field"><span>账户号（11 位）</span>
+                        <input id="ins-account" value="00000000006" maxlength="11" pattern="\\d{11}" required></label>
+                    <label class="field"><span>状态</span>
+                        <select id="ins-status">
+                            <option value="">全部</option>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="SETTLED">SETTLED</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                        </select></label>
+                    <label class="field"><span>每页</span>
+                        <input id="ins-size" type="number" min="1" max="100" value="20"></label>
+                    <button class="btn primary" type="submit">查询</button>
+                    <a class="btn ghost" href="#/installments/new?sourceType=TRANSACTION">申请消费分期</a>
+                    <a class="btn ghost" href="#/installments/new?sourceType=BILL">申请账单分期</a>
+                </form>
+                <div id="ins-result"></div>
+                <div id="ins-pager" class="form-actions"></div>
+            </div>`
+    });
+
+    const result = document.getElementById('ins-result');
+    const pager = document.getElementById('ins-pager');
+    let page = 1;
+
+    const load = async () => {
+        const accountId = document.getElementById('ins-account').value.trim();
+        const status = document.getElementById('ins-status').value;
+        const size = document.getElementById('ins-size').value || 20;
+        result.innerHTML = '<div class="empty">加载中…</div>';
+        try {
+            const params = new URLSearchParams({ accountId, page: String(page), size: String(size) });
+            if (status) params.set('status', status);
+            const data = await api(`/api/v1/installments?${params.toString()}`);
+            if (!data.items.length) {
+                result.innerHTML = '<div class="empty">暂无分期计划</div>';
+                pager.innerHTML = '';
+                return;
+            }
+            result.innerHTML = `
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>计划号</th><th>来源</th><th>本金</th><th>期数</th><th>总手续费</th>
+                        <th>剩余本金</th><th>状态</th><th>创建时间</th><th></th></tr></thead>
+                    <tbody>${data.items.map((plan) => `
+                        <tr>
+                            <td class="mono">${esc(plan.planId)}</td>
+                            <td>${esc(plan.sourceType)}<div class="hint mono">${esc(plan.sourceId)}</div></td>
+                            <td class="num mono">${money(plan.principal)}</td>
+                            <td>${plan.termMonths}</td>
+                            <td class="num mono">${money(plan.totalFee)}</td>
+                            <td class="num mono">${money(plan.remainingPrincipal)}</td>
+                            <td>${planStatusBadge(plan.status)}</td>
+                            <td class="nowrap">${dateTimeText(plan.createdAt)}</td>
+                            <td><a class="btn ghost small" href="#/installments/${encodeURIComponent(plan.planId)}">详情</a></td>
+                        </tr>`).join('')}
+                    </tbody></table></div>
+                <div class="hint mt-16">共 ${data.total} 条，第 ${data.page} 页</div>`;
+            const canPrev = data.page > 1;
+            const canNext = data.page * data.size < data.total;
+            pager.innerHTML = `
+                <button class="btn ghost" id="ins-prev" ${canPrev ? '' : 'disabled'}>上一页</button>
+                <button class="btn ghost" id="ins-next" ${canNext ? '' : 'disabled'}>下一页</button>`;
+            document.getElementById('ins-prev').addEventListener('click', () => { page -= 1; load(); });
+            document.getElementById('ins-next').addEventListener('click', () => { page += 1; load(); });
+        } catch (error) {
+            result.innerHTML = errBox(error);
+            pager.innerHTML = '';
+        }
+    };
+
+    document.getElementById('ins-filter').addEventListener('submit', (event) => {
+        event.preventDefault();
+        page = 1;
+        load();
+    });
+    load();
+}
+
+function pageInstallmentNew() {
+    const query = hashQuery();
+    const sourceType = query.get('sourceType') === 'BILL' ? 'BILL' : 'TRANSACTION';
+    const accountId = query.get('accountId') || '00000000006';
+    const sourceId = query.get('sourceId') || '';
+    const amount = query.get('amount') || '';
+    const previewKey = 'installment-preview';
+
+    shell({
+        active: 'installments',
+        title: '申请分期',
+        subtitle: '三步：选择期数 → 试算 → 确认提交（REQ-INS-03/04）',
+        content: `
+            <div class="card">
+                <h3>① 分期信息</h3>
+                <form id="ins-new-form">
+                    <div class="grid cols-2">
+                        <label class="field"><span>账户号（11 位）</span>
+                            <input name="accountId" value="${esc(accountId)}" maxlength="11" pattern="\\d{11}" required></label>
+                        <label class="field"><span>来源类型</span>
+                            <select name="sourceType">
+                                <option value="TRANSACTION" ${sourceType === 'TRANSACTION' ? 'selected' : ''}>TRANSACTION 单笔消费</option>
+                                <option value="BILL" ${sourceType === 'BILL' ? 'selected' : ''}>BILL 当期账单</option>
+                            </select></label>
+                        <label class="field span-2"><span>来源 ID（交易号 16 位 / 账单号）</span>
+                            <input name="sourceId" value="${esc(sourceId)}" maxlength="32" required></label>
+                        <label class="field"><span>分期本金</span>
+                            <input name="principal" type="number" step="0.01" min="0.01" value="${esc(amount)}" required></label>
+                        <label class="field"><span>期数</span>
+                            <select name="termMonths">
+                                <option value="3">3 期（0.60%/月）</option>
+                                <option value="6" selected>6 期（0.55%/月）</option>
+                                <option value="12">12 期（0.50%/月）</option>
+                            </select></label>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn primary" type="submit" id="ins-preview-btn">试算</button>
+                        <a class="btn ghost" href="#/installments">返回我的分期</a>
+                    </div>
+                    <div id="ins-preview-msg"></div>
+                </form>
+            </div>
+            <div class="card mt-16" id="ins-preview-box" hidden></div>`
+    });
+
+    const form = document.getElementById('ins-new-form');
+    const box = document.getElementById('ins-preview-box');
+    const msg = document.getElementById('ins-preview-msg');
+
+    // C-04：账单分期必须带真实账单号/可分期本金，不能要求用户猜内部账单 ID
+    if (sourceType === 'BILL' && !sourceId) {
+        msg.innerHTML = '<div class="hint">正在读取当期账单…</div>';
+        api(`/api/v1/installments/bills/${encodeURIComponent(accountId)}`)
+            .then((bill) => {
+                form.elements.sourceId.value = bill.billId;
+                form.elements.principal.value = bill.availablePrincipal;
+                msg.innerHTML = `<div class="hint">账单 ${esc(bill.billId)} · 账期 ${dateText(bill.cycleStart)} ~ ${dateText(bill.cycleEnd)} · 可分期 ${money(bill.availablePrincipal)}</div>`;
+            })
+            .catch((error) => { msg.innerHTML = errBox(error); });
+    }
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        msg.innerHTML = '';
+        const values = formValues(form);
+        const body = {
+            accountId: values.accountId.trim(),
+            sourceType: values.sourceType,
+            sourceId: values.sourceId.trim(),
+            principal: Number(values.principal),
+            termMonths: Number(values.termMonths)
+        };
+        const button = document.getElementById('ins-preview-btn');
+        setBusy(button, true, '试算中…');
+        try {
+            const preview = await api('/api/v1/installments/preview', { method: 'POST', body });
+            sessionStorage.setItem(previewKey, JSON.stringify({ request: body, preview }));
+            box.hidden = false;
+            box.innerHTML = `
+                <h3>② 试算结果</h3>
+                <div class="grid cols-3">
+                    <div class="stat"><div class="label">月手续费率</div><div class="value">${preview.monthlyFeeRate}</div></div>
+                    <div class="stat"><div class="label">总手续费</div><div class="value">${money(preview.totalFee)}</div></div>
+                    <div class="stat"><div class="label">首期合计</div><div class="value">${money(preview.firstPeriodTotal)}</div></div>
+                </div>
+                <div class="table-wrap mt-16"><table class="table">
+                    <thead><tr><th>期序</th><th>本金</th><th>手续费</th><th>本期合计</th></tr></thead>
+                    <tbody>${preview.periods.map((period) => `
+                        <tr><td>${period.installmentNo}</td>
+                            <td class="num mono">${money(period.principal)}</td>
+                            <td class="num mono">${money(period.fee)}</td>
+                            <td class="num mono">${money(Number(period.principal) + Number(period.fee))}</td></tr>`).join('')}
+                    </tbody></table></div>
+                <h3 class="mt-16">③ 确认提交</h3>
+                <label class="checkbox"><input type="checkbox" id="ins-agreement"> 我已阅读并同意《信用卡分期协议》</label>
+                <div class="form-actions">
+                    <button class="btn primary" id="ins-submit">提交分期</button>
+                    <button class="btn ghost" id="ins-repreview">重新试算</button>
+                </div>
+                <div id="ins-submit-msg"></div>`;
+            document.getElementById('ins-repreview').addEventListener('click', () => {
+                sessionStorage.removeItem(previewKey);
+                box.hidden = true;
+                box.innerHTML = '';
+            });
+            const submitKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+            document.getElementById('ins-submit').addEventListener('click', async () => {
+                const submitMsg = document.getElementById('ins-submit-msg');
+                submitMsg.innerHTML = '';
+                if (!document.getElementById('ins-agreement').checked) {
+                    submitMsg.innerHTML = '<div class="alert error">请先勾选分期协议</div>';
+                    return;
+                }
+                const submitButton = document.getElementById('ins-submit');
+                setBusy(submitButton, true, '提交中…');
+                try {
+                    const created = await api('/api/v1/installments', {
+                        method: 'POST',
+                        body: {
+                            idempotencyKey: submitKey,
+                            accountId: body.accountId,
+                            sourceType: body.sourceType,
+                            sourceId: body.sourceId,
+                            principal: body.principal,
+                            termMonths: body.termMonths,
+                            previewToken: preview.previewToken,
+                            agreementAccepted: true
+                        }
+                    });
+                    toast(`分期已创建：${created.planId}`, 'success');
+                    location.hash = `#/installments/${encodeURIComponent(created.planId)}`;
+                } catch (error) {
+                    submitMsg.innerHTML = errBox(error);
+                } finally {
+                    setBusy(submitButton, false);
+                }
+            });
+        } catch (error) {
+            sessionStorage.removeItem(previewKey);
+            box.hidden = true;
+            msg.innerHTML = errBox(error);
+        } finally {
+            setBusy(button, false);
+        }
+    });
+}
+
+function pageInstallmentDetail(planId) {
+    shell({
+        active: 'installments',
+        title: '分期详情',
+        subtitle: `计划号 ${planId}`,
+        content: '<div class="card" id="ins-detail"><div class="empty">加载中…</div></div>'
+    });
+    const box = document.getElementById('ins-detail');
+
+    const load = async () => {
+        try {
+            const plan = await api(`/api/v1/installments/${encodeURIComponent(planId)}`);
+            const scheduleTotal = plan.schedules.reduce((sum, row) => sum + Number(row.totalDue), 0);
+            const nextUnpaid = plan.schedules.find((row) => row.status !== 'PAID');
+            box.innerHTML = `
+                ${plan.warning ? `<div class="alert error">还款计划不完整（${esc(plan.warning)}），请联系客服</div>` : ''}
+                <div class="grid cols-3">
+                    <div class="stat"><div class="label">本金 / 期数</div>
+                        <div class="value">${money(plan.principal)} / ${plan.termMonths}</div></div>
+                    <div class="stat"><div class="label">剩余本金</div>
+                        <div class="value">${money(plan.remainingPrincipal)}</div></div>
+                    <div class="stat"><div class="label">状态</div>
+                        <div class="value">${planStatusBadge(plan.status)}</div></div>
+                </div>
+                <dl class="dl mt-16">
+                    <dt>来源</dt><dd>${esc(plan.sourceType)} · <span class="mono">${esc(plan.sourceId)}</span></dd>
+                    <dt>月费率 / 总手续费</dt><dd>${plan.monthlyFeeRate} / ${money(plan.totalFee)}</dd>
+                    <dt>创建 / 结清时间</dt><dd>${dateTimeText(plan.createdAt)} / ${plan.settledAt ? dateTimeText(plan.settledAt) : '—'}</dd>
+                    <dt>还款计划合计</dt><dd class="mono">${money(scheduleTotal)}</dd>
+                </dl>
+                <div class="table-wrap mt-16"><table class="table">
+                    <thead><tr><th>期序</th><th>应还日期</th><th>应还本金</th><th>已还本金</th><th>手续费</th><th>合计</th><th>状态</th></tr></thead>
+                    <tbody>${plan.schedules.map((row) => `
+                        <tr><td>${row.installmentNo}</td>
+                            <td>${dateText(row.dueDate)}</td>
+                            <td class="num mono">${money(row.principalDue)}</td>
+                            <td class="num mono">${money(row.paidPrincipal || 0)}</td>
+                            <td class="num mono">${money(row.feeDue)}</td>
+                            <td class="num mono">${money(row.totalDue)}</td>
+                            <td>${esc(row.status)}</td></tr>`).join('')}
+                    </tbody></table></div>
+                ${(plan.repayments || []).length ? `
+                <h3 class="mt-16">还款记录</h3>
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>还款标识</th><th class="num">金额</th><th class="num">冲减本金</th><th>状态</th><th>时间</th></tr></thead>
+                    <tbody>${plan.repayments.map((row) => `
+                        <tr><td class="mono">${esc(row.paymentKey)}</td>
+                            <td class="num mono">${money(row.amount)}</td>
+                            <td class="num mono">${money(row.principalApplied)}</td>
+                            <td>${esc(row.status)}</td>
+                            <td class="nowrap">${dateTimeText(row.createdAt)}</td></tr>`).join('')}
+                    </tbody></table></div>` : ''}
+                ${plan.status === 'ACTIVE' ? `
+                <h3 class="mt-16">归还本金</h3>
+                <p class="hint">按实际归还本金累计回写：本期未还本金 ${nextUnpaid ? money(Number(nextUnpaid.principalDue) - Number(nextUnpaid.paidPrincipal || 0)) : '0.00'}，
+                    可部分归还（不少于 0.01，不超过剩余本金 ${money(plan.remainingPrincipal)}）。同一还款标识重试只扣款一次。</p>
+                <div class="inline-form">
+                    <label class="field"><span>本次归还本金</span>
+                        <input id="ins-repay-amount" type="number" step="0.01" min="0.01"
+                            max="${esc(plan.remainingPrincipal)}"
+                            value="${nextUnpaid ? (Number(nextUnpaid.principalDue) - Number(nextUnpaid.paidPrincipal || 0)).toFixed(2) : ''}"></label>
+                    <button class="btn ghost" id="ins-repay" ${nextUnpaid ? '' : 'disabled'}>归还本金</button>
+                </div>
+                <div id="ins-repay-msg"></div>
+                <h3 class="mt-16">提前结清</h3>
+                <p class="hint">先试算金额组成，确认后才产生资金动作；取消不写入任何资金。</p>
+                <div class="form-actions">
+                    <button class="btn primary" id="ins-settle-quote">试算结清金额</button>
+                </div>
+                <div id="ins-settle-msg"></div>` : `
+                <div class="form-actions"><a class="btn ghost" href="#/installments">返回我的分期</a></div>`}`;
+
+            wireRepayment(plan, nextUnpaid);
+            wireSettlement();
+        } catch (error) {
+            box.innerHTML = errBox(error);
+        }
+    };
+
+    let repaymentKey = null;
+    const wireRepayment = (plan, nextUnpaid) => {
+        const button = document.getElementById('ins-repay');
+        if (!button || !nextUnpaid) return;
+        button.addEventListener('click', async () => {
+            const msg = document.getElementById('ins-repay-msg');
+            msg.innerHTML = '';
+            const amountInput = document.getElementById('ins-repay-amount');
+            const amount = Number(amountInput.value);
+            if (!amount || amount <= 0) {
+                msg.innerHTML = '<div class="alert error">请输入大于 0 的归还本金金额</div>';
+                return;
+            }
+            // 同一笔还款重试复用同一 paymentKey（幂等）
+            if (!repaymentKey) repaymentKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+            setBusy(button, true, '还款中…');
+            try {
+                const result = await api(`/api/v1/installments/${encodeURIComponent(planId)}/repayments`, {
+                    method: 'POST',
+                    body: { paymentKey: repaymentKey, amount: amount }
+                });
+                toast(result.replayed ? '该次还款已处理（重放首次结果）' : '还款成功', 'success');
+                repaymentKey = null;
+                msg.innerHTML = `<div class="alert success">已冲减本金 ${money(result.principalApplied)}，
+                    剩余本金 ${money(result.remainingPrincipal)}，本期已还 ${result.paidInstallments} 期。</div>`;
+                await load();
+            } catch (error) {
+                msg.innerHTML = errBox(error) + '<div class="hint">重试将复用同一还款标识，不会重复扣款。</div>';
+            } finally {
+                setBusy(button, false);
+            }
+        });
+    };
+
+    let settlementKey = null;
+    const wireSettlement = () => {
+        const quoteButton = document.getElementById('ins-settle-quote');
+        if (!quoteButton) return;
+        const msg = document.getElementById('ins-settle-msg');
+        quoteButton.addEventListener('click', async () => {
+            msg.innerHTML = '';
+            setBusy(quoteButton, true, '试算中…');
+            try {
+                const quote = await api(`/api/v1/installments/${encodeURIComponent(planId)}/settlement-quote`);
+                settlementKey = settlementKey || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+                msg.innerHTML = `
+                    <div class="alert info">
+                        结清金额 <strong>${money(quote.settlementTotal)}</strong>
+                        = 剩余本金 ${money(quote.remainingPrincipal)} + 违约金 ${money(quote.penaltyFee)}
+                        − 手续费减免 ${money(quote.feeRebate)}
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn primary" id="ins-settle-confirm">确认结清</button>
+                        <button class="btn ghost" id="ins-settle-cancel">取消</button>
+                    </div>
+                    <div id="ins-settle-confirm-msg"></div>`;
+                document.getElementById('ins-settle-cancel').addEventListener('click', () => {
+                    msg.innerHTML = '<div class="hint">已取消，未产生任何资金写入。</div>';
+                    settlementKey = null;
+                });
+                const confirmButton = document.getElementById('ins-settle-confirm');
+                confirmButton.addEventListener('click', async () => {
+                    const confirmMsg = document.getElementById('ins-settle-confirm-msg');
+                    confirmMsg.innerHTML = '';
+                    setBusy(confirmButton, true, '结清中…');
+                    try {
+                        const result = await api(`/api/v1/installments/${encodeURIComponent(planId)}/early-settlement`, {
+                            method: 'POST',
+                            body: { settlementIdempotencyKey: settlementKey, feeRebate: 0 }
+                        });
+                        toast(result.replayed ? '该次结清已处理（重放首次结果）' : '分期已结清', 'success');
+                        settlementKey = null;
+                        await load();
+                    } catch (error) {
+                        confirmMsg.innerHTML = errBox(error)
+                            + '<div class="hint">重试将复用同一结清标识，不会重复扣款。</div>';
+                    } finally {
+                        setBusy(confirmButton, false);
+                    }
+                });
+            } catch (error) {
+                msg.innerHTML = errBox(error);
+            } finally {
+                setBusy(quoteButton, false);
+            }
+        });
+    };
+    load();
+}
+
+/* ---------------- 页面：分期后台 ---------------- */
+
+function pageAdminInstallments() {
+    shell({
+        active: 'admin-installments',
+        title: '分期后台',
+        subtitle: '跨账户查询、分页、只读详情与 30 天 CSV 导出（REQ-INS-07 / US-008）',
+        content: `
+            <div class="card">
+                <form class="inline-form" id="admin-ins-filter">
+                    <label class="field"><span>账户号（可选）</span>
+                        <input id="admin-ins-account" maxlength="11" placeholder="00000000006"></label>
+                    <label class="field"><span>状态</span>
+                        <select id="admin-ins-status">
+                            <option value="">全部</option>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="SETTLED">SETTLED</option>
+                        </select></label>
+                    <label class="field"><span>每页</span>
+                        <input id="admin-ins-size" type="number" min="1" max="100" value="20"></label>
+                    <button class="btn primary" type="submit">查询</button>
+                    <button class="btn ghost" type="button" id="admin-ins-export">导出 30 天 CSV</button>
+                </form>
+                <div id="admin-ins-export-msg"></div>
+                <div id="admin-ins-result"></div>
+                <div id="admin-ins-pager" class="form-actions"></div>
+            </div>`
+    });
+
+    const result = document.getElementById('admin-ins-result');
+    const pager = document.getElementById('admin-ins-pager');
+    let page = 1;
+
+    const load = async () => {
+        const accountId = document.getElementById('admin-ins-account').value.trim();
+        const status = document.getElementById('admin-ins-status').value;
+        const size = document.getElementById('admin-ins-size').value || 20;
+        const params = new URLSearchParams({ page: String(page), size: String(size) });
+        if (accountId) params.set('accountId', accountId);
+        if (status) params.set('status', status);
+        result.innerHTML = '<div class="empty">加载中…</div>';
+        try {
+            const data = await api(`/api/v1/admin/installments?${params.toString()}`);
+            const totalPages = Math.max(1, Math.ceil(Number(data.total) / Number(data.size)));
+            result.innerHTML = data.items.length === 0
+                ? '<div class="empty">暂无数据</div>'
+                : `<div class="table-wrap"><table class="table">
+                    <thead><tr><th>计划号</th><th>账户</th><th>本金</th><th>期数</th><th>剩余本金</th><th>状态</th><th>创建时间</th><th></th></tr></thead>
+                    <tbody>${data.items.map((plan) => `
+                        <tr><td class="mono">${esc(plan.planId)}</td>
+                            <td class="mono">${esc(plan.accountId)}</td>
+                            <td class="num mono">${money(plan.principal)}</td>
+                            <td>${plan.termMonths}</td>
+                            <td class="num mono">${money(plan.remainingPrincipal)}</td>
+                            <td>${planStatusBadge(plan.status)}</td>
+                            <td class="nowrap">${dateTimeText(plan.createdAt)}</td>
+                            <td><a class="btn ghost small" href="#/admin/installments/${encodeURIComponent(plan.planId)}">详情</a></td></tr>`).join('')}
+                    </tbody></table></div>
+                <div class="hint mt-16">共 ${data.total} 条，第 ${data.page} / ${totalPages} 页</div>`;
+            pager.innerHTML = `
+                <button class="btn ghost" id="admin-ins-prev" ${data.page > 1 ? '' : 'disabled'}>上一页</button>
+                <button class="btn ghost" id="admin-ins-next" ${data.page < totalPages ? '' : 'disabled'}>下一页</button>`;
+            document.getElementById('admin-ins-prev').addEventListener('click', () => { page = Math.max(1, page - 1); load(); });
+            document.getElementById('admin-ins-next').addEventListener('click', () => { page = page + 1; load(); });
+        } catch (error) {
+            result.innerHTML = errBox(error);
+            pager.innerHTML = '';
+        }
+    };
+
+    document.getElementById('admin-ins-filter').addEventListener('submit', (event) => {
+        event.preventDefault();
+        page = 1;
+        load();
+    });
+
+    // C-02：携带 Bearer 下载真实 CSV（普通 <a> 导航不会带 Authorization）
+    document.getElementById('admin-ins-export').addEventListener('click', async () => {
+        const exportMsg = document.getElementById('admin-ins-export-msg');
+        exportMsg.innerHTML = '';
+        try {
+            const ticket = await api('/api/v1/admin/installments/exports?days=30', { method: 'POST' });
+            exportMsg.innerHTML = `<div class="alert success">
+                导出已生成：${ticket.rowCount} 行，24 小时内可下载。
+                <button class="btn ghost small" id="admin-ins-download">下载 CSV</button></div>`;
+            document.getElementById('admin-ins-download').addEventListener('click', async () => {
+                try {
+                    const response = await fetch(`/api/v1/admin/installments/exports/${encodeURIComponent(ticket.exportId)}`, {
+                        headers: { Authorization: `Bearer ${state.session.token}` }
+                    });
+                    if (!response.ok) {
+                        let payload = {};
+                        try { payload = await response.json(); } catch (ignored) { /* 非 JSON 错误体 */ }
+                        throw new Error(payload.message || `下载失败（HTTP ${response.status}）`);
+                    }
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `installments-${ticket.exportId}.csv`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(url);
+                    toast(`CSV 已下载（${ticket.rowCount} 行）`, 'success');
+                } catch (error) {
+                    exportMsg.innerHTML = errBox(error);
+                }
+            });
+            toast('导出已生成', 'success');
+        } catch (error) {
+            exportMsg.innerHTML = errBox(error);
+        }
+    });
+    load();
+}
+
+async function pageAdminInstallmentDetail(planId) {
+    shell({
+        active: 'admin-installments',
+        title: '分期后台详情',
+        subtitle: `计划号 ${planId}`,
+        content: '<div class="card" id="admin-ins-detail"><div class="empty">加载中…</div></div>'
+    });
+    const box = document.getElementById('admin-ins-detail');
+    try {
+        const plan = await api(`/api/v1/admin/installments/${encodeURIComponent(planId)}`);
+        box.innerHTML = `
+            <div class="grid cols-3">
+                <div class="stat"><div class="label">账户</div><div class="value mono">${esc(plan.accountId)}</div></div>
+                <div class="stat"><div class="label">本金 / 剩余</div>
+                    <div class="value">${money(plan.principal)} / ${money(plan.remainingPrincipal)}</div></div>
+                <div class="stat"><div class="label">状态</div><div class="value">${planStatusBadge(plan.status)}</div></div>
+            </div>
+            <dl class="dl mt-16">
+                <dt>来源</dt><dd>${esc(plan.sourceType)} · <span class="mono">${esc(plan.sourceId)}</span></dd>
+                <dt>期数 / 费率 / 总手续费</dt><dd>${plan.termMonths} / ${plan.monthlyFeeRate} / ${money(plan.totalFee)}</dd>
+                <dt>创建 / 结清</dt><dd>${dateTimeText(plan.createdAt)} / ${plan.settledAt ? dateTimeText(plan.settledAt) : '—'}</dd>
+            </dl>
+            <h3 class="mt-16">还款计划</h3>
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>期序</th><th>应还日期</th><th class="num">本金</th><th class="num">手续费</th><th>状态</th></tr></thead>
+                <tbody>${plan.schedules.map((row) => `
+                    <tr><td>${row.installmentNo}</td><td>${dateText(row.dueDate)}</td>
+                        <td class="num mono">${money(row.principalDue)}</td>
+                        <td class="num mono">${money(row.feeDue)}</td>
+                        <td>${esc(row.status)}</td></tr>`).join('')}
+                </tbody></table></div>
+            <h3 class="mt-16">还款记录</h3>
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>还款标识</th><th class="num">金额</th><th class="num">冲减本金</th><th>状态</th><th>时间</th></tr></thead>
+                <tbody>${(plan.repayments || []).map((row) => `
+                    <tr><td class="mono">${esc(row.paymentKey)}</td>
+                        <td class="num mono">${money(row.amount)}</td>
+                        <td class="num mono">${money(row.principalApplied)}</td>
+                        <td>${esc(row.status)}</td>
+                        <td class="nowrap">${dateTimeText(row.createdAt)}</td></tr>`).join('')
+                    || '<tr><td colspan="5"><div class="empty">暂无还款记录</div></td></tr>'}
+                </tbody></table></div>
+            <div class="hint mt-16">风控只读身份可查看本页，但不能执行协助结清或维护风险信号（写操作 403）。</div>
+            <div class="form-actions"><a class="btn ghost" href="#/admin/installments">返回后台列表</a></div>`;
+    } catch (error) {
+        box.innerHTML = errBox(error);
+    }
+}
+
 /* ---------------- 路由 ---------------- */
 
 function pageNotFound() {
@@ -1915,7 +2613,8 @@ function pageNotFound() {
 function route() {
     loadSession();
     const hash = location.hash || '#/menu';
-    const path = hash.replace(/^#/, '');
+    const queryIndex = hash.indexOf('?');
+    const path = (queryIndex < 0 ? hash : hash.slice(0, queryIndex)).replace(/^#/, '');
     const segments = path.split('/').filter(Boolean);
 
     if (!state.session) {
@@ -1940,6 +2639,14 @@ function route() {
         if (segments[1] === 'new') return pageTransactionNew();
         return segments[1] ? pageTransactionDetail(segments[1]) : pageTransactions();
     }
+    if (segments[0] === 'installments') {
+        if (segments[1] === 'new') return pageInstallmentNew();
+        return segments[1] ? pageInstallmentDetail(segments[1]) : pageInstallments();
+    }
+    if (segments[0] === 'admin' && segments[1] === 'installments') {
+        return segments[2] ? pageAdminInstallmentDetail(decodeURIComponent(segments[2])) : pageAdminInstallments();
+    }
+    if (segments[0] === 'billing') return pageBilling();
     if (segments[0] === 'bill-pay') return pageBillPay();
     if (segments[0] === 'reports') return pageReports();
     if (segments[0] === 'authorizations') return pageAuthorizations();

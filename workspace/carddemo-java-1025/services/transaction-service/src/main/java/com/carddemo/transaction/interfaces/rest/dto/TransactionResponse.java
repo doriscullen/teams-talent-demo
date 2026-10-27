@@ -25,7 +25,8 @@ public record TransactionResponse(
         String merchantCity,
         String merchantZip,
         LocalDateTime originalTimestamp,
-        LocalDateTime processedTimestamp) {
+        LocalDateTime processedTimestamp,
+        String status) {
 
     public static TransactionResponse from(TransactionView view) {
         TransactionRecord transaction = view.transaction();
@@ -45,6 +46,7 @@ public record TransactionResponse(
                 transaction.getMerchantCity(),
                 transaction.getMerchantZip(),
                 transaction.getOriginalTimestamp(),
-                transaction.getProcessedTimestamp());
+                transaction.getProcessedTimestamp(),
+                transaction.getStatus().name());
     }
 }

@@ -1,0 +1,65 @@
+server:
+  port: ${SERVER_PORT:8088}
+  shutdown: graceful
+
+spring:
+  application:
+    name: installment-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:carddemo_installment}
+    username: ${DB_USER:carddemo}
+    password: ${DB_PASSWORD:carddemo}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+installment:
+  iam:
+    token:
+      secret: ${IAM_TOKEN_SECRET:carddemo-demo-secret-change-me}
+  preview:
+    secret: ${INSTALLMENT_PREVIEW_SECRET:carddemo-installment-preview-change-me}
+    ttl-minutes: ${INSTALLMENT_PREVIEW_TTL_MINUTES:30}
+  idempotency:
+    window-minutes: ${INSTALLMENT_IDEMPOTENCY_WINDOW_MINUTES:30}
+  notification:
+    delivery-dir: ${INSTALLMENT_NOTIFICATION_DIR:/var/lib/carddemo/notifications}
+  workers:
+    enabled: ${INSTALLMENT_WORKERS_ENABLED:true}
+  downstream:
+    account-url: ${ACCOUNT_SERVICE_URL:http://localhost:8084}
+    transaction-url: ${TRANSACTION_SERVICE_URL:http://localhost:8085}
+    ledger-url: ${LEDGER_SERVICE_URL:http://localhost:8089}
+    connect-timeout-ms: ${DOWNSTREAM_CONNECT_TIMEOUT_MS:500}
+    read-timeout-ms: ${DOWNSTREAM_READ_TIMEOUT_MS:2000}
+
+logging:
+  level:
+    com.carddemo: INFO

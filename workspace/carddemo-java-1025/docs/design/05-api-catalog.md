@@ -632,7 +632,50 @@
 
 `200` 返回账户；同一 `rewardId` 重复调用不重复入账；金额 ≤ 0 返回 `409 INVALID_CASHBACK_AMOUNT`。
 
-## 8. 错误码总表
+## 8. installment-service（:8088，REQ-2026-001）
+
+> 认证：除 `preview` 外所有接口需 `Authorization: Bearer <IAM HMAC token>`；缺/坏/过期 `401 UNAUTHENTICATED`。
+> 主体来自 token（userId/userType），不使用请求体自报身份。客户只能访问 `installment_account_access` 中的账户（越权 404）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/installments/preview` | 试算（不落库），返回 `previewToken`（30 分钟）、期次明细、`totalFee`、`firstPeriodTotal`、`availablePrincipal` |
+| POST | `/api/v1/installments` | 创建分期；`201`，同一 `idempotencyKey` 重放 `200` 返回首次计划 |
+| GET | `/api/v1/installments?accountId=&status=&page=&size=` | 我的/账户分期列表；`page≥1`、`1≤size≤100` |
+| GET | `/api/v1/installments/{planId}` | 详情 + 还款计划；越权 `404 INSTALLMENT_NOT_FOUND` |
+| POST | `/api/v1/installments/{planId}/repayments` | 一期/部分本金还款；同 `paymentKey` 重放首次结果，本金-only 按期累计 |
+| GET | `/api/v1/installments/accounts/{accountId}/limit-view` | 账户额度视图（原文 §8.1 `account_limit_view`）：账户额度字段 + `installmentOccupied`（= ACTIVE 计划 `remaining_principal` 合计，本金口径）；越权 `404`，后台无读权限 `403` |
+| POST | `/api/v1/installments/{planId}/early-settlement` | 提前结清；同 `settlementIdempotencyKey` 重放 `200` 首次结果，异键对非 ACTIVE `409 SETTLEMENT_NOT_ALLOWED` |
+| GET | `/api/v1/admin/installments?accountId=&status=&page=&size=` | 后台查询（需 `STAFF_ASSIST` 或 `RISK_READONLY`） |
+| POST | `/api/v1/admin/installments/exports?days=30` | 创建 CSV 导出（24 小时有效），返回 `exportId/rowCount/expiresAt` |
+| GET | `/api/v1/admin/installments/exports/{exportId}` | 下载 CSV；过期 `410 EXPORT_EXPIRED` |
+| POST | `/api/v1/admin/installments/eligibility-flags` | 维护交易逾期/争议信号（仅 `STAFF_ASSIST`） |
+
+创建请求示例：
+
+```json
+{"idempotencyKey":"ins-20261027-001","accountId":"00000000006","sourceType":"TRANSACTION",
+ "sourceId":"0000000000000200","principal":1000.00,"termMonths":6,
+ "previewToken":"<base64url>.<base64url>","agreementAccepted":true}
+```
+
+计费口径（test-profile-v2）：1000.00/6 期手续费 5.50/4.58/3.67/2.75/1.83/0.92（合计 19.25，首期 172.16）；
+500.00/3 期 3.00/2.00/1.00（合计 6.00，首期 169.66）；本金 166.66×5+166.70（末期吸收尾差）。
+
+## 9. ledger-service（:8089）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/journal-entries` | 过账分录组；按 `entryGroupId` 幂等，重复提交 `200` + `duplicate=true` |
+| GET | `/api/v1/journal-entries/{entryGroupId}` | 查询分录行 |
+
+```json
+{"entryGroupId":"IP…","businessType":"INSTALLMENT_CREATE","referenceId":"IP…",
+ "lines":[{"accountCode":"1100-INSTALLMENT-RECEIVABLE","direction":"DEBIT","amount":1000.00,"memo":"principal"},
+          {"accountCode":"4001-INSTALLMENT-FEE-INCOME","direction":"CREDIT","amount":19.25,"memo":"fee"}]}
+```
+
+## 10. 错误码总表
 
 | code | HTTP | 归属 | 含义 |
 |---|---|---|---|
@@ -672,4 +715,21 @@
 | CAMPAIGN_NOT_ACTIVE | 409 | marketing | 非进行中活动不能报名 |
 | REWARD_NOT_FOUND | 404 | marketing | 奖励记录不存在 |
 | INVALID_CASHBACK_AMOUNT | 409 | account | 返现金额必须大于 0 |
-| DEPENDENCY_UNAVAILABLE | 503 | transaction/authorization/marketing | 下游服务不可用 |
+| DEPENDENCY_UNAVAILABLE | 503 | transaction/authorization/marketing/installment | 下游服务不可用 |
+| INSTALLMENT_NOT_ELIGIBLE | 409 | installment | 金额不足、状态不支持、已逾期/争议中 |
+| ALREADY_INSTALLED | 409 | installment | 本金已存在生效计划（含单笔/账单交叉占用） |
+| INSTALLMENT_LIMIT_EXCEEDED | 409 | installment | 单账户 ACTIVE 分期达 20 笔 |
+| PREVIEW_EXPIRED | 409 | installment | 试算令牌过期或与请求不一致 |
+| PRINCIPAL_EXCEEDS_LIMIT | 409 | installment | 本金超过可分期本金余额 |
+| SETTLEMENT_NOT_ALLOWED | 409 | installment | 计划非 ACTIVE 且非同一结清幂等键重放 |
+| CONCURRENT_MODIFICATION | 409 | installment | 计划状态并发变更（乐观锁） |
+| IDEMPOTENCY_KEY_CONFLICT | 409 | installment | 去重键/结清键已被其它账户或计划使用 |
+| AGREEMENT_REQUIRED | 400 | installment | 未勾选分期协议 |
+| INVALID_PARAMETER | 400 | installment | 分页/枚举/类型参数非法 |
+| INVALID_TERM | 400 | installment | 期数不在 3/6/12 |
+| INSTALLMENT_NOT_FOUND | 404 | installment | 计划/交易不存在或越权 |
+| SCHEDULE_INCONSISTENT | 200 | installment | 还款计划缺失告警（随计划返回） |
+| EXPORT_EXPIRED | 410 | installment | 导出文件超过 24 小时有效期 |
+| EXPORT_NOT_FOUND | 404 | installment | 导出文件不存在 |
+| UNAUTHENTICATED | 401 | installment | 无/非法/过期 IAM token |
+| FORBIDDEN | 403 | installment | 无后台权限点或只读身份请求写操作 |

@@ -1,0 +1,451 @@
+package com.carddemo.installment.application;
+
+import com.carddemo.installment.application.port.AccountPort;
+import com.carddemo.installment.application.port.AuditPort;
+import com.carddemo.installment.application.port.ClockProvider;
+import com.carddemo.installment.application.port.LedgerPort;
+import com.carddemo.installment.application.port.NotificationPort;
+import com.carddemo.installment.domain.exception.BusinessRuleException;
+import com.carddemo.installment.domain.exception.RemoteServiceException;
+import com.carddemo.installment.domain.model.InstallmentPlan;
+import com.carddemo.installment.domain.model.InstallmentRepayment;
+import com.carddemo.installment.domain.model.InstallmentSchedule;
+import com.carddemo.installment.domain.model.SettlementIntent;
+import com.carddemo.installment.domain.model.SourceType;
+import com.carddemo.installment.domain.repository.InstallmentPlanRepository;
+import com.carddemo.installment.domain.repository.InstallmentRepaymentRepository;
+import com.carddemo.installment.domain.repository.InstallmentScheduleRepository;
+import com.carddemo.installment.domain.repository.SettlementIntentRepository;
+import com.carddemo.installment.infrastructure.security.AccessGuard;
+import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * 一期还款（A-003 / US-005，A-R002/A-R003/A-R004）：
+ * 仅完整期次本金可还，任何其它金额在任何远端资金动作前拒绝；
+ * 账户作用ID按操作+计划生成且与结清命名空间分离；在途结清阻止还款；失败可续跑。
+ */
+class RepaymentServiceTest {
+
+    private static final String PLAN_ID = "IP0001";
+    private static final String ACCOUNT = "00000000006";
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 27, 10, 0);
+    private static final InstallmentPrincipal CUSTOMER = new InstallmentPrincipal("USER0001", "U");
+
+    private InstallmentPlanRepository planRepository;
+    private InstallmentScheduleRepository scheduleRepository;
+    private InstallmentRepaymentRepository repaymentRepository;
+    private SettlementIntentRepository settlementIntentRepository;
+    private AccountPort accountPort;
+    private LedgerPort ledgerPort;
+    private RepaymentService service;
+    private InstallmentPlan plan;
+    private final List<InstallmentSchedule> schedules = new ArrayList<>();
+    private final Map<String, InstallmentRepayment> repayments = new HashMap<>();
+
+    @BeforeEach
+    void setUp() {
+        planRepository = mock(InstallmentPlanRepository.class);
+        scheduleRepository = mock(InstallmentScheduleRepository.class);
+        repaymentRepository = mock(InstallmentRepaymentRepository.class);
+        settlementIntentRepository = mock(SettlementIntentRepository.class);
+        accountPort = mock(AccountPort.class);
+        ledgerPort = mock(LedgerPort.class);
+
+        plan = new InstallmentPlan(PLAN_ID, ACCOUNT, null, SourceType.TRANSACTION, "0000000000000200",
+                new BigDecimal("900.00"), 3, new BigDecimal("0.0060"), new BigDecimal("10.80"),
+                "key-1", NOW.minusDays(1));
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(plan));
+        when(planRepository.findForUpdate(PLAN_ID)).thenReturn(Optional.of(plan));
+
+        schedules.clear();
+        for (int no = 1; no <= 3; no++) {
+            schedules.add(new InstallmentSchedule(PLAN_ID + "-0" + no, PLAN_ID, no,
+                    LocalDate.of(2026, 10, 9).plusMonths(no), new BigDecimal("300.00"),
+                    new BigDecimal("3.60")));
+        }
+        when(scheduleRepository.findByPlanIdOrderByInstallmentNo(PLAN_ID)).thenReturn(schedules);
+
+        repayments.clear();
+        when(repaymentRepository.saveAndFlush(any(InstallmentRepayment.class))).thenAnswer(invocation -> {
+            InstallmentRepayment repayment = invocation.getArgument(0);
+            repayments.put(repayment.getPaymentKey(), repayment);
+            return repayment;
+        });
+        when(repaymentRepository.findById(anyString())).thenAnswer(invocation ->
+                Optional.ofNullable(repayments.get(invocation.getArgument(0))));
+        when(repaymentRepository.findForUpdate(anyString())).thenAnswer(invocation ->
+                Optional.ofNullable(repayments.get(invocation.getArgument(0))));
+        when(repaymentRepository.existsByPlanIdAndStatus(anyString(), anyString())).thenAnswer(invocation -> {
+            String planId = invocation.getArgument(0);
+            String status = invocation.getArgument(1);
+            return repayments.values().stream()
+                    .anyMatch(row -> row.getPlanId().equals(planId) && status.equals(row.getStatus()));
+        });
+        when(repaymentRepository.existsByPlanIdAndStatusAndPaymentKeyNot(anyString(), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String planId = invocation.getArgument(0);
+                    String status = invocation.getArgument(1);
+                    String paymentKey = invocation.getArgument(2);
+                    return repayments.values().stream().anyMatch(row -> row.getPlanId().equals(planId)
+                            && status.equals(row.getStatus()) && !row.getPaymentKey().equals(paymentKey));
+                });
+
+        ClockProvider clock = mock(ClockProvider.class);
+        when(clock.now()).thenReturn(NOW);
+        when(clock.today()).thenReturn(NOW.toLocalDate());
+
+        PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
+        when(txManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+
+        service = new RepaymentService(planRepository, scheduleRepository, repaymentRepository,
+                settlementIntentRepository, accountPort, ledgerPort, mock(AuditPort.class),
+                mock(NotificationPort.class), mock(AccessGuard.class), clock, txManager);
+    }
+
+    private RepaymentService.RepaymentCommand command(String key, String amount) {
+        return new RepaymentService.RepaymentCommand(PLAN_ID, key, new BigDecimal(amount));
+    }
+
+    @Test
+    void firstPeriodRepaymentReducesRemainingAndMarksSchedulePaid() {
+        RepaymentService.RepaymentResult result = service.repay(CUSTOMER, command("pay-1", "300.00"));
+
+        assertThat(result.replayed()).isFalse();
+        assertThat(result.paidInstallments()).isEqualTo(1);
+        assertThat(result.principalApplied()).isEqualByComparingTo("300.00");
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("300.00")),
+                eq("REPAY-" + hashOf("REPAY|" + PLAN_ID + "|pay-1")));
+        verify(ledgerPort).postGroup(anyString(), eq("INSTALLMENT_REPAYMENT"), eq(PLAN_ID), any());
+    }
+
+    @Test
+    void partialPrincipalIsAccumulatedPerPeriodExactly() {
+        // 900/3：先还 100 → 剩余 800，第 1 期已还 100 仍未完成
+        RepaymentService.RepaymentResult first = service.repay(CUSTOMER, command("part-1", "100.00"));
+        assertThat(first.principalApplied()).isEqualByComparingTo("100.00");
+        assertThat(first.paidInstallments()).isZero();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("800.00");
+        assertThat(schedules.get(0).getPaidPrincipal()).isEqualByComparingTo("100.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PENDING");
+
+        // 再还 250 → 累计 350：第 1 期完成（300），第 2 期已还 50，剩余 550
+        RepaymentService.RepaymentResult second = service.repay(CUSTOMER, command("part-2", "250.00"));
+        assertThat(second.principalApplied()).isEqualByComparingTo("250.00");
+        assertThat(second.paidInstallments()).isEqualTo(1);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("550.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+        assertThat(schedules.get(0).getPaidPrincipal()).isEqualByComparingTo("300.00");
+        assertThat(schedules.get(1).getStatus().name()).isEqualTo("PENDING");
+        assertThat(schedules.get(1).getPaidPrincipal()).isEqualByComparingTo("50.00");
+
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("100.00")), anyString());
+        verify(accountPort).applyRepayment(eq(ACCOUNT), eq(new BigDecimal("250.00")), anyString());
+        verify(ledgerPort, org.mockito.Mockito.times(2))
+                .postGroup(anyString(), eq("INSTALLMENT_REPAYMENT"), eq(PLAN_ID), any());
+    }
+
+    @Test
+    void singlePartialRepaymentOnFreshPlanIsRecordedCompletely() {
+        RepaymentService.RepaymentResult result = service.repay(CUSTOMER, command("single-350", "350.00"));
+
+        assertThat(result.principalApplied()).isEqualByComparingTo("350.00");
+        assertThat(result.paidInstallments()).isEqualTo(1);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("550.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+        assertThat(schedules.get(1).getPaidPrincipal()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    void amountAboveUnpaidPrincipalIsRejectedBeforeMoneyMoves() {
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("too-much", "900.01")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_EXCEEDS_PRINCIPAL");
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("bad-scale", "10.001")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("INVALID_PARAMETER");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+    }
+
+    @Test
+    void eachPeriodAmountFollowsScheduleSoEveryCentIsWrittenBack() {
+        service.repay(CUSTOMER, command("pay-1", "300.00"));
+        service.repay(CUSTOMER, command("pay-2", "300.00"));
+        service.repay(CUSTOMER, command("pay-3", "300.00"));
+
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("0.00");
+        assertThat(schedules).allMatch(schedule -> schedule.getStatus().name().equals("PAID"));
+        assertThat(repayments.values()).allMatch(InstallmentRepayment::isCompleted);
+    }
+
+    @Test
+    void repaymentIsRejectedWhileSettlementIsInFlight() {
+        when(settlementIntentRepository.findFirstByPlanIdAndStatusIn(eq(PLAN_ID), any()))
+                .thenReturn(Optional.of(new SettlementIntent("settle-x", PLAN_ID, new BigDecimal("600.00"),
+                        new BigDecimal("6.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("606.00"), NOW)));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-9", "300.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("SETTLEMENT_IN_PROGRESS");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+    }
+
+    @Test
+    void samePaymentKeyReplaysWithoutSecondFinancialEffect() {
+        service.repay(CUSTOMER, command("pay-1", "300.00"));
+        RepaymentService.RepaymentResult replay = service.repay(CUSTOMER, command("pay-1", "300.00"));
+
+        assertThat(replay.replayed()).isTrue();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        verify(accountPort, org.mockito.Mockito.times(1))
+                .applyRepayment(anyString(), any(), anyString());
+    }
+
+    @Test
+    void paymentKeyReusedWithDifferentAmountIsRejected() {
+        service.repay(CUSTOMER, command("pay-1", "300.00"));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-1", "200.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("IDEMPOTENCY_KEY_CONFLICT");
+    }
+
+    @Test
+    void settledPlanRejectsRepayment() {
+        plan.settle("settle-1", NOW.minusMinutes(5));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-3", "300.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_NOT_ALLOWED");
+    }
+
+    @Test
+    void accountFailureLeavesRepaymentPendingAndResumable() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new RemoteServiceException("account-service", "timeout"))
+                .thenReturn(new BigDecimal("864.00"));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-4", "300.00")))
+                .isInstanceOf(RemoteServiceException.class);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("900.00");
+        assertThat(repayments.get("pay-4").getStatus()).isEqualTo(InstallmentRepayment.PENDING);
+
+        RepaymentService.RepaymentResult resumed = service.repay(CUSTOMER, command("pay-4", "300.00"));
+
+        assertThat(resumed.principalApplied()).isEqualByComparingTo("300.00");
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+    }
+
+    @Test
+    void accountBusinessRejectionMarksFailedWithoutMovingMoney() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-5", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(repayments.get("pay-5").getStatus()).isEqualTo(InstallmentRepayment.FAILED);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("900.00");
+    }
+
+    @Test
+    void reconciliationCompletesInterruptedRepayment() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new RemoteServiceException("account-service", "timeout"))
+                .thenReturn(new BigDecimal("864.00"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-6", "300.00")))
+                .isInstanceOf(RemoteServiceException.class);
+
+        InstallmentRepayment pending = repayments.get("pay-6");
+        when(repaymentRepository.findByStatusInAndUpdatedAtBefore(any(), any())).thenReturn(List.of(pending));
+
+        int completed = service.reconcilePending();
+
+        assertThat(completed).isEqualTo(1);
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(pending.getStatus()).isEqualTo(InstallmentRepayment.COMPLETED);
+    }
+
+    @Test
+    void repaymentEffectIdDiffersFromSettlementEffectForSameClientKey() {
+        String repaymentEffect = com.carddemo.installment.domain.service.EffectIds.repayment(PLAN_ID, "final");
+        String settlementEffect = com.carddemo.installment.domain.service.EffectIds.settlement(PLAN_ID, "final");
+
+        assertThat(repaymentEffect).isNotEqualTo(settlementEffect);
+        assertThat(repaymentEffect).startsWith("REPAY-");
+        assertThat(settlementEffect).startsWith("SETTLE-");
+        assertThat(com.carddemo.installment.domain.service.EffectIds.repayment(PLAN_ID, "final"))
+                .isEqualTo(repaymentEffect);
+    }
+
+    /** A-R003a：FAILED 重试必须先在锁事务内持久化为在途，结算栅栏才能在远端动作前看到它。 */
+    @Test
+    void failedRetryPersistsInFlightBeforeRemoteEffect() {
+        java.util.concurrent.atomic.AtomicReference<String> statusDuringRemote =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean settlementBlocked =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        when(accountPort.applyRepayment(anyString(), any(), anyString())).thenAnswer(invocation -> {
+            InstallmentRepayment row = repayments.get("pay-inflight");
+            if (attempts.incrementAndGet() == 1) {
+                // 账户余额不足：明确拒绝，本次零资金
+                throw new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance");
+            }
+            statusDuringRemote.set(row.getStatus());
+            // 结算栅栏视角：此时 PG 中已存在 PENDING 行，结清会在任何资金动作前 409
+            settlementBlocked.set(repaymentRepository.existsByPlanIdAndStatus(PLAN_ID,
+                    InstallmentRepayment.PENDING));
+            return new BigDecimal("864.00");
+        });
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-inflight", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(repayments.get("pay-inflight").getStatus()).isEqualTo(InstallmentRepayment.FAILED);
+
+        RepaymentService.RepaymentResult retried = service.repay(CUSTOMER, command("pay-inflight", "300.00"));
+
+        assertThat(statusDuringRemote.get()).isEqualTo(InstallmentRepayment.PENDING);
+        assertThat(settlementBlocked.get()).isTrue();
+        assertThat(retried.principalApplied()).isEqualByComparingTo("300.00");
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(repayments.get("pay-inflight").getStatus()).isEqualTo(InstallmentRepayment.COMPLETED);
+    }
+
+    /** A-R003b：同一计划不同 paymentKey 也不得并行占用本金，第二个键在远端动作前拒绝。 */
+    @Test
+    void differentPaymentKeyIsRejectedWhileAnotherRepaymentIsInFlight() {
+        repayments.put("pay-other", new InstallmentRepayment("pay-other", PLAN_ID,
+                new BigDecimal("900.00"), NOW));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-second", "900.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_IN_PROGRESS");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+        verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("900.00");
+
+        // 在途请求完成（或失败）后同一键即可继续，栅栏不扩成永久禁止
+        repayments.get("pay-other").markCompleted(new BigDecimal("900.00"), NOW);
+
+        RepaymentService.RepaymentResult later = service.repay(CUSTOMER, command("pay-third", "10.00"));
+        assertThat(later.principalApplied()).isEqualByComparingTo("10.00");
+    }
+
+    /** A-R003c：锁交接窗口内同 key 被另一线程完成，本地只能按真实库状态回放一次。 */
+    @Test
+    void concurrentCompletionBeforeApplyIsNotAppliedTwice() {
+        when(planRepository.findForUpdate(PLAN_ID))
+                .thenReturn(Optional.of(plan))
+                .thenAnswer(invocation -> {
+                    // 另一线程在我取到计划锁之前完成了同 key 的 300 回写
+                    repayments.get("pay-race").markCompleted(new BigDecimal("300.00"), NOW);
+                    plan.repayPrincipal(new BigDecimal("300.00"));
+                    schedules.get(0).applyPrincipal(new BigDecimal("300.00"), NOW);
+                    return Optional.of(plan);
+                });
+
+        RepaymentService.RepaymentResult result = service.repay(CUSTOMER, command("pay-race", "300.00"));
+
+        assertThat(result.replayed()).isTrue();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(schedules.get(0).getPaidPrincipal()).isEqualByComparingTo("300.00");
+        assertThat(schedules.get(1).getPaidPrincipal()).isEqualByComparingTo("0.00");
+    }
+
+    private static String hashOf(String material) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.substring(0, 40);
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    @Test
+    void failedRepaymentRetryAfterSettlementMovesNoMoney() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(repayments.get("pay-fail").getStatus()).isEqualTo(InstallmentRepayment.FAILED);
+
+        // 计划随后被结清（真实业务动作），用同一失败 key 重试
+        plan.settle("settle-x", NOW.minusMinutes(1));
+        org.mockito.Mockito.clearInvocations(accountPort, ledgerPort);
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail", "300.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_NOT_ALLOWED");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+        verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void failedRepaymentRetryDuringSettlementIsRejectedBeforeMoneyMoves() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail2", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+
+        when(settlementIntentRepository.findFirstByPlanIdAndStatusIn(eq(PLAN_ID), any()))
+                .thenReturn(Optional.of(new SettlementIntent("settle-y", PLAN_ID, new BigDecimal("900.00"),
+                        new BigDecimal("9.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("909.00"), NOW)));
+        org.mockito.Mockito.clearInvocations(accountPort, ledgerPort);
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-fail2", "300.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("SETTLEMENT_IN_PROGRESS");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+    }
+
+    @Test
+    void failedRepaymentRetryOnActivePlanStillRecovers() {
+        when(accountPort.applyRepayment(anyString(), any(), anyString()))
+                .thenThrow(new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance"))
+                .thenReturn(new BigDecimal("864.00"));
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-ok", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+
+        RepaymentService.RepaymentResult recovered = service.repay(CUSTOMER, command("pay-ok", "300.00"));
+
+        assertThat(recovered.replayed()).isFalse();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(schedules.get(0).getStatus().name()).isEqualTo("PAID");
+    }
+}

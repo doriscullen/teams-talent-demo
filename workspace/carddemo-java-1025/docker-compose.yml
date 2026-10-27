@@ -141,6 +141,50 @@ services:
       customer-service:
         condition: service_started
 
+  ledger-service:
+    build:
+      context: ./services/ledger-service
+    container_name: carddemo-ledger
+    environment:
+      SERVER_PORT: 8089
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: carddemo_ledger
+      DB_USER: carddemo
+      DB_PASSWORD: carddemo
+    ports:
+      - "8089:8089"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  installment-service:
+    build:
+      context: ./services/installment-service
+    container_name: carddemo-installment
+    environment:
+      SERVER_PORT: 8088
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: carddemo_installment
+      DB_USER: carddemo
+      DB_PASSWORD: carddemo
+      IAM_TOKEN_SECRET: ${IAM_TOKEN_SECRET:-carddemo-demo-secret-change-me}
+      ACCOUNT_SERVICE_URL: http://account-service:8084
+      TRANSACTION_SERVICE_URL: http://transaction-service:8085
+      LEDGER_SERVICE_URL: http://ledger-service:8089
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      account-service:
+        condition: service_started
+      transaction-service:
+        condition: service_started
+      ledger-service:
+        condition: service_started
+
   web-ui:
     build:
       context: ./services/web-ui
@@ -154,6 +198,7 @@ services:
       TRANSACTION_SERVICE_URL: http://transaction-service:8085
       AUTHORIZATION_SERVICE_URL: http://authorization-service:8086
       MARKETING_SERVICE_URL: http://marketing-service:8087
+      INSTALLMENT_SERVICE_URL: http://installment-service:8088
     ports:
       - "8090:8080"
     depends_on:
@@ -170,6 +215,8 @@ services:
       authorization-service:
         condition: service_started
       marketing-service:
+        condition: service_started
+      installment-service:
         condition: service_started
 
   marketing-service:
