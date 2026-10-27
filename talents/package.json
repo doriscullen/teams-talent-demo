@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "codegraph:export": "node tools/export-codegraph.mjs",
+    "test:codegraph:e2e": "node --import tsx tests/codegraph-browser.ts",
     "build": "node tools/build.mjs",
     "start": "node --import tsx server/index.ts",
     "dev": "npm run build && npm start",
@@ -24,6 +26,8 @@
   "dependencies": {
     "@ant-design/icons": "6.3.4",
     "antd": "6.6.3",
+    "d3-force-3d": "3.0.6",
+    "force-graph": "^1.52.0",
     "marked": "15.0.12",
     "react": "19.1.1",
     "react-dom": "19.1.1"

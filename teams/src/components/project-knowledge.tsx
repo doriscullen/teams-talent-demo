@@ -39,7 +39,7 @@ function ArtifactDrawer({ artifact, onClose }: { artifact: PublishedArtifact; on
       ...(artifact.stats ?? []).map(([label, value]) => ({ key: label, label, children: value })),
     ]} />
     {artifact.kind === 'index'
-      ? <p className="muted">索引类知识通过 MCP 在线查询，开发者在 Talents 应用后由 iCode 直接调用，始终使用最新版本。</p>
+      ? <><p className="muted">索引类知识通过 MCP 在线查询，开发者在 Talents 应用后由 iCode 直接调用。</p>{artifact.id === 'a-cg-java' && <Button href={talentLink('review', { projectId: artifact.projectId ?? undefined }) + '&id=' + encodeURIComponent(artifact.id)} target="_blank" rel="noreferrer">查看真实代码图谱</Button>}</>
       : <>{artifact.files.length > 1 && <Segmented className="talents-file-tabs" value={path} onChange={value => setPath(value as string)} options={artifact.files.map(item => ({ value: item.path, label: item.title }))} />}
         {file && <FileView artifact={artifact} file={file} />}</>}
   </Drawer>;

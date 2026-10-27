@@ -108,7 +108,7 @@ export function seedState(): TalentsState {
     // basis: the source state the artifact was built from (a document version, or a commit for code).
     artifacts: [
       { id: 'a-cg-java', projectId: PROJECT_ID, cap: 'codegraph', name: 'carddemo-java-1025 CodeGraph', desc: '查询 carddemo-java-1025 中类、方法的定义与调用关系。', sources: [REPO_ID], kind: 'index',
-        stats: [['文件', '1,284'], ['节点', '41,206'], ['关系', '152,883']], mcpName: 'codegraph',
+        stats: [], mcpName: 'codegraph',
         published: { version: 3, at: '2026-10-26 02:05', note: '同步代码变化：3 个新提交', delivery: 'cloud', agents: ['Code'], basis: { commit: '4e1b7c2' }, auto: true }, draft: null },
       { id: 'a-docidx', projectId: PROJECT_ID, cap: 'doc-index', name: '信用卡营销交付文档 RAG 检索', desc: '按问题检索信用卡营销交付文档中的相关段落。', sources: [DOCSET_ID], kind: 'index',
         stats: [['文档', '3'], ['片段', '146'], ['向量维度', '1,024']], mcpName: 'docs-rag',

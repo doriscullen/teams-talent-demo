@@ -7,6 +7,7 @@ import { content, skillTree } from '../content.ts';
 import { capability } from '../demo/model.ts';
 import * as K from '../demo/knowledge.ts';
 import { Fields } from './ui.tsx';
+import { CodeGraphView } from './codegraph.tsx';
 
 /** Markdown with its front matter shown as fields and the added lines of ```diff blocks highlighted. */
 export function Markdown({ text }: { text: string }) {
@@ -70,6 +71,7 @@ export function FileContent({ st, a, file, text }: { st: TalentsState; a: Artifa
 }
 
 export function IndexSummary({ a }: { a: Artifact }) {
+  if (a.id === 'a-cg-java') return <CodeGraphView />;
   return <div className="index-summary"><div className="stat-row">{(a.stats ?? []).map(([label, value]) => <div className="stat" key={label}><b>{value}</b><span>{label}</span></div>)}</div>
     <p>{a.desc}</p><p className="ui-note">索引通过在线查询使用，不需要打开阅读。</p></div>;
 }
@@ -112,6 +114,7 @@ export function ArtifactPreview({ st, a, which = 'published', onClose }: { st: T
   const cap = capability(st, a.cap);
   const title = <div><div className="caption">{cap.name}</div>{a.name}</div>;
   if (K.isIndex(a)) return <Modal open title={title} footer={null} onCancel={onClose} width={640}><IndexSummary a={a} /></Modal>;
+  if (K.isIndex(a)) return <Modal open title={title} footer={null} onCancel={onClose} width={a.id === 'a-cg-java' ? 1280 : 640} destroyOnHidden><IndexSummary a={a} /></Modal>;
   const groups: FileGroup[] = K.fileGroups(a, list).map((g, i) => ({ title: g.title || (i ? '' : '内容'), items: g.items.map(f => ({ key: f, label: K.fileLabel(f), indent: !!g.title && a.folder === 'miner' })) }));
   (a.skills ?? []).forEach(name => groups.push({ title: '配套 Skill：' + name, items: skillTree(name).map(f => ({ key: 'skills/' + name + '/' + f, label: f, indent: f.includes('/') })) }));
   const keys = groups.flatMap(g => g.items.map(it => it.key));

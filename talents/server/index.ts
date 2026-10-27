@@ -8,6 +8,7 @@ import { Store } from './store.ts';
 import { HttpError } from './model.ts';
 import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.ts';
 import { KnowledgeExporter } from './export.ts';
+import { codegraphSnapshot, withCodegraph } from './codegraph.ts';
 
 const store = new Store(); await store.init();
 const exporter = new KnowledgeExporter(sharedDir);
@@ -18,7 +19,7 @@ async function bootstrap() {
   const teams = await readTeamsData();
   return {
     revision: store.state.revision,
-    state: clientState(store.state, teams.snapshot),
+    state: clientState(withCodegraph(store.state), teams.snapshot),
     teams: { origin: teamsOrigin, from: teams.from, exportedAt: teams.snapshot.exportedAt },
   };
 }
@@ -57,6 +58,20 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
       if (method === 'GET' && path === '/api/health') { json(200, { app: 'talents-carddemo', service: 'talents', workspaceRoot: root, stateRoot: runtimeDir, sharedDir, version: '0.1.0', pid: process.pid, origin, teamsOrigin }); return; }
       if (method === 'GET' && path === '/api/bootstrap') { json(200, await bootstrap()); return; }
       if (method === 'GET' && path === '/api/skill') { json(200, await readSkill((await readTeamsData()).snapshot, url.searchParams.get('project') ?? '', url.searchParams.get('id') ?? '')); return; }
+      if (method === 'GET' && path === '/api/codegraph/carddemo') {
+        const { sources, ...graph } = codegraphSnapshot();
+        json(200, graph); return;
+      }
+      if (method === 'GET' && path === '/api/codegraph/carddemo/source') {
+        const graph = codegraphSnapshot();
+        if (url.searchParams.get('snapshot') !== graph.metadata.snapshotId) throw new HttpError('图谱已更新，请刷新后重试', 409);
+        const node = graph.nodes.find(n => n.id === url.searchParams.get('id'));
+        if (!node) throw new HttpError('符号不存在', 404);
+        const source = graph.sources[node.filePath];
+        if (source === undefined) throw new HttpError('快照中没有此源码', 404);
+        const start = Math.max(1, node.startLine - 3), end = Math.min(source.split('\n').length, node.endLine + 3, start + 299);
+        json(200, { filePath: node.filePath, startLine: start, endLine: end, content: source.split('\n').slice(start - 1, end).join('\n') }); return;
+      }
       if (method === 'PUT' && path === '/api/state') {
         const body = await bodyJson(request);
         if (!Number.isInteger(body.revision)) throw new HttpError('缺少 revision', 400);

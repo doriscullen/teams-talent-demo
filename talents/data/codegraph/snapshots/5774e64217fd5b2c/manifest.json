@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "snapshotId": "5774e64217fd5b2c",
+  "metadata": {
+    "project": "carddemo",
+    "root": "workspace/carddemo-java-1025",
+    "toolVersion": "1.6.0",
+    "indexedAt": "2026-10-27T12:16:47.022Z",
+    "exportedAt": "2026-10-27T12:25:54.119Z",
+    "revision": "1a89a57c835d908ddb3fd71c0c2d1c867bb4b892",
+    "sourceDigest": "75ddb609941bbb081cb0ba301e8d4f924af70349abfe896305b59799e0fc10ec",
+    "snapshotId": "5774e64217fd5b2c",
+    "files": 324,
+    "nodes": 4606,
+    "edges": 7676,
+    "parseErrors": 0,
+    "unresolved": 8563,
+    "crossServiceCalls": 196,
+    "nodeKinds": {
+      "class": 145,
+      "constant": 399,
+      "enum": 7,
+      "enum_member": 20,
+      "field": 396,
+      "file": 308,
+      "function": 114,
+      "import": 1754,
+      "interface": 38,
+      "method": 1072,
+      "namespace": 298,
+      "route": 55
+    },
+    "edgeKinds": {
+      "contains": 3987,
+      "references": 956,
+      "calls": 2101,
+      "imports": 354,
+      "instantiates": 258,
+      "extends": 18,
+      "implements": 2
+    }
+  },
+  "databaseSchema": [
+    {
+      "version": 1,
+      "applied_at": 1793103406000,
+      "description": "Initial schema"
+    },
+    {
+      "version": 9,
+      "applied_at": 1793103406826,
+      "description": "Initial schema includes all migrations"
+    }
+  ],
+  "checksums": {
+    "graph.json": "bb18d96aa1f0727b92d4444f4d8769f5d7636a2bcc016fa5b94acfb8405bf54a",
+    "codegraph.db.gz": "2f7093aa0dab39c49f4f6a297d3ad717a666d3407c1dc55b331539ed4d604eba",
+    "codegraph.db": "1e53f1a52cfb11dc34d1cb2b0a49793af31e8ea7fc658dfbebc1d8201403ecb3"
+  },
+  "sizes": {
+    "graph.json": 4430676,
+    "codegraph.db.gz": 2550218,
+    "codegraph.db": 14077952
+  }
+}
