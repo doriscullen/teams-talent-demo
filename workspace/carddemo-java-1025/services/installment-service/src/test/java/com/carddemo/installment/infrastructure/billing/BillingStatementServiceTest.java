@@ -4,7 +4,9 @@ import com.carddemo.installment.application.port.AccountPort;
 import com.carddemo.installment.application.port.BillingPort;
 import com.carddemo.installment.application.port.ClockProvider;
 import com.carddemo.installment.application.port.TransactionPort;
+import com.carddemo.installment.domain.model.EligibilityFlag;
 import com.carddemo.installment.domain.model.PrincipalAllocation;
+import com.carddemo.installment.domain.repository.EligibilityFlagRepository;
 import com.carddemo.installment.domain.repository.PrincipalAllocationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ class BillingStatementServiceTest {
 
     private TransactionPort transactionPort;
     private PrincipalAllocationRepository allocationRepository;
+    private EligibilityFlagRepository flagRepository;
     private BillingStatementService service;
 
     @BeforeEach
@@ -38,9 +41,12 @@ class BillingStatementServiceTest {
                 ACCOUNT, "Y", new BigDecimal("2450.75"), new BigDecimal("8000.00"), LocalDate.of(2018, 3, 9)));
         transactionPort = mock(TransactionPort.class);
         allocationRepository = mock(PrincipalAllocationRepository.class);
+        flagRepository = mock(EligibilityFlagRepository.class);
+        when(flagRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
         ClockProvider clock = mock(ClockProvider.class);
         when(clock.today()).thenReturn(TODAY);
-        service = new BillingStatementService(accountPort, transactionPort, allocationRepository, clock);
+        service = new BillingStatementService(accountPort, transactionPort, allocationRepository,
+                flagRepository, clock);
     }
 
     @Test
@@ -108,5 +114,31 @@ class BillingStatementServiceTest {
         assertThat(statement.billPrincipal()).isEqualByComparingTo("0.00");
         assertThat(statement.availablePrincipal()).isEqualByComparingTo("0.00");
         assertThat(statement.lines()).isEmpty();
+    }
+
+    @Test
+    void disputedAndDelinquentTransactionsAreExcludedFromBillPrincipal() {
+        when(transactionPort.listAccountTransactions(ACCOUNT, 0, 100)).thenReturn(List.of(
+                new TransactionPort.TransactionView("0000000000000011", ACCOUNT, "3344556677889900", "01",
+                        "0001", "Disputed purchase", new BigDecimal("900.00"),
+                        LocalDateTime.of(2026, 10, 1, 9, 0), "POSTED"),
+                new TransactionPort.TransactionView("0000000000000012", ACCOUNT, "3344556677889900", "01",
+                        "0001", "Delinquent purchase", new BigDecimal("600.00"),
+                        LocalDateTime.of(2026, 10, 2, 9, 0), "POSTED"),
+                new TransactionPort.TransactionView("0000000000000013", ACCOUNT, "3344556677889900", "01",
+                        "0001", "Clean purchase", new BigDecimal("800.00"),
+                        LocalDateTime.of(2026, 10, 3, 9, 0), "POSTED")));
+        when(allocationRepository.findByTransactionIdIn(any())).thenReturn(List.of());
+        when(flagRepository.findById("0000000000000011")).thenReturn(java.util.Optional.of(
+                new EligibilityFlag("0000000000000011", true, false, LocalDateTime.of(2026, 10, 4, 9, 0))));
+        when(flagRepository.findById("0000000000000012")).thenReturn(java.util.Optional.of(
+                new EligibilityFlag("0000000000000012", false, true, LocalDateTime.of(2026, 10, 4, 9, 0))));
+
+        BillingPort.BillingStatement statement = service.currentStatement(ACCOUNT);
+
+        assertThat(statement.lines()).extracting(BillingPort.BillingLine::transactionId)
+                .containsExactly("0000000000000013");
+        assertThat(statement.billPrincipal()).isEqualByComparingTo("800.00");
+        assertThat(statement.availablePrincipal()).isEqualByComparingTo("800.00");
     }
 }

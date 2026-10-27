@@ -1,6 +1,7 @@
 package com.carddemo.installment.infrastructure.client;
 
 import com.carddemo.installment.application.port.AccountPort;
+import com.carddemo.installment.domain.exception.BusinessRuleException;
 import com.carddemo.installment.domain.exception.RemoteServiceException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -55,17 +56,24 @@ public class AccountRestClient implements AccountPort {
     }
 
     @Override
-    public BigDecimal applyRepayment(String accountId, BigDecimal amount) {
+    public BigDecimal applyRepayment(String accountId, BigDecimal amount, String effectId) {
         try {
             Map<?, ?> body = restClient.post()
                     .uri("/api/v1/accounts/{accountId}/payments", accountId)
-                    .body(Map.of("amount", amount))
+                    .body(Map.of("amount", amount, "effectId", effectId))
                     .retrieve()
                     .body(Map.class);
             if (body == null) {
                 throw new RemoteServiceException("account-service", "Empty payment response");
             }
             return decimal(body.get("currentBalance"));
+        } catch (HttpClientErrorException ex) {
+            if (ex.getStatusCode().is4xxClientError()) {
+                // 账户端业务拒绝（如余额不足）：重试无法成功，按业务错误返回并冲正已过账分录
+                throw new BusinessRuleException("REPAYMENT_REJECTED",
+                        "Account service rejected the repayment: " + ex.getResponseBodyAsString());
+            }
+            throw new RemoteServiceException("account-service", "Repayment failed", ex);
         } catch (RestClientException ex) {
             throw new RemoteServiceException("account-service", "Repayment failed", ex);
         }

@@ -58,4 +58,32 @@ public class AuditRetry {
     public Long getRetryId() {
         return retryId;
     }
+
+    public String getActor() {
+        return actor;
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public String getResourceType() {
+        return resourceType;
+    }
+
+    public String getResourceId() {
+        return resourceId;
+    }
+
+    public String getPayload() {
+        return payload;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 }

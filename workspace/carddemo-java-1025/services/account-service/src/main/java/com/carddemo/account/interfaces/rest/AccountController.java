@@ -5,6 +5,7 @@ import com.carddemo.account.domain.model.Account;
 import com.carddemo.account.interfaces.rest.dto.AccountResponse;
 import com.carddemo.account.interfaces.rest.dto.AmountRequest;
 import com.carddemo.account.interfaces.rest.dto.CashbackCreditRequest;
+import com.carddemo.account.interfaces.rest.dto.PaymentRequest;
 import com.carddemo.account.interfaces.rest.dto.PostingRequest;
 import com.carddemo.account.interfaces.rest.dto.UpdateAccountRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,8 +60,9 @@ public class AccountController {
 
     @PostMapping("/{accountId}/payments")
     public AccountResponse pay(@PathVariable String accountId,
-                               @Valid @RequestBody AmountRequest request) {
-        return AccountResponse.from(accountService.applyBillPayment(accountId, request.amount()));
+                               @Valid @RequestBody PaymentRequest request) {
+        return AccountResponse.from(accountService.applyIdempotentPayment(accountId, request.amount(),
+                request.effectId()));
     }
 
     @PostMapping("/{accountId}/interest-accruals")

@@ -7,10 +7,13 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface PrincipalAllocationRepository extends JpaRepository<PrincipalAllocation, Long> {
 
     List<PrincipalAllocation> findByTransactionIdIn(Collection<String> transactionIds);
+
+    Optional<PrincipalAllocation> findFirstByTransactionId(String transactionId);
 
     boolean existsByTransactionId(String transactionId);
 

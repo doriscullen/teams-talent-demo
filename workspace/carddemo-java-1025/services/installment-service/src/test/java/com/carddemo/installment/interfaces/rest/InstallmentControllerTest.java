@@ -1,8 +1,10 @@
 package com.carddemo.installment.interfaces.rest;
 
 import com.carddemo.installment.application.InstallmentApplicationService;
+import com.carddemo.installment.application.EligibilityQueryService;
 import com.carddemo.installment.application.InstallmentQueryService;
 import com.carddemo.installment.application.PreviewService;
+import com.carddemo.installment.application.RepaymentService;
 import com.carddemo.installment.application.SettlementService;
 import com.carddemo.installment.domain.exception.BusinessRuleException;
 import com.carddemo.installment.domain.exception.ForbiddenException;
@@ -37,6 +39,8 @@ class InstallmentControllerTest {
     private InstallmentApplicationService applicationService;
     private InstallmentQueryService queryService;
     private SettlementService settlementService;
+    private RepaymentService repaymentService;
+    private EligibilityQueryService eligibilityQueryService;
     private MockMvc mvc;
 
     @BeforeEach
@@ -45,8 +49,11 @@ class InstallmentControllerTest {
         applicationService = mock(InstallmentApplicationService.class);
         queryService = mock(InstallmentQueryService.class);
         settlementService = mock(SettlementService.class);
+        repaymentService = mock(RepaymentService.class);
+        eligibilityQueryService = mock(EligibilityQueryService.class);
         mvc = MockMvcBuilders.standaloneSetup(
-                        new InstallmentController(previewService, applicationService, queryService, settlementService))
+                        new InstallmentController(previewService, applicationService, queryService,
+                                settlementService, repaymentService, eligibilityQueryService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -152,7 +159,7 @@ class InstallmentControllerTest {
 
     @Test
     void previewReturnsComputedSchedule() throws Exception {
-        when(previewService.preview(any())).thenReturn(new PreviewService.PreviewResult("token", "TRANSACTION",
+        when(previewService.preview(any(), any())).thenReturn(new PreviewService.PreviewResult("token", "TRANSACTION",
                 "0000000000000200", new BigDecimal("1000.00"), 6, new BigDecimal("0.0055"),
                 new BigDecimal("19.25"), new BigDecimal("172.16"),
                 List.of(new com.carddemo.installment.domain.service.FeeScheduleCalculator.Period(1,
@@ -179,5 +186,70 @@ class InstallmentControllerTest {
                         .param("accountId", "00000000006").param("size", "200")
                         .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void eligibilityReturnsServerSideReasonAndExistingPlan() throws Exception {
+        when(eligibilityQueryService.transactionEligibility(any(), eq("00000000006"), eq("0000000000000200")))
+                .thenReturn(new EligibilityQueryService.TransactionEligibility("0000000000000200",
+                        "00000000006", new BigDecimal("1000.00"), false, "DISPUTED", true,
+                        "IP0001", new BigDecimal("100.00")));
+
+        mvc.perform(get("/api/v1/installments/eligibility")
+                        .param("accountId", "00000000006")
+                        .param("transactionId", "0000000000000200")
+                        .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(false))
+                .andExpect(jsonPath("$.reason").value("DISPUTED"))
+                .andExpect(jsonPath("$.alreadyInstalled").value(true))
+                .andExpect(jsonPath("$.existingPlanId").value("IP0001"));
+    }
+
+    @Test
+    void repaymentReturnsRemainingPrincipalAndIdempotentReplay() throws Exception {
+        InstallmentPlan plan = plan();
+        when(plan.getRemainingPrincipal()).thenReturn(new BigDecimal("600.00"));
+        when(repaymentService.repay(any(), any())).thenReturn(
+                new RepaymentService.RepaymentResult(plan, new BigDecimal("300.00"), 1, false));
+
+        mvc.perform(post("/api/v1/installments/IP0001/repayments")
+                        .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"pay-1\",\"amount\":300.00}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.remainingPrincipal").value(600.00))
+                .andExpect(jsonPath("$.paidInstallments").value(1))
+                .andExpect(jsonPath("$.replayed").value(false));
+    }
+
+    @Test
+    void clientFeeRebateIsRejectedAsBadRequest() throws Exception {
+        when(settlementService.settle(any(), any()))
+                .thenThrow(new BusinessRuleException("INVALID_FEE_REBATE", "Fee rebate is fixed at 0.00"));
+
+        mvc.perform(post("/api/v1/installments/IP0001/early-settlement")
+                        .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"settlementIdempotencyKey\":\"settle-9\",\"feeRebate\":10000.00}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_FEE_REBATE"));
+    }
+
+    @Test
+    void billEndpointReturnsRealStatementProjection() throws Exception {
+        when(eligibilityQueryService.currentBill(any(), eq("00000000006"))).thenReturn(
+                new EligibilityQueryService.BillView("BILL20261000000000006", "00000000006",
+                        java.time.LocalDate.of(2026, 9, 9), java.time.LocalDate.of(2026, 10, 27),
+                        new BigDecimal("1500.00"), new BigDecimal("1000.00"), new BigDecimal("500.00"),
+                        List.of(new EligibilityQueryService.BillLine("0000000000000005",
+                                new BigDecimal("1500.00"), java.time.LocalDate.of(2026, 10, 1), "Purchase"))));
+
+        mvc.perform(get("/api/v1/installments/bills/00000000006")
+                        .requestAttr(InstallmentPrincipal.ATTRIBUTE, CUSTOMER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.billId").value("BILL20261000000000006"))
+                .andExpect(jsonPath("$.availablePrincipal").value(1000.00))
+                .andExpect(jsonPath("$.lines[0].transactionId").value("0000000000000005"));
     }
 }

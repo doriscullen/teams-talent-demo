@@ -5,7 +5,10 @@ import com.carddemo.installment.domain.exception.NotFoundException;
 import com.carddemo.installment.domain.model.InstallmentPlan;
 import com.carddemo.installment.domain.model.PlanStatus;
 import com.carddemo.installment.domain.model.SourceType;
+import com.carddemo.installment.application.port.AuditPort;
+import com.carddemo.installment.application.port.ClockProvider;
 import com.carddemo.installment.domain.repository.InstallmentPlanRepository;
+import com.carddemo.installment.domain.repository.InstallmentRepaymentRepository;
 import com.carddemo.installment.domain.repository.InstallmentScheduleRepository;
 import com.carddemo.installment.infrastructure.security.AccessGuard;
 import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
@@ -36,13 +39,18 @@ class InstallmentQueryServiceTest {
 
     private InstallmentPlanRepository planRepository;
     private InstallmentScheduleRepository scheduleRepository;
+    private InstallmentRepaymentRepository repaymentRepository;
+    private AuditPort auditPort;
     private InstallmentQueryService service;
 
     @BeforeEach
     void setUp() {
         planRepository = mock(InstallmentPlanRepository.class);
         scheduleRepository = mock(InstallmentScheduleRepository.class);
-        service = new InstallmentQueryService(planRepository, scheduleRepository, mock(AccessGuard.class));
+        repaymentRepository = mock(InstallmentRepaymentRepository.class);
+        auditPort = mock(AuditPort.class);
+        service = new InstallmentQueryService(planRepository, scheduleRepository, repaymentRepository,
+                mock(AccessGuard.class), auditPort, mock(ClockProvider.class));
     }
 
     private InstallmentPlan plan() {
@@ -97,5 +105,32 @@ class InstallmentQueryServiceTest {
 
         assertThat(view.warning()).isEqualTo("SCHEDULE_INCONSISTENT");
         verify(scheduleRepository).findByPlanIdOrderByInstallmentNo("IP0001");
+    }
+
+    @Test
+    void backOfficeListAuditsQueryWithActorAndFilters() {
+        when(planRepository.findByAccountIdAndStatus(eq(ACCOUNT), eq(PlanStatus.ACTIVE), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(plan())));
+        when(scheduleRepository.findByPlanIdOrderByInstallmentNo("IP0001")).thenReturn(List.of());
+
+        InstallmentQueryService.PlanPage page = service.backOfficeList(CUSTOMER, ACCOUNT, "ACTIVE", 2, 10);
+
+        assertThat(page.items()).hasSize(1);
+        verify(auditPort).record(eq("USER0001"), eq("INSTALLMENT_BACKOFFICE_QUERYED"), eq("INSTALLMENT_PLAN"),
+                eq(ACCOUNT), org.mockito.ArgumentMatchers.contains("page=2"));
+    }
+
+    @Test
+    void backOfficeDetailAuditsView() {
+        when(planRepository.findById("IP0001")).thenReturn(Optional.of(plan()));
+        when(scheduleRepository.findByPlanIdOrderByInstallmentNo("IP0001")).thenReturn(List.of());
+        when(repaymentRepository.findByPlanIdOrderByCreatedAtAsc("IP0001")).thenReturn(List.of());
+
+        InstallmentQueryService.PlanView view = service.backOfficeDetail(CUSTOMER, "IP0001");
+
+        assertThat(view.planId()).isEqualTo("IP0001");
+        assertThat(view.repayments()).isEmpty();
+        verify(auditPort).record(eq("USER0001"), eq("INSTALLMENT_BACKOFFICE_VIEWED"), eq("INSTALLMENT_PLAN"),
+                eq("IP0001"), any());
     }
 }

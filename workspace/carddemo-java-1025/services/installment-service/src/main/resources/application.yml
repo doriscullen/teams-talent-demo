@@ -49,6 +49,10 @@ installment:
     ttl-minutes: ${INSTALLMENT_PREVIEW_TTL_MINUTES:30}
   idempotency:
     window-minutes: ${INSTALLMENT_IDEMPOTENCY_WINDOW_MINUTES:30}
+  notification:
+    delivery-dir: ${INSTALLMENT_NOTIFICATION_DIR:/var/lib/carddemo/notifications}
+  workers:
+    enabled: ${INSTALLMENT_WORKERS_ENABLED:true}
   downstream:
     account-url: ${ACCOUNT_SERVICE_URL:http://localhost:8084}
     transaction-url: ${TRANSACTION_SERVICE_URL:http://localhost:8085}

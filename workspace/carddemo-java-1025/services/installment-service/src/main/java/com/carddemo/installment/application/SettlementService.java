@@ -7,6 +7,7 @@ import com.carddemo.installment.application.port.LedgerPort;
 import com.carddemo.installment.application.port.NotificationPort;
 import com.carddemo.installment.domain.exception.BusinessRuleException;
 import com.carddemo.installment.domain.exception.NotFoundException;
+import com.carddemo.installment.domain.exception.RemoteServiceException;
 import com.carddemo.installment.domain.model.InstallmentPlan;
 import com.carddemo.installment.domain.model.InstallmentPolicy;
 import com.carddemo.installment.domain.model.SettlementIntent;
@@ -22,6 +23,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,13 +31,19 @@ import java.util.List;
  * <ol>
  *   <li>同 settlementKey 重放 → 200 返回首次结果，不重复扣款/分录/释放；</li>
  *   <li>不同新 key 对非 ACTIVE 计划 → 409 SETTLEMENT_NOT_ALLOWED；</li>
- *   <li>ledger 过账失败 → 503 且计划保持 ACTIVE、不释放额度；</li>
- *   <li>本金已在 current_balance，结清只做一次真实还款，不额外释放授权额度（BR-INS-10）。</li>
+ *   <li>计划行锁 + 单计划在途意图唯一约束：同键或异键并发只产生一次资金效果；</li>
+ *   <li>ledger 过账与真实还款都用稳定作用ID（settlementKey / SETTLE-settlementKey），
+ *       任一步骤响应丢失都可在同键重试中安全续跑；</li>
+ *   <li>手续费减免本轮由服务端固定为 0.00（A-005），客户/客服传入非零减免一律 400。</li>
  * </ol>
- * 步骤用独立事务落盘意图，保证跨服务步骤失败后可凭同一 key 继续而不重复计账。
  */
 @Service
 public class SettlementService {
+
+    private static final String CASH = "1001-CASH-COLLECTION";
+    private static final String RECEIVABLE = "1100-INSTALLMENT-RECEIVABLE";
+    private static final String PENALTY_INCOME = "4002-SETTLEMENT-PENALTY-INCOME";
+    private static final String REVERSAL_SUFFIX = "-REV";
 
     public record SettlementCommand(String planId, String settlementKey, BigDecimal feeRebate) {
     }
@@ -86,66 +94,202 @@ public class SettlementService {
         InstallmentPlan plan = planRepository.findById(command.planId())
                 .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
         accessGuard.requireWriteAccess(principal, plan.getAccountId());
+        requireServerSideRebate(command.feeRebate());
 
         SettlementIntent existing = intentRepository.findById(command.settlementKey()).orElse(null);
-        if (existing != null && !existing.getPlanId().equals(command.planId())) {
-            throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
-                    "Settlement key is already used by another plan.");
+        if (existing != null) {
+            if (!existing.getPlanId().equals(command.planId())) {
+                throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
+                        "Settlement key is already used by another plan.");
+            }
+            return resumeOrReplay(principal, existing);
         }
-        if (existing != null && existing.isCompleted()) {
-            SettlementCalculator.SettlementQuote quote = new SettlementCalculator.SettlementQuote(
-                    existing.getPrincipal(), existing.getPenaltyFee(), existing.getFeeRebate(), existing.getAmount());
-            return new SettlementResult(plan, quote, true);
+
+        SettlementIntent intent = transactionTemplate.execute(status -> {
+            InstallmentPlan locked = planRepository.findForUpdate(command.planId())
+                    .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
+            if (!locked.isActive()) {
+                throw new BusinessRuleException("SETTLEMENT_NOT_ALLOWED", "Only ACTIVE plans can be settled.");
+            }
+            SettlementIntent inflight = intentRepository
+                    .findFirstByPlanIdAndStatusNot(command.planId(), SettlementIntent.COMPLETED)
+                    .orElse(null);
+            if (inflight != null && !inflight.getSettlementKey().equals(command.settlementKey())) {
+                throw new BusinessRuleException("CONCURRENT_SETTLEMENT",
+                        "Another settlement is in progress for this plan.");
+            }
+            SettlementIntent again = intentRepository.findById(command.settlementKey()).orElse(null);
+            if (again != null) {
+                return again;
+            }
+            SettlementCalculator.SettlementQuote quote = calculator.quote(locked.getRemainingPrincipal(),
+                    BigDecimal.ZERO.setScale(2), policy.getPenaltyRate());
+            return intentRepository.saveAndFlush(new SettlementIntent(command.settlementKey(),
+                    command.planId(), quote.remainingPrincipal(), quote.penaltyFee(), quote.feeRebate(),
+                    quote.settlementTotal(), clock.now()));
+        });
+        if (intent == null) {
+            throw new IllegalStateException("settlement intent was not persisted");
         }
+        return resumeOrReplay(principal, intent);
+    }
+
+    /** 结清试算（原文 4.2.05）：只读，不产生资金状态，供前端展示金额组成后再确认。 */
+    public SettlementCalculator.SettlementQuote quote(InstallmentPrincipal principal, String planId) {
+        InstallmentPolicy policy = policyRepository.findById((short) 1)
+                .orElseThrow(() -> new BusinessRuleException("CONFIGURATION_MISSING", "Installment policy is missing"));
+        InstallmentPlan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
+        accessGuard.requireWriteAccess(principal, plan.getAccountId());
         if (!plan.isActive()) {
             throw new BusinessRuleException("SETTLEMENT_NOT_ALLOWED", "Only ACTIVE plans can be settled.");
         }
+        return calculator.quote(plan.getRemainingPrincipal(), BigDecimal.ZERO.setScale(2),
+                policy.getPenaltyRate());
+    }
 
-        SettlementCalculator.SettlementQuote quote = calculator.quote(
-                plan.getRemainingPrincipal(), command.feeRebate(), policy.getPenaltyRate());
-
-        SettlementIntent intent = existing != null ? existing
-                : transactionTemplate.execute(status -> intentRepository.saveAndFlush(
-                        new SettlementIntent(command.settlementKey(), command.planId(),
-                                quote.remainingPrincipal(), quote.penaltyFee(), quote.feeRebate(),
-                                quote.settlementTotal(), clock.now())));
-
-        // ① 会计过账（按 settlementKey 幂等）
-        ledgerPort.postGroup(command.settlementKey(), "INSTALLMENT_SETTLEMENT", plan.getPlanId(), List.of(
-                new LedgerPort.JournalLine("1100-INSTALLMENT-RECEIVABLE", "CREDIT", quote.remainingPrincipal(),
-                        "settlement principal"),
-                new LedgerPort.JournalLine("4002-SETTLEMENT-PENALTY-INCOME", "CREDIT", quote.penaltyFee(),
-                        "settlement penalty"),
-                new LedgerPort.JournalLine("4003-SETTLEMENT-FEE-REBATE", "DEBIT", quote.feeRebate(),
-                        "settlement fee rebate")));
-        intent.markLedgerPosted(clock.now());
-        transactionTemplate.execute(status -> intentRepository.saveAndFlush(intent));
-
-        // ② 真实还款（只归还剩余本金一次）
-        accountPort.applyRepayment(plan.getAccountId(), quote.remainingPrincipal());
-
-        // ③ 状态落库：计划 SETTLED + 意图 COMPLETED（乐观锁冲突返回 409 CONCURRENT_MODIFICATION）
-        try {
-            SettlementCalculator.SettlementQuote finalQuote = quote;
-            transactionTemplate.execute(status -> {
-                InstallmentPlan loaded = planRepository.findById(command.planId()).orElseThrow();
-                loaded.settle(command.settlementKey(), clock.now());
-                planRepository.saveAndFlush(loaded);
-                intent.markCompleted(clock.now());
-                intentRepository.saveAndFlush(intent);
-                return finalQuote;
-            });
-        } catch (ObjectOptimisticLockingFailureException ex) {
-            throw new BusinessRuleException("CONCURRENT_MODIFICATION",
-                    "Plan state changed concurrently, please refresh and retry.");
+    private SettlementResult resumeOrReplay(InstallmentPrincipal principal, SettlementIntent intent) {
+        SettlementCalculator.SettlementQuote quote = quoteOf(intent);
+        if (intent.isFailed()) {
+            throw new BusinessRuleException("SETTLEMENT_FAILED",
+                    "A previous settlement attempt was rejected and reversed; please use a new settlement key.");
+        }
+        if (intent.isCompleted()) {
+            InstallmentPlan plan = planRepository.findById(intent.getPlanId())
+                    .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
+            return new SettlementResult(plan, quote, true);
         }
 
-        auditPort.record(principal.userId(), "INSTALLMENT_SETTLED", "INSTALLMENT_PLAN", plan.getPlanId(),
-                "remaining=" + quote.remainingPrincipal() + ",penalty=" + quote.penaltyFee()
-                        + ",rebate=" + quote.feeRebate() + ",total=" + quote.settlementTotal());
-        notificationPort.enqueue("SMS", plan.getAccountId(), "INSTALLMENT_SETTLED",
-                "planId=" + plan.getPlanId() + ";total=" + quote.settlementTotal());
-        InstallmentPlan settled = planRepository.findById(command.planId()).orElse(plan);
-        return new SettlementResult(settled, quote, false);
+        try {
+            // ① 会计过账（按 settlementKey 幂等，冲正/重复都只保留一组）
+            ledgerPort.postGroup(intent.getSettlementKey(), "INSTALLMENT_SETTLEMENT", intent.getPlanId(),
+                    settlementLines(quote));
+            markLedgerPosted(intent);
+
+            // ② 真实还款（effectId = SETTLE-<key>，账户端去重，响应丢失重试不会二次扣款）
+            accountPort.applyRepayment(planAccountId(intent.getPlanId()), quote.remainingPrincipal(),
+                    "SETTLE-" + intent.getSettlementKey());
+            markPaymentApplied(intent);
+
+            // ③ 状态落库：计划 SETTLED + 意图 COMPLETED
+            SettlementCalculator.SettlementQuote finalQuote = quote;
+            InstallmentPlan settled = transactionTemplate.execute(status -> complete(intent));
+            auditPort.record(principal.userId(), "INSTALLMENT_SETTLED", "INSTALLMENT_PLAN", intent.getPlanId(),
+                    "remaining=" + finalQuote.remainingPrincipal() + ",penalty=" + finalQuote.penaltyFee()
+                            + ",rebate=" + finalQuote.feeRebate() + ",total=" + finalQuote.settlementTotal());
+            notificationPort.enqueue("SMS", settled.getAccountId(), "INSTALLMENT_SETTLED",
+                    "planId=" + settled.getPlanId() + ";total=" + finalQuote.settlementTotal());
+            return new SettlementResult(settled, finalQuote, false);
+        } catch (BusinessRuleException | NotFoundException ex) {
+            // 账户端业务拒绝（余额不足等）：冲正本次结清分录；冲正成功才置 FAILED（重试需新键）
+            if (reverseLedger(intent, quote)) {
+                markFailed(intent, ex.getMessage());
+            }
+            throw ex;
+        } catch (RemoteServiceException ex) {
+            recordError(intent, ex.getMessage());
+            throw ex;
+        }
+    }
+
+    /** 结清冲正（A-001 对账补偿边界）：与结清分录方向相反且金额相等，保证无未冲正的孤立入账。 */
+    private boolean reverseLedger(SettlementIntent intent, SettlementCalculator.SettlementQuote quote) {
+        List<LedgerPort.JournalLine> lines = new ArrayList<>(3);
+        lines.add(new LedgerPort.JournalLine(CASH, "CREDIT", quote.settlementTotal(),
+                "reversal: settlement cash"));
+        lines.add(new LedgerPort.JournalLine(RECEIVABLE, "DEBIT", quote.remainingPrincipal(),
+                "reversal: settlement principal"));
+        if (quote.penaltyFee().signum() > 0) {
+            lines.add(new LedgerPort.JournalLine(PENALTY_INCOME, "DEBIT", quote.penaltyFee(),
+                    "reversal: settlement penalty"));
+        }
+        try {
+            ledgerPort.postGroup(intent.getSettlementKey() + REVERSAL_SUFFIX, "INSTALLMENT_SETTLEMENT_REVERSAL",
+                    intent.getPlanId(), lines);
+            return true;
+        } catch (RemoteServiceException ex) {
+            // 冲正也失败时保留在途状态，由运维对账处理；至少不把结清标成完成或允许新键
+            recordError(intent, "reversal failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    private InstallmentPlan complete(SettlementIntent detached) {
+        SettlementIntent intent = intentRepository.findById(detached.getSettlementKey())
+                .orElseThrow(() -> new IllegalStateException("settlement intent disappeared"));
+        InstallmentPlan locked = planRepository.findForUpdate(intent.getPlanId())
+                .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
+        if (locked.isActive()) {
+            locked.settle(intent.getSettlementKey(), clock.now());
+            planRepository.saveAndFlush(locked);
+        } else if (!intent.getSettlementKey().equals(locked.getSettlementIdempotencyKey())) {
+            throw new BusinessRuleException("CONCURRENT_MODIFICATION",
+                    "Plan was settled by another request, please refresh.");
+        }
+        intent.markCompleted(clock.now());
+        intentRepository.saveAndFlush(intent);
+        return locked;
+    }
+
+    private List<LedgerPort.JournalLine> settlementLines(SettlementCalculator.SettlementQuote quote) {
+        List<LedgerPort.JournalLine> lines = new ArrayList<>(4);
+        lines.add(new LedgerPort.JournalLine(CASH, "DEBIT", quote.settlementTotal(), "settlement cash received"));
+        lines.add(new LedgerPort.JournalLine(RECEIVABLE, "CREDIT", quote.remainingPrincipal(),
+                "settlement principal"));
+        if (quote.penaltyFee().signum() > 0) {
+            lines.add(new LedgerPort.JournalLine(PENALTY_INCOME, "CREDIT", quote.penaltyFee(),
+                    "settlement penalty"));
+        }
+        return lines;
+    }
+
+    private void requireServerSideRebate(BigDecimal feeRebate) {
+        if (feeRebate != null && feeRebate.signum() != 0) {
+            throw new BusinessRuleException("INVALID_FEE_REBATE",
+                    "Fee rebate is fixed at 0.00 for this release and cannot be supplied by the caller.");
+        }
+    }
+
+    private SettlementCalculator.SettlementQuote quoteOf(SettlementIntent intent) {
+        return new SettlementCalculator.SettlementQuote(intent.getPrincipal(), intent.getPenaltyFee(),
+                intent.getFeeRebate(), intent.getAmount());
+    }
+
+    private String planAccountId(String planId) {
+        return planRepository.findById(planId)
+                .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."))
+                .getAccountId();
+    }
+
+    private void markLedgerPosted(SettlementIntent intent) {
+        transactionTemplate.executeWithoutResult(status ->
+                intentRepository.findById(intent.getSettlementKey()).ifPresent(fresh -> {
+                    fresh.markLedgerPosted(clock.now());
+                    intentRepository.saveAndFlush(fresh);
+                }));
+    }
+
+    private void markPaymentApplied(SettlementIntent intent) {
+        transactionTemplate.executeWithoutResult(status ->
+                intentRepository.findById(intent.getSettlementKey()).ifPresent(fresh -> {
+                    fresh.markPaymentApplied(clock.now());
+                    intentRepository.saveAndFlush(fresh);
+                }));
+    }
+
+    private void recordError(SettlementIntent intent, String message) {
+        transactionTemplate.executeWithoutResult(status ->
+                intentRepository.findById(intent.getSettlementKey()).ifPresent(fresh -> {
+                    fresh.recordError(message, clock.now());
+                    intentRepository.saveAndFlush(fresh);
+                }));
+    }
+
+    private void markFailed(SettlementIntent intent, String message) {
+        transactionTemplate.executeWithoutResult(status ->
+                intentRepository.findById(intent.getSettlementKey()).ifPresent(fresh -> {
+                    fresh.markFailed(message, clock.now());
+                    intentRepository.saveAndFlush(fresh);
+                }));
     }
 }

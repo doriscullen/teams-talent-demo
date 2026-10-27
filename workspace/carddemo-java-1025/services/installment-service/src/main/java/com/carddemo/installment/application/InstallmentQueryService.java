@@ -1,11 +1,15 @@
 package com.carddemo.installment.application;
 
+import com.carddemo.installment.application.port.AuditPort;
+import com.carddemo.installment.application.port.ClockProvider;
 import com.carddemo.installment.domain.exception.BusinessRuleException;
 import com.carddemo.installment.domain.exception.NotFoundException;
 import com.carddemo.installment.domain.model.InstallmentPlan;
+import com.carddemo.installment.domain.model.InstallmentRepayment;
 import com.carddemo.installment.domain.model.InstallmentSchedule;
 import com.carddemo.installment.domain.model.PlanStatus;
 import com.carddemo.installment.domain.repository.InstallmentPlanRepository;
+import com.carddemo.installment.domain.repository.InstallmentRepaymentRepository;
 import com.carddemo.installment.domain.repository.InstallmentScheduleRepository;
 import com.carddemo.installment.infrastructure.security.AccessGuard;
 import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
@@ -22,6 +26,7 @@ import java.util.List;
 
 /**
  * 我的分期 / 后台查询（REQ-INS-05/07）：分页与筛选参数服务端校验，越权 404。
+ * 后台读取必须留痕（C-07）：actor + 查询范围写入审计，审计写失败进补偿队列。
  */
 @Service
 public class InstallmentQueryService {
@@ -30,11 +35,15 @@ public class InstallmentQueryService {
                                BigDecimal feeDue, BigDecimal totalDue, String status, LocalDateTime paidAt) {
     }
 
+    public record RepaymentView(String paymentKey, BigDecimal amount, BigDecimal principalApplied,
+                                String status, LocalDateTime createdAt) {
+    }
+
     public record PlanView(String planId, String accountId, String sourceType, String sourceId,
                            BigDecimal principal, int termMonths, BigDecimal monthlyFeeRate,
                            BigDecimal totalFee, BigDecimal remainingPrincipal, String status,
                            LocalDateTime createdAt, LocalDateTime settledAt,
-                           List<ScheduleView> schedules, String warning) {
+                           List<ScheduleView> schedules, List<RepaymentView> repayments, String warning) {
     }
 
     public record PlanPage(List<PlanView> items, int page, int size, long total) {
@@ -42,14 +51,23 @@ public class InstallmentQueryService {
 
     private final InstallmentPlanRepository planRepository;
     private final InstallmentScheduleRepository scheduleRepository;
+    private final InstallmentRepaymentRepository repaymentRepository;
     private final AccessGuard accessGuard;
+    private final AuditPort auditPort;
+    private final ClockProvider clock;
 
     public InstallmentQueryService(InstallmentPlanRepository planRepository,
                                    InstallmentScheduleRepository scheduleRepository,
-                                   AccessGuard accessGuard) {
+                                   InstallmentRepaymentRepository repaymentRepository,
+                                   AccessGuard accessGuard,
+                                   AuditPort auditPort,
+                                   ClockProvider clock) {
         this.planRepository = planRepository;
         this.scheduleRepository = scheduleRepository;
+        this.repaymentRepository = repaymentRepository;
         this.accessGuard = accessGuard;
+        this.auditPort = auditPort;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -65,7 +83,7 @@ public class InstallmentQueryService {
                 page, size, result.getTotalElements());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PlanPage backOfficeList(InstallmentPrincipal principal, String accountId, String status,
                                    int page, int size) {
         requirePaging(page, size);
@@ -82,8 +100,22 @@ public class InstallmentQueryService {
         } else {
             result = planRepository.findAll(request);
         }
+        auditPort.record(principal.userId(), "INSTALLMENT_BACKOFFICE_QUERYED", "INSTALLMENT_PLAN",
+                null == accountId ? "ALL" : accountId,
+                "accountId=" + accountId + ",status=" + status + ",page=" + page + ",size=" + size
+                        + ",total=" + result.getTotalElements() + ",at=" + clock.now());
         return new PlanPage(result.getContent().stream().map(plan -> toView(plan, false)).toList(),
                 page, size, result.getTotalElements());
+    }
+
+    @Transactional
+    public PlanView backOfficeDetail(InstallmentPrincipal principal, String planId) {
+        accessGuard.requireBackOfficeRead(principal);
+        InstallmentPlan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
+        auditPort.record(principal.userId(), "INSTALLMENT_BACKOFFICE_VIEWED", "INSTALLMENT_PLAN", planId,
+                "accountId=" + plan.getAccountId() + ",at=" + clock.now());
+        return toView(plan, true);
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +130,9 @@ public class InstallmentQueryService {
         List<InstallmentSchedule> schedules = withSchedules
                 ? scheduleRepository.findByPlanIdOrderByInstallmentNo(plan.getPlanId())
                 : List.of();
+        List<InstallmentRepayment> repayments = withSchedules
+                ? repaymentRepository.findByPlanIdOrderByCreatedAtAsc(plan.getPlanId())
+                : List.of();
         String warning = withSchedules && schedules.isEmpty() ? "SCHEDULE_INCONSISTENT" : null;
         return new PlanView(plan.getPlanId(), plan.getAccountId(), plan.getSourceType().name(),
                 plan.getSourceId(), plan.getPrincipal(), plan.getTermMonths(), plan.getMonthlyFeeRate(),
@@ -107,6 +142,10 @@ public class InstallmentQueryService {
                         .map(schedule -> new ScheduleView(schedule.getInstallmentNo(), schedule.getDueDate(),
                                 schedule.getPrincipalDue(), schedule.getFeeDue(), schedule.getTotalDue(),
                                 schedule.getStatus().name(), schedule.getPaidAt()))
+                        .toList(),
+                repayments.stream()
+                        .map(repayment -> new RepaymentView(repayment.getPaymentKey(), repayment.getAmount(),
+                                repayment.getPrincipalApplied(), repayment.getStatus(), repayment.getCreatedAt()))
                         .toList(),
                 warning);
     }

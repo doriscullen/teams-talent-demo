@@ -16,6 +16,8 @@ import com.carddemo.installment.domain.repository.InstallmentRateRepository;
 import com.carddemo.installment.domain.repository.PrincipalAllocationRepository;
 import com.carddemo.installment.domain.service.EligibilityPolicy;
 import com.carddemo.installment.domain.service.FeeScheduleCalculator;
+import com.carddemo.installment.infrastructure.security.AccessGuard;
+import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
 import com.carddemo.installment.infrastructure.security.PreviewTokenService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +53,7 @@ public class PreviewService {
     private final EligibilityPolicy eligibilityPolicy;
     private final FeeScheduleCalculator calculator;
     private final PreviewTokenService previewTokenService;
+    private final AccessGuard accessGuard;
     private final ClockProvider clock;
 
     public PreviewService(InstallmentPolicyRepository policyRepository,
@@ -62,6 +65,7 @@ public class PreviewService {
                           EligibilityPolicy eligibilityPolicy,
                           FeeScheduleCalculator calculator,
                           PreviewTokenService previewTokenService,
+                          AccessGuard accessGuard,
                           ClockProvider clock) {
         this.policyRepository = policyRepository;
         this.rateRepository = rateRepository;
@@ -72,11 +76,14 @@ public class PreviewService {
         this.eligibilityPolicy = eligibilityPolicy;
         this.calculator = calculator;
         this.previewTokenService = previewTokenService;
+        this.accessGuard = accessGuard;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
-    public PreviewResult preview(PreviewCommand command) {
+    public PreviewResult preview(InstallmentPrincipal principal, PreviewCommand command) {
+        // A-004：试算同样校验账户归属/后台权限，越权一律 404，不返回他人本金/账单号
+        accessGuard.requireReadAccess(principal, command.accountId());
         InstallmentPolicy policy = policy();
         eligibilityPolicy.requireTerm(command.termMonths());
         eligibilityPolicy.requireMinimumAmount(command.sourceType(), command.principal(), policy);

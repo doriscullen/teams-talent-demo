@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface EntryLineRepository extends JpaRepository<EntryLine, Long> {
 
-    List<EntryLine> findByEntryGroupId(String entryGroupId);
+    List<EntryLine> findByEntryGroupIdOrderByLineIdAsc(String entryGroupId);
 }

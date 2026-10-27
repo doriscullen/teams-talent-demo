@@ -89,7 +89,7 @@ public class AdminExportService {
         return new ExportTicket(file.getExportId(), file.getRowCount(), file.getExpiresAt());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public DownloadPayload download(InstallmentPrincipal principal, String exportId) {
         accessGuard.requireBackOfficeRead(principal);
         ExportFile file = exportFileRepository.findById(exportId)

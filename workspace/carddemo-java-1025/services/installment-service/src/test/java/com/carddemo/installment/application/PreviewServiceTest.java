@@ -14,6 +14,8 @@ import com.carddemo.installment.domain.repository.InstallmentRateRepository;
 import com.carddemo.installment.domain.repository.PrincipalAllocationRepository;
 import com.carddemo.installment.domain.service.EligibilityPolicy;
 import com.carddemo.installment.domain.service.FeeScheduleCalculator;
+import com.carddemo.installment.infrastructure.security.AccessGuard;
+import com.carddemo.installment.infrastructure.security.InstallmentPrincipal;
 import com.carddemo.installment.infrastructure.security.PreviewTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,7 @@ class PreviewServiceTest {
     private static final String ACCOUNT = "00000000006";
     private static final String TXN = "0000000000000200";
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 27, 10, 0);
+    private static final InstallmentPrincipal CUSTOMER = new InstallmentPrincipal("USER0001", "U");
 
     private PrincipalAllocationRepository allocationRepository;
     private EligibilityFlagRepository flagRepository;
@@ -70,9 +73,10 @@ class PreviewServiceTest {
                 TXN, ACCOUNT, "3344556677889900", "01", "0001", "Purchase", new BigDecimal("1000.00"),
                 NOW.minusDays(1), "POSTED")));
 
+        AccessGuard accessGuard = mock(AccessGuard.class);
         service = new PreviewService(policyRepository, rateRepository, flagRepository, allocationRepository,
                 transactionPort, billingPort, new EligibilityPolicy(), new FeeScheduleCalculator(),
-                new PreviewTokenService("preview-secret", 30), clock);
+                new PreviewTokenService("preview-secret", 30), accessGuard, clock);
     }
 
     private PreviewService.PreviewCommand command(BigDecimal principal, int term) {
@@ -81,7 +85,7 @@ class PreviewServiceTest {
 
     @Test
     void transactionPreviewReturnsProfileFeeAndToken() {
-        PreviewService.PreviewResult result = service.preview(command(new BigDecimal("1000.00"), 6));
+        PreviewService.PreviewResult result = service.preview(CUSTOMER, command(new BigDecimal("1000.00"), 6));
 
         assertThat(result.totalFee()).isEqualByComparingTo("19.25");
         assertThat(result.firstPeriodTotal()).isEqualByComparingTo("172.16");
@@ -92,7 +96,7 @@ class PreviewServiceTest {
 
     @Test
     void belowMinimumPrincipalIsRejected() {
-        assertThatThrownBy(() -> service.preview(command(new BigDecimal("99.99"), 6)))
+        assertThatThrownBy(() -> service.preview(CUSTOMER, command(new BigDecimal("99.99"), 6)))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting(ex -> ((BusinessRuleException) ex).getCode())
                 .isEqualTo("INSTALLMENT_NOT_ELIGIBLE");
@@ -100,7 +104,7 @@ class PreviewServiceTest {
 
     @Test
     void unsupportedTermIsRejected() {
-        assertThatThrownBy(() -> service.preview(command(new BigDecimal("1000.00"), 9)))
+        assertThatThrownBy(() -> service.preview(CUSTOMER, command(new BigDecimal("1000.00"), 9)))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting(ex -> ((BusinessRuleException) ex).getCode())
                 .isEqualTo("INVALID_TERM");
@@ -108,7 +112,7 @@ class PreviewServiceTest {
 
     @Test
     void principalAboveTransactionAmountIsRejected() {
-        assertThatThrownBy(() -> service.preview(command(new BigDecimal("1000.01"), 6)))
+        assertThatThrownBy(() -> service.preview(CUSTOMER, command(new BigDecimal("1000.01"), 6)))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting(ex -> ((BusinessRuleException) ex).getCode())
                 .isEqualTo("PRINCIPAL_EXCEEDS_LIMIT");
@@ -119,7 +123,7 @@ class PreviewServiceTest {
         when(flagRepository.findById(TXN)).thenReturn(Optional.of(
                 new EligibilityFlag(TXN, true, false, NOW)));
 
-        assertThatThrownBy(() -> service.preview(command(new BigDecimal("1000.00"), 6)))
+        assertThatThrownBy(() -> service.preview(CUSTOMER, command(new BigDecimal("1000.00"), 6)))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting(ex -> ((BusinessRuleException) ex).getCode())
                 .isEqualTo("INSTALLMENT_NOT_ELIGIBLE");
@@ -129,7 +133,7 @@ class PreviewServiceTest {
     void alreadyInstallmentedPrincipalIsRejected() {
         when(allocationRepository.existsByTransactionId(TXN)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.preview(command(new BigDecimal("1000.00"), 6)))
+        assertThatThrownBy(() -> service.preview(CUSTOMER, command(new BigDecimal("1000.00"), 6)))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting(ex -> ((BusinessRuleException) ex).getCode())
                 .isEqualTo("ALREADY_INSTALLED");
@@ -146,13 +150,13 @@ class PreviewServiceTest {
                 List.of(new BillingPort.BillingLine(TXN, new BigDecimal("700.00"),
                         LocalDate.of(2026, 10, 1), "Purchase"))));
 
-        PreviewService.PreviewResult result = service.preview(new PreviewService.PreviewCommand(
+        PreviewService.PreviewResult result = service.preview(CUSTOMER, new PreviewService.PreviewCommand(
                 ACCOUNT, SourceType.BILL, "BILL20261000000000006", new BigDecimal("500.00"), 3));
 
         assertThat(result.availablePrincipal()).isEqualByComparingTo("700.00");
         assertThat(result.billId()).isEqualTo("BILL20261000000000006");
 
-        assertThatThrownBy(() -> service.preview(new PreviewService.PreviewCommand(
+        assertThatThrownBy(() -> service.preview(CUSTOMER, new PreviewService.PreviewCommand(
                 ACCOUNT, SourceType.BILL, "BILL20261000000000006", new BigDecimal("700.01"), 3)))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting(ex -> ((BusinessRuleException) ex).getCode())

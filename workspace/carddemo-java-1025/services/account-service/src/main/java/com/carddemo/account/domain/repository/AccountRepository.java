@@ -12,6 +12,9 @@ public interface AccountRepository {
 
     Optional<Account> findByAccountId(String accountId);
 
+    /** 行级锁读取：同一账户的还款/记账在持锁事务内判定（A-001）。 */
+    Optional<Account> findForUpdate(String accountId);
+
     Account saveAccount(Account account);
 
     List<Account> findAllAccounts();

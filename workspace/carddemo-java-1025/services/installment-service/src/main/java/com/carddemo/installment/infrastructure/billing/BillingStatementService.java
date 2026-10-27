@@ -4,7 +4,9 @@ import com.carddemo.installment.application.port.AccountPort;
 import com.carddemo.installment.application.port.BillingPort;
 import com.carddemo.installment.application.port.ClockProvider;
 import com.carddemo.installment.application.port.TransactionPort;
+import com.carddemo.installment.domain.model.EligibilityFlag;
 import com.carddemo.installment.domain.model.PrincipalAllocation;
+import com.carddemo.installment.domain.repository.EligibilityFlagRepository;
 import com.carddemo.installment.domain.repository.PrincipalAllocationRepository;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +20,7 @@ import java.util.Map;
 
 /**
  * 最小账单能力（ADR-011）：账期以账户开卡日（openDate）为锚点，取本账期内的已入账消费交易；
- * 可分期本金 = 账单内尚未被任何计划占用的交易本金（BR-INS-09 交叉去重）。
+ * 可分期本金 = 账单内尚未被任何计划占用、且无逾期/争议信号的交易本金（BR-INS-09 交叉去重、A-007 风险重检）。
  * 这里不做账单计算逻辑改造（原文 A-02），只为分期提供真实可分期金额与账期归属。
  */
 @Service
@@ -30,13 +32,16 @@ public class BillingStatementService implements BillingPort {
     private final AccountPort accountPort;
     private final TransactionPort transactionPort;
     private final PrincipalAllocationRepository allocationRepository;
+    private final EligibilityFlagRepository eligibilityFlagRepository;
     private final ClockProvider clock;
 
     public BillingStatementService(AccountPort accountPort, TransactionPort transactionPort,
-                                   PrincipalAllocationRepository allocationRepository, ClockProvider clock) {
+                                   PrincipalAllocationRepository allocationRepository,
+                                   EligibilityFlagRepository eligibilityFlagRepository, ClockProvider clock) {
         this.accountPort = accountPort;
         this.transactionPort = transactionPort;
         this.allocationRepository = allocationRepository;
+        this.eligibilityFlagRepository = eligibilityFlagRepository;
         this.clock = clock;
     }
 
@@ -84,6 +89,11 @@ public class BillingStatementService implements BillingPort {
             }
             for (TransactionPort.TransactionView transaction : batch) {
                 if (!transaction.isPurchase() || !"POSTED".equals(transaction.status())) {
+                    continue;
+                }
+                EligibilityFlag flag = eligibilityFlagRepository.findById(transaction.transactionId())
+                        .orElse(null);
+                if (flag != null && (flag.isDisputed() || flag.isDelinquent())) {
                     continue;
                 }
                 LocalDate posted = transaction.processedTimestamp().toLocalDate();

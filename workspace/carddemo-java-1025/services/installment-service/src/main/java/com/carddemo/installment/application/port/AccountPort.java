@@ -12,6 +12,9 @@ public interface AccountPort {
 
     AccountSnapshot getAccount(String accountId);
 
-    /** 真实还款（只减少欠款；返回变更后余额）。 */
-    BigDecimal applyRepayment(String accountId, BigDecimal amount);
+    /**
+     * 真实还款（只减少欠款；返回变更后余额）。
+     * effectId 为稳定作用标识：同一 effectId 重复调用只扣减一次（A-001）。
+     */
+    BigDecimal applyRepayment(String accountId, BigDecimal amount, String effectId);
 }
