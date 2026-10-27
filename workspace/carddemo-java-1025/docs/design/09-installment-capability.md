@@ -133,9 +133,19 @@ services/installment-service/src/main/java/com/carddemo/installment/
    不会先扣款再报错；正常 ACTIVE 计划上的同键重试仍可恢复。
 900/3 还 300 → 剩余 600、第 1 期 PAID，随后结清 600+6−0=606（原 US-005 不变）。
 
-**本金资金动作互斥（A-R003）**：同一计划的还款与结清共用互斥——建结清意图时若存在 PENDING 还款 → 409 `REPAYMENT_IN_PROGRESS`；
-建还款意图时若存在在途结清意图（PENDING/LEDGER_POSTED/PAYMENT_APPLIED）→ 409 `SETTLEMENT_IN_PROGRESS`。
-因此「账户已扣、本地未回写」的还款不会被按旧 remaining 再结清一次。
+**本金资金动作互斥（A-R003）**：同一计划的还款与结清共用互斥，并且互斥覆盖**不同的 paymentKey**：
+- 建结清意图时若存在 PENDING 还款 → 409 `REPAYMENT_IN_PROGRESS`；
+- 建还款意图时若存在在途结清意图（PENDING/LEDGER_POSTED/PAYMENT_APPLIED）→ 409 `SETTLEMENT_IN_PROGRESS`；
+- 建还款意图时若**同一计划存在其它 paymentKey 的 PENDING 还款** → 409 `REPAYMENT_IN_PROGRESS`（A-R003b）。
+  因此同计划两个各 900 的还款键不会都扣款：第二个在远端资金动作之前被拒，账户/账务累计不超过实际合法归还本金。
+- **在途占用先落库再做资金动作（A-R003a）**：新键与 FAILED/PENDING 重试都在计划锁事务内先把自己的
+  `installment_repayment` 原子置为 PENDING 并提交，释放锁之后才调用 account/ledger。重试不再是「已过栅栏、
+  仍是 FAILED、已放锁」，因此并发的结清在任何新资金动作前就拿到 409，而不是结清完才发现还有在途还款。
+- **锁内新鲜读取（A-R003c）**：回写本金时先取共享计划锁，再以悲观写锁（`findForUpdate`）从数据库重新读取还款意图，
+  不使用锁前读到的一级缓存旧快照；同 key 只应用一次，已完成的调用返回首次效果（`replayed=true`），
+  账户扣款与本地回写都不会重复。
+只控制金额不足/无在途本金时的**明确拒绝**才置 FAILED；响应未知/账务未完成保持 PENDING 供对账续跑，不提前清栅栏，
+也不把栅栏扩成永久禁止（在途行完成后同键与其它键都可以继续）。
 
 **账户作用ID（A-R004）**：`EffectIds` 按「操作类型 + 计划 + 客户端键」生成 `REPAY-<sha256前40位>` / `SETTLE-<sha256前40位>`，
 服务端生成、操作命名空间分离，客户端键相同的还款与结清也不会碰撞；同键重放仍稳定。
@@ -189,7 +199,7 @@ services/installment-service/src/main/java/com/carddemo/installment/
 | 跨服务幂等/补偿 | §7 | A-001/A-002 | SettlementServiceTest、InstallmentApplicationServiceTest、AccountApplicationServiceTest、LedgerPostingServiceTest |
 | 补偿阶段持久化与只逆向恢复 | §7 | A-R001 | InstallmentApplicationServiceTest（compensationPhaseNeverCompletesForward…、reconciliationOfCompensationPendingOnlyReverses） |
 | 本金-only 累计还款 | §7 | A-R002、US-005 | RepaymentServiceTest、InstallmentScheduleTest |
-| 还款/结清互斥与失败重试栅栏 | §7 | A-R003 | RepaymentServiceTest、SettlementServiceTest |
+| 还款/结清互斥与失败重试栅栏 | §7 | A-R003（a/b/c） | RepaymentServiceTest（failedRetryPersistsInFlightBeforeRemoteEffect、differentPaymentKeyIsRejectedWhileAnotherRepaymentIsInFlight、concurrentCompletionBeforeApplyIsNotAppliedTwice）、SettlementServiceTest；真实服务重叠：develop-rework-rt4.py |
 | 操作作用ID | §7 | A-R004 | RepaymentServiceTest、EffectIds |
 | FAILED 不占在途 | §7 | A-R005 | SettlementServiceTest（failedIntentDoesNotBlockNewSettlementKey） |
 | 副作用事务边界（真实 PG 触发器） | §8 | R-C-01 | InstallmentSideEffectFailureTest（Testcontainers + 表级拒绝 INSERT） |

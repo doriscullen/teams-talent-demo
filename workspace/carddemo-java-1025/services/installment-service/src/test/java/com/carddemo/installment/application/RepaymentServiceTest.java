@@ -96,6 +96,22 @@ class RepaymentServiceTest {
         });
         when(repaymentRepository.findById(anyString())).thenAnswer(invocation ->
                 Optional.ofNullable(repayments.get(invocation.getArgument(0))));
+        when(repaymentRepository.findForUpdate(anyString())).thenAnswer(invocation ->
+                Optional.ofNullable(repayments.get(invocation.getArgument(0))));
+        when(repaymentRepository.existsByPlanIdAndStatus(anyString(), anyString())).thenAnswer(invocation -> {
+            String planId = invocation.getArgument(0);
+            String status = invocation.getArgument(1);
+            return repayments.values().stream()
+                    .anyMatch(row -> row.getPlanId().equals(planId) && status.equals(row.getStatus()));
+        });
+        when(repaymentRepository.existsByPlanIdAndStatusAndPaymentKeyNot(anyString(), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String planId = invocation.getArgument(0);
+                    String status = invocation.getArgument(1);
+                    String paymentKey = invocation.getArgument(2);
+                    return repayments.values().stream().anyMatch(row -> row.getPlanId().equals(planId)
+                            && status.equals(row.getStatus()) && !row.getPaymentKey().equals(paymentKey));
+                });
 
         ClockProvider clock = mock(ClockProvider.class);
         when(clock.now()).thenReturn(NOW);
@@ -289,6 +305,82 @@ class RepaymentServiceTest {
         assertThat(settlementEffect).startsWith("SETTLE-");
         assertThat(com.carddemo.installment.domain.service.EffectIds.repayment(PLAN_ID, "final"))
                 .isEqualTo(repaymentEffect);
+    }
+
+    /** A-R003a：FAILED 重试必须先在锁事务内持久化为在途，结算栅栏才能在远端动作前看到它。 */
+    @Test
+    void failedRetryPersistsInFlightBeforeRemoteEffect() {
+        java.util.concurrent.atomic.AtomicReference<String> statusDuringRemote =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean settlementBlocked =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        when(accountPort.applyRepayment(anyString(), any(), anyString())).thenAnswer(invocation -> {
+            InstallmentRepayment row = repayments.get("pay-inflight");
+            if (attempts.incrementAndGet() == 1) {
+                // 账户余额不足：明确拒绝，本次零资金
+                throw new BusinessRuleException("REPAYMENT_REJECTED", "insufficient balance");
+            }
+            statusDuringRemote.set(row.getStatus());
+            // 结算栅栏视角：此时 PG 中已存在 PENDING 行，结清会在任何资金动作前 409
+            settlementBlocked.set(repaymentRepository.existsByPlanIdAndStatus(PLAN_ID,
+                    InstallmentRepayment.PENDING));
+            return new BigDecimal("864.00");
+        });
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-inflight", "300.00")))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(repayments.get("pay-inflight").getStatus()).isEqualTo(InstallmentRepayment.FAILED);
+
+        RepaymentService.RepaymentResult retried = service.repay(CUSTOMER, command("pay-inflight", "300.00"));
+
+        assertThat(statusDuringRemote.get()).isEqualTo(InstallmentRepayment.PENDING);
+        assertThat(settlementBlocked.get()).isTrue();
+        assertThat(retried.principalApplied()).isEqualByComparingTo("300.00");
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(repayments.get("pay-inflight").getStatus()).isEqualTo(InstallmentRepayment.COMPLETED);
+    }
+
+    /** A-R003b：同一计划不同 paymentKey 也不得并行占用本金，第二个键在远端动作前拒绝。 */
+    @Test
+    void differentPaymentKeyIsRejectedWhileAnotherRepaymentIsInFlight() {
+        repayments.put("pay-other", new InstallmentRepayment("pay-other", PLAN_ID,
+                new BigDecimal("900.00"), NOW));
+
+        assertThatThrownBy(() -> service.repay(CUSTOMER, command("pay-second", "900.00")))
+                .isInstanceOf(BusinessRuleException.class)
+                .extracting(ex -> ((BusinessRuleException) ex).getCode())
+                .isEqualTo("REPAYMENT_IN_PROGRESS");
+        verify(accountPort, never()).applyRepayment(anyString(), any(), anyString());
+        verify(ledgerPort, never()).postGroup(anyString(), anyString(), anyString(), any());
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("900.00");
+
+        // 在途请求完成（或失败）后同一键即可继续，栅栏不扩成永久禁止
+        repayments.get("pay-other").markCompleted(new BigDecimal("900.00"), NOW);
+
+        RepaymentService.RepaymentResult later = service.repay(CUSTOMER, command("pay-third", "10.00"));
+        assertThat(later.principalApplied()).isEqualByComparingTo("10.00");
+    }
+
+    /** A-R003c：锁交接窗口内同 key 被另一线程完成，本地只能按真实库状态回放一次。 */
+    @Test
+    void concurrentCompletionBeforeApplyIsNotAppliedTwice() {
+        when(planRepository.findForUpdate(PLAN_ID))
+                .thenReturn(Optional.of(plan))
+                .thenAnswer(invocation -> {
+                    // 另一线程在我取到计划锁之前完成了同 key 的 300 回写
+                    repayments.get("pay-race").markCompleted(new BigDecimal("300.00"), NOW);
+                    plan.repayPrincipal(new BigDecimal("300.00"));
+                    schedules.get(0).applyPrincipal(new BigDecimal("300.00"), NOW);
+                    return Optional.of(plan);
+                });
+
+        RepaymentService.RepaymentResult result = service.repay(CUSTOMER, command("pay-race", "300.00"));
+
+        assertThat(result.replayed()).isTrue();
+        assertThat(plan.getRemainingPrincipal()).isEqualByComparingTo("600.00");
+        assertThat(schedules.get(0).getPaidPrincipal()).isEqualByComparingTo("300.00");
+        assertThat(schedules.get(1).getPaidPrincipal()).isEqualByComparingTo("0.00");
     }
 
     private static String hashOf(String material) {

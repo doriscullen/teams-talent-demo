@@ -59,6 +59,15 @@ public class InstallmentRepayment {
         this.updatedAt = createdAt;
     }
 
+    /**
+     * 重试进入在途（A-R003a）：在计划锁事务内先原子持久化为 PENDING，提交后结清与其它还款键
+     * 的栅栏立即可见，重试者才被允许执行账户/账务动作。
+     */
+    public void markInFlight(LocalDateTime at) {
+        this.status = PENDING;
+        this.updatedAt = at;
+    }
+
     public void markCompleted(BigDecimal principalApplied, LocalDateTime at) {
         this.principalApplied = principalApplied;
         this.status = COMPLETED;

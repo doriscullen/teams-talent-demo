@@ -113,12 +113,14 @@ public class RepaymentService {
             }
         }
 
-        // 计划锁内统一栅栏：新请求与 PENDING/FAILED 重试都必须重核计划状态、在途结清与金额
+        // 计划锁内统一栅栏：新请求、PENDING 续跑与 FAILED 重试都必须重核计划状态、在途结清、
+        // 其它在途还款键与金额，并在同一事务内先把自己的意图持久化为在途（A-R003a/b）
         InstallmentRepayment guarded = transactionTemplate.execute(status -> {
             InstallmentPlan locked = planRepository.findForUpdate(command.planId())
                     .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND",
                             "Installment plan not found."));
-            InstallmentRepayment concurrent = repaymentRepository.findById(command.paymentKey()).orElse(null);
+            InstallmentRepayment concurrent = repaymentRepository.findForUpdate(command.paymentKey())
+                    .orElse(null);
             if (concurrent != null && (!concurrent.getPlanId().equals(command.planId())
                     || concurrent.getAmount().compareTo(command.amount()) != 0)) {
                 throw new BusinessRuleException("IDEMPOTENCY_KEY_CONFLICT",
@@ -130,10 +132,15 @@ public class RepaymentService {
             // A-R003：已结清/结清在途时任何账户或账务动作之前先拒绝
             requireActive(locked);
             requireNoSettlementInFlight(locked.getPlanId());
+            requireNoOtherRepaymentInFlight(locked.getPlanId(), command.paymentKey());
             requireValidAmount(locked, command.amount());
-            return concurrent != null ? concurrent
-                    : repaymentRepository.saveAndFlush(new InstallmentRepayment(command.paymentKey(),
-                    command.planId(), command.amount(), clock.now()));
+            if (concurrent == null) {
+                return repaymentRepository.saveAndFlush(new InstallmentRepayment(command.paymentKey(),
+                        command.planId(), command.amount(), clock.now()));
+            }
+            // FAILED 重试在同一锁事务内先变为在途并提交，锁释放后结清/其它键才可能看到栅栏
+            concurrent.markInFlight(clock.now());
+            return repaymentRepository.saveAndFlush(concurrent);
         });
         if (guarded == null) {
             throw new IllegalStateException("repayment intent was not persisted");
@@ -196,14 +203,15 @@ public class RepaymentService {
     }
 
     private RepaymentResult applyToPlan(InstallmentRepayment detached) {
-        InstallmentRepayment repayment = repaymentRepository.findById(detached.getPaymentKey())
+        // A-R003c：先取共享计划锁，再以悲观锁从数据库重新读取还款意图；锁前读到的一级缓存
+        // 旧快照（可能是 PENDING）不参与判断，同 key 只在真实库状态下应用一次。
+        InstallmentPlan locked = planRepository.findForUpdate(detached.getPlanId())
+                .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
+        InstallmentRepayment repayment = repaymentRepository.findForUpdate(detached.getPaymentKey())
                 .orElseThrow(() -> new IllegalStateException("repayment intent disappeared"));
         if (repayment.isCompleted()) {
-            InstallmentPlan plan = planRepository.findById(repayment.getPlanId()).orElseThrow();
-            return new RepaymentResult(plan, repayment.getPrincipalApplied(), 0, true);
+            return new RepaymentResult(locked, repayment.getPrincipalApplied(), 0, true);
         }
-        InstallmentPlan locked = planRepository.findForUpdate(repayment.getPlanId())
-                .orElseThrow(() -> new NotFoundException("INSTALLMENT_NOT_FOUND", "Installment plan not found."));
         requireActive(locked);
 
         // 本金-only：按最早未还期次累计 paid_principal，每期达到应还本金即 PAID
@@ -270,6 +278,15 @@ public class RepaymentService {
                     throw new BusinessRuleException("SETTLEMENT_IN_PROGRESS",
                             "A settlement is in progress for this plan; retry that settlement instead.");
                 });
+    }
+
+    /** A-R003b：同一计划同一时刻只允许一个还款键在途，第二个键在远端动作前拒绝。 */
+    private void requireNoOtherRepaymentInFlight(String planId, String paymentKey) {
+        if (repaymentRepository.existsByPlanIdAndStatusAndPaymentKeyNot(planId,
+                InstallmentRepayment.PENDING, paymentKey)) {
+            throw new BusinessRuleException("REPAYMENT_IN_PROGRESS",
+                    "Another repayment is in progress for this plan; retry after it completes.");
+        }
     }
 
     private RepaymentResult replay(String planId, InstallmentRepayment repayment) {
