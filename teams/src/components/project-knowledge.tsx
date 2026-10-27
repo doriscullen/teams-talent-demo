@@ -68,7 +68,7 @@ export function ProjectKnowledge({ projectId, compact = false }: { projectId: st
         <div className="project-material-list">{group.items.map(artifact => <div className="project-material" key={artifact.id} data-artifact={artifact.id}><div>
           <strong>{artifact.name}</strong><p>{artifact.description}</p>
           <small>{artifact.capabilityName} · v{artifact.version} · 发布于 {day(artifact.publishedAt)}{artifact.note ? ' · ' + artifact.note : ''}</small>
-        </div><Tag>{deliveryNames[artifact.delivery]}</Tag><Button size="small" onClick={() => setOpened(artifact)}>查看</Button></div>)}</div></section>)
+        </div>{artifact.projectId === null && <Tag>团队知识</Tag>}<Tag>{deliveryNames[artifact.delivery]}</Tag><Button size="small" onClick={() => setOpened(artifact)}>查看</Button></div>)}</div></section>)
       : <><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Talents 尚未为此项目发布知识" /><p className="muted">Talents 读取本项目对接的代码仓与设计文档挖掘知识，Owner 审阅发布后在这里展示。</p></>}
     <Space wrap className="card-actions">
       <Button type={ready ? 'default' : 'primary'} href={talentLink('knowledge', { projectId, role })}>{role === 'owner' ? '在 Talents 挖掘知识' : '在 Talents 应用知识'}</Button>

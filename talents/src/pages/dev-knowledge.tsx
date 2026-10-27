@@ -1,4 +1,4 @@
-// 开发者端 · 项目知识：团队已发布的知识，一键应用、更新。
+// 开发者端 · 项目知识：所选项目已发布的知识，以及在每个项目中都可用的团队知识；一键应用、更新。
 import { useEffect, useState, type ReactNode } from 'react';
 import { App, Button, Checkbox, Collapse, Dropdown, Modal, Radio, Segmented, Space, Tag } from 'antd';
 import { EllipsisOutlined } from '@ant-design/icons';
@@ -8,7 +8,7 @@ import type { Artifact, Scope, TalentsState } from '../types.ts';
 import { artifact, capability, project } from '../demo/model.ts';
 import { now } from '../demo/format.ts';
 import * as K from '../demo/knowledge.ts';
-import { CapIcon, CardGrid, EmptyState, ItemCard, Section } from '../components/ui.tsx';
+import { CapIcon, CardGrid, EmptyState, Fields, ItemCard, Section } from '../components/ui.tsx';
 import { ArtifactPreview, ChangeList } from '../components/files.tsx';
 
 /** Published knowledge of the project, and team-level knowledge, which every project uses. */
@@ -66,16 +66,21 @@ export function DevKnowledge() {
           <Button size="small" type="text" aria-label="更多" icon={<EllipsisOutlined />} /></Dropdown>}
       </>}>
       <p className="ui-note">{a.desc}</p>
+      {a.published!.agents && <Fields rows={[['适用', K.audienceText(st, a.published!.agents)]]} />}
       {state === 'update' && <div className="update-note"><span className="caption">更新说明</span>{a.published!.note}</div>}
     </ItemCard>;
   };
-  const sections = st.categories.map(cat => {
-    const items = list.filter(a => capability(st, a.cap).cat === cat.id);
-    return items.length > 0 && <Section key={cat.id} title={cat.name} note={cat.desc}><CardGrid>{items.map(card)}</CardGrid></Section>;
-  }).filter(Boolean);
+  const team = list.filter(a => a.projectId === null), own = list.filter(a => a.projectId === pid);
+  const sections = [
+    team.length > 0 && <Section key="team" title="团队知识" note="全团队通用，在每个项目中都可用"><CardGrid>{team.map(card)}</CardGrid></Section>,
+    ...st.categories.map(cat => {
+      const items = own.filter(a => capability(st, a.cap).cat === cat.id);
+      return items.length > 0 && <Section key={cat.id} title={cat.name} note={cat.desc}><CardGrid>{items.map(card)}</CardGrid></Section>;
+    }),
+  ].filter(Boolean);
   const previewed = artifact(st, preview), changed = artifact(st, changes), scoped = artifact(st, scoping);
   return <div className="page-stack">
-    <PageHeader title="项目知识" description="团队已发布的知识。应用后，本机的 iCode 就能用上。" actions={<Space>
+    <PageHeader title="项目知识" description="管理员已发布的项目知识和团队知识。应用后，本机的 iCode 就能用上。" actions={<Space>
       {updates > 0 && <Button loading={busy === 'update-all'} onClick={updateAll}>全部更新（{updates}）</Button>}
       {pending > 0 && <Button type="primary" loading={busy === 'apply-all'} onClick={applyAll}>全部应用（{pending}）</Button>}
     </Space>} />
@@ -95,7 +100,7 @@ function ScopeDialog({ a, onClose }: { a: Artifact; onClose(): void }) {
   const current = st.dev.applied[a.id].scope;
   const [kind, setKind] = useState<Scope['kind']>(current.kind);
   const [repos, setRepos] = useState(current.kind === 'repo' ? current.repos : K.localRepos(st, a).map(r => r.repo!));
-  const [agents, setAgents] = useState(current.kind === 'agent' ? current.agents : ['Code']);
+  const [agents, setAgents] = useState(current.kind === 'agent' ? current.agents : a.published?.agents ?? ['Code']);
   const [dir, setDir] = useState<'chrys' | 'agents'>(current.kind === 'global' ? current.dir : 'chrys');
   const reasons = K.scopeOptions(st, a);
   const scope: Scope = kind === 'repo' ? { kind, repos } : kind === 'global' ? { kind, dir } : { kind, agents };

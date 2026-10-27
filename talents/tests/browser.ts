@@ -85,6 +85,12 @@ try {
   await card.getByText('已应用').waitFor();
   await card.getByText('查看改动').click();
   await page.getByText('应用到本机 iCode 的改动').waitFor();
+  await page.keyboard.press('Escape');
+  // Team knowledge is listed in the project; knowledge meant for some agents is applied to those agents.
+  await page.locator('.talents-section', { hasText: '团队知识' }).locator('.item-card', { hasText: '银行编码规范要点' }).waitFor();
+  const rag = page.locator('.item-card', { hasText: '信用卡营销交付文档 RAG 检索' });
+  await rag.getByRole('button', { name: /^应\s?用$/ }).click();
+  await rag.getByText('范围：Code Agent').waitFor();
 
   // Saved on the service, and published to the shared directory for Teams.
   const boot = await (await fetch(origin + '/api/bootstrap')).json();

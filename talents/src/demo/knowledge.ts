@@ -113,12 +113,15 @@ export function scopeOptions(st: TalentsState, a: Artifact) {
     agent: '',
   };
 }
+/** Where one-click apply puts the knowledge: the agents the admin meant it for; otherwise the project's local
+ *  repositories, falling back to every agent (team knowledge has no repositories). */
 export function defaultScope(st: TalentsState, a: Artifact): Scope {
-  const k = kind(a);
-  if (k === 'mcp') return { kind: 'agent', agents: ['Code'] };
+  const k = kind(a), meant = a.published?.agents, every = st.agents.map(g => g.id);
+  if (meant) return { kind: 'agent', agents: meant };
+  if (k === 'mcp') return { kind: 'agent', agents: every };
   const repos = localRepos(st, a);
   if (repos.length) return { kind: 'repo', repos: repos.map(r => r.repo!) };
-  return k === 'memory' ? { kind: 'agent', agents: ['Code'] } : { kind: 'global', dir: 'chrys' };
+  return k === 'memory' ? { kind: 'agent', agents: every } : { kind: 'global', dir: 'chrys' };
 }
 function localPath(st: TalentsState, repoId: string) {
   return st.dev.local.find(x => x.repo === repoId)?.path ?? source(st, repoId)?.path ?? repoId;
