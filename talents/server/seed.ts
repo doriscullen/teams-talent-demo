@@ -6,7 +6,7 @@ import { minerFiles } from './content.ts';
 import type { TalentsState } from './model.ts';
 
 /** Bump when the seed changes shape or content; a stored state from another seed version is replaced. */
-export const SEED_VERSION = 9;
+export const SEED_VERSION = 10;
 
 export const PROJECT_ID = 'carddemo';
 /** Source ids derived from the Teams snapshot (see teams-data.ts): repository id, and one document set per project. */
@@ -14,8 +14,9 @@ export const REPO_ID = 'repository:carddemo:carddemo-java-1025';
 export const DOCSET_ID = 'docset:carddemo';
 export const STD_ID = 's-std';
 
-const MINER_V1 = ['跨服务幂等记账', '乐观锁更新账户余额', '统一错误码与异常处理'];
-const MINER_V2 = [...MINER_V1, '营销奖励发放'];
+const MINER_DIFF = ['消费返现与奖励发放', '跨服务幂等入账与失败重试', '活动资格判定与有效期控制', '账户余额乐观锁更新', '用户维护与删除保护'];
+const MINER_PR = ['统一错误码与异常处理'];
+const MINER_SPECS = [...MINER_DIFF, ...MINER_PR];
 const BIZ_FILES = ['doc-knowledge/index.md', 'doc-knowledge/业务规则目录.md', 'doc-knowledge/统一语言术语表.md', 'doc-knowledge/数据字典.md'];
 const STD_FILES = ['doc-knowledge/银行编码规范要点.md'];
 
@@ -96,7 +97,12 @@ export function seedState(): TalentsState {
       { id: 't-docidx', projectId: PROJECT_ID, name: '', cap: 'doc-index', sources: [DOCSET_ID], schedule: { kind: 'daily', time: '02:30' }, mode: 'update', skipUnchanged: true, input: { from: '2026-10-26 10:00', to: '2026-10-27 09:05' }, status: 'success', lastRun: '2026-10-27 09:10', duration: '18 秒', artifact: 'a-docidx', created: '2026-10-26 10:12' },
       { id: 't-biz', projectId: PROJECT_ID, name: '', cap: 'doc-extract', sources: [DOCSET_ID], mode: 'update', input: { from: '2026-10-26 10:00', to: '2026-10-27 09:05' }, schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 09:31', duration: '6 分 12 秒', artifact: 'a-biz', created: '2026-10-25 22:24' },
       { id: 't-std', projectId: null, name: '', cap: 'doc-extract', sources: [STD_ID], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-18 11:22', duration: '9 分 05 秒', artifact: 'a-std', created: '2026-10-18 11:13' },
-      { id: 't-miner', projectId: PROJECT_ID, name: '', cap: 'miner-pr', sources: [REPO_ID], prs: [12, 19, 23, 29, 35, 41, 47, 52, 58, 61, 63, 66], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-24 17:10', duration: '26 分 41 秒', artifact: 'a-miner', created: '2026-10-24 16:43' },
+      { id: 't-miner-errors', projectId: PROJECT_ID, name: '', cap: 'miner-pr', sources: [REPO_ID], prs: [12, 19, 35], schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-24 17:10', duration: '13 分 22 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-24 16:57' },
+      { id: 't-miner-cashback', projectId: PROJECT_ID, name: '消费返现与奖励发放', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 11:06', duration: '8 分 12 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 11:04' },
+      { id: 't-miner-idempotent', projectId: PROJECT_ID, name: '跨服务幂等入账与失败重试', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 17:44', duration: '9 分 26 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 17:42' },
+      { id: 't-miner-eligibility', projectId: PROJECT_ID, name: '活动资格判定与有效期控制', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 17:50', duration: '7 分 48 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 17:48' },
+      { id: 't-miner-lock', projectId: PROJECT_ID, name: '账户余额乐观锁更新', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 18:45', duration: '6 分 31 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 18:43' },
+      { id: 't-miner-user', projectId: PROJECT_ID, name: '用户维护与删除保护', cap: 'miner-diff', sources: [REPO_ID], mode: 'build', schedule: { kind: 'now' }, status: 'success', lastRun: '2026-10-27 18:50', duration: '5 分 54 秒', artifact: 'a-miner', produced: 'a-miner', created: '2026-10-27 18:48' },
     ],
     // published: what developers see; draft: the latest run, waiting for review (revisions are added while reviewing).
     // basis: the source state the artifact was built from (a document version, or a commit for code).
@@ -115,10 +121,10 @@ export function seedState(): TalentsState {
       { id: 'a-std', projectId: null, cap: 'doc-extract', name: '银行编码规范要点', desc: '分层、建模、接口与安全约定，以及五类检查规则。', sources: [STD_ID], kind: 'files', folder: '编码规范',
         files: STD_FILES, skills: ['dev-bank-coding-standards'], usage: '编写或评审代码时对照检查',
         published: { version: 1, at: '2026-10-18 14:02', note: '首次发布', delivery: 'local', agents: ['Code', 'Reviewer'], files: STD_FILES, basis: { version: '2026-10-12 10:00' } }, draft: null },
-      { id: 'a-miner', projectId: PROJECT_ID, cap: 'miner-pr', name: 'carddemo-java-1025 开发范式', desc: '从已合并 PR 总结的实现范式，含步骤、约束和示例代码。', sources: [REPO_ID], kind: 'files', folder: 'miner',
-        specs: MINER_V2, files: minerFiles(MINER_V2), skills: ['find-reference-spec'], usage: '开发新需求或修改现有功能前，用 find-reference-spec 查找可参考的范式',
-        published: { version: 2, at: '2026-10-24 17:40', note: '新增范式「营销奖励发放」', delivery: 'local', specs: MINER_V2, files: minerFiles(MINER_V2) },
-        history: [{ version: 1, specs: MINER_V1 }], draft: null },
+      { id: 'a-miner', projectId: PROJECT_ID, cap: 'miner-diff', name: 'carddemo-java-1025 开发范式', desc: '从已合并 PR 与代码片段挖掘的实现范式，含步骤、约束和示例代码。', sources: [REPO_ID], kind: 'files', folder: 'miner',
+        specs: MINER_SPECS, files: minerFiles(MINER_SPECS), skills: ['find-reference-spec'], usage: '开发新需求或修改现有功能前，用 find-reference-spec 查找可参考的范式',
+        published: { version: 2, at: '2026-10-27 18:50', note: '新增 5 个代码片段挖掘的开发范式，保留「统一错误码与异常处理」', delivery: 'local', specs: MINER_SPECS, files: minerFiles(MINER_SPECS) },
+        history: [{ version: 1, specs: ['统一错误码与异常处理'] }], draft: null },
     ],
     // Trajectory reports are picked by matching the selected sessions' titles; the first topic is the default.
     trajTopics: {
@@ -130,7 +136,7 @@ export function seedState(): TalentsState {
       applied: {
         'a-cg-java': { version: 3, scope: { kind: 'agent', agents: ['Code'] }, at: '2026-10-20 11:20' },
         'a-std': { version: 1, scope: { kind: 'agent', agents: ['Code', 'Reviewer'] }, at: '2026-10-18 15:00' },
-        'a-miner': { version: 1, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-22 16:30' },
+        'a-miner': { version: 2, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-27 18:55' },
         'a-biz': { version: 1, scope: { kind: 'repo', repos: [REPO_ID] }, at: '2026-10-26 15:10' },
       },
       local: [

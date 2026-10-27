@@ -46,8 +46,11 @@ test('writes knowledge.json and the files, and removes versions no longer publis
   for (const a of knowledge.artifacts) for (const f of a.files) await access(join(dir, 'talents', 'files', a.id, 'v' + a.version, f.path));
   const miner = knowledge.artifacts.find((a: any) => a.id === 'a-miner');
   const index = await readFile(join(dir, 'talents', 'files', 'a-miner', 'v2', 'miner', 'index.md'), 'utf8');
-  assert.match(index, /营销奖励发放/);
+  assert.match(index, /消费返现与奖励发放/);
+  assert.match(index, /统一错误码与异常处理/);
+  // PR-mode specs carry their PR records; diff-mode specs carry their mining metadata.
   assert.ok(miner.files.some((f: any) => f.type === 'json' && f.title.startsWith('PR #')));
+  assert.ok(miner.files.some((f: any) => f.type === 'json' && /挖掘元数据/.test(f.title)));
 
   state.artifacts.find(a => a.id === 'a-std')!.published!.version = 2;
   state.artifacts = state.artifacts.filter(a => a.id !== 'a-miner');

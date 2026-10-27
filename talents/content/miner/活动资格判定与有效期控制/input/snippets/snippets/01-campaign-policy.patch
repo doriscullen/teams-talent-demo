@@ -1,0 +1,530 @@
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/AccountSnapshot.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/AccountSnapshot.java
+new file mode 100644
+index 0000000..2965b40
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/AccountSnapshot.java
+@@ -0,0 +1,9 @@
++package com.carddemo.marketing.domain.model;
++
++import java.math.BigDecimal;
++
++/**
++ * 账户快照（来自 account-service），营销只读，不保存。
++ */
++public record AccountSnapshot(String accountId, String activeStatus, BigDecimal currentBalance, String groupId) {
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/Campaign.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/Campaign.java
+new file mode 100644
+index 0000000..c94e334
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/Campaign.java
+@@ -0,0 +1,360 @@
++package com.carddemo.marketing.domain.model;
++
++import com.carddemo.marketing.domain.exception.BusinessRuleException;
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.EnumType;
++import jakarta.persistence.Enumerated;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++import jakarta.persistence.Version;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++import java.util.Objects;
++
++/**
++ * 营销活动聚合根。状态机：DRAFT → ACTIVE ⇄ PAUSED → ENDED。
++ * 规则详见 docs/design/08-marketing-capability.md。
++ */
++@Entity
++@Table(name = "campaign")
++public class Campaign {
++
++    private static final BigDecimal ZERO = new BigDecimal("0.00");
++
++    @Id
++    @Column(name = "campaign_id", length = 36, nullable = false, updatable = false)
++    private String campaignId;
++
++    @Column(name = "name", length = 80, nullable = false)
++    private String name;
++
++    @Column(name = "description", length = 300)
++    private String description;
++
++    @Enumerated(EnumType.STRING)
++    @Column(name = "campaign_type", length = 32, nullable = false)
++    private CampaignType campaignType;
++
++    @Enumerated(EnumType.STRING)
++    @Column(name = "status", length = 16, nullable = false)
++    private CampaignStatus status;
++
++    @Column(name = "start_at", nullable = false)
++    private LocalDateTime startAt;
++
++    @Column(name = "end_at", nullable = false)
++    private LocalDateTime endAt;
++
++    @Column(name = "target_group_id", length = 10)
++    private String targetGroupId;
++
++    @Column(name = "category_code", length = 4)
++    private String categoryCode;
++
++    @Column(name = "min_transaction_amount", nullable = false, precision = 12, scale = 2)
++    private BigDecimal minTransactionAmount = ZERO;
++
++    @Column(name = "reward_rate", precision = 6, scale = 4)
++    private BigDecimal rewardRate;
++
++    @Column(name = "fixed_reward_amount", precision = 12, scale = 2)
++    private BigDecimal fixedRewardAmount;
++
++    @Column(name = "max_reward_per_transaction", precision = 12, scale = 2)
++    private BigDecimal maxRewardPerTransaction;
++
++    @Column(name = "max_rewards_per_card")
++    private Integer maxRewardsPerCard;
++
++    @Column(name = "budget", nullable = false, precision = 12, scale = 2)
++    private BigDecimal budget = ZERO;
++
++    @Column(name = "consumed_amount", nullable = false, precision = 12, scale = 2)
++    private BigDecimal consumedAmount = ZERO;
++
++    @Column(name = "points_multiplier", precision = 5, scale = 2)
++    private BigDecimal pointsMultiplier;
++
++    @Column(name = "enrollment_required", nullable = false)
++    private boolean enrollmentRequired;
++
++    @Column(name = "created_at", nullable = false)
++    private LocalDateTime createdAt;
++
++    @Column(name = "updated_at", nullable = false)
++    private LocalDateTime updatedAt;
++
++    @Version
++    @Column(name = "version", nullable = false)
++    private long version;
++
++    protected Campaign() {
++        // for JPA
++    }
++
++    public Campaign(String campaignId, CampaignDraft draft, LocalDateTime now) {
++        this.campaignId = campaignId;
++        this.status = CampaignStatus.DRAFT;
++        this.consumedAmount = ZERO;
++        this.createdAt = now;
++        this.updatedAt = now;
++        applyDraft(draft, now);
++    }
++
++    /**
++     * MK-CAM-01..06：只有 DRAFT 可编辑规则。
++     */
++    public void applyDraft(CampaignDraft draft, LocalDateTime now) {
++        if (status != CampaignStatus.DRAFT) {
++            throw new BusinessRuleException("CAMPAIGN_NOT_EDITABLE", "Only DRAFT campaigns can be edited.");
++        }
++        validate(draft);
++        this.name = draft.name().trim();
++        this.description = draft.description() == null ? null : draft.description().trim();
++        this.campaignType = draft.campaignType();
++        this.startAt = draft.startAt();
++        this.endAt = draft.endAt();
++        this.targetGroupId = blankToNull(draft.targetGroupId());
++        this.categoryCode = blankToNull(draft.categoryCode());
++        this.minTransactionAmount = draft.minTransactionAmount() == null ? ZERO : draft.minTransactionAmount();
++        this.rewardRate = draft.rewardRate();
++        this.fixedRewardAmount = draft.fixedRewardAmount();
++        this.maxRewardPerTransaction = draft.maxRewardPerTransaction();
++        this.maxRewardsPerCard = draft.maxRewardsPerCard();
++        this.budget = draft.budget() == null ? ZERO : draft.budget();
++        this.pointsMultiplier = draft.pointsMultiplier();
++        this.enrollmentRequired = draft.enrollmentRequired();
++        this.updatedAt = now;
++    }
++
++    public void activate(LocalDateTime now) {
++        if (status != CampaignStatus.DRAFT && status != CampaignStatus.PAUSED) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_STATE",
++                    "Only DRAFT or PAUSED campaigns can be activated.");
++        }
++        if (!now.isBefore(endAt)) {
++            throw new BusinessRuleException("CAMPAIGN_EXPIRED", "Campaign end time has passed.");
++        }
++        if (campaignType == CampaignType.CATEGORY_CASHBACK && budget.signum() <= 0) {
++            throw new BusinessRuleException("BUDGET_REQUIRED", "Cashback campaign requires a positive budget.");
++        }
++        this.status = CampaignStatus.ACTIVE;
++        this.updatedAt = now;
++    }
++
++    public void pause(LocalDateTime now) {
++        if (status != CampaignStatus.ACTIVE) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_STATE", "Only ACTIVE campaigns can be paused.");
++        }
++        this.status = CampaignStatus.PAUSED;
++        this.updatedAt = now;
++    }
++
++    public void end(LocalDateTime now) {
++        if (status != CampaignStatus.ACTIVE && status != CampaignStatus.PAUSED) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_STATE",
++                    "Only ACTIVE or PAUSED campaigns can be ended.");
++        }
++        this.status = CampaignStatus.ENDED;
++        this.updatedAt = now;
++    }
++
++    public boolean isActiveAt(LocalDateTime moment) {
++        return status == CampaignStatus.ACTIVE
++                && !moment.isBefore(startAt)
++                && moment.isBefore(endAt);
++    }
++
++    public boolean isCashback() {
++        return campaignType != CampaignType.POINTS_MULTIPLIER;
++    }
++
++    public boolean matchesGroup(String accountGroupId) {
++        return targetGroupId == null || Objects.equals(targetGroupId, accountGroupId);
++    }
++
++    public boolean matchesCategory(String transactionCategory) {
++        return categoryCode == null || Objects.equals(categoryCode, transactionCategory);
++    }
++
++    /**
++     * MK-ELI-09：现金返现预算是否足够。
++     */
++    public boolean hasBudgetFor(BigDecimal rewardAmount) {
++        if (!isCashback()) {
++            return true;
++        }
++        if (budget.signum() <= 0) {
++            return true;
++        }
++        return consumedAmount.add(rewardAmount).compareTo(budget) <= 0;
++    }
++
++    public void consumeCashback(BigDecimal rewardAmount) {
++        if (!isCashback()) {
++            return;
++        }
++        if (!hasBudgetFor(rewardAmount)) {
++            throw new BusinessRuleException("BUDGET_EXHAUSTED", "Campaign budget is exhausted.");
++        }
++        this.consumedAmount = consumedAmount.add(rewardAmount);
++        this.updatedAt = LocalDateTime.now();
++    }
++
++    public BigDecimal remainingBudget() {
++        if (budget.signum() <= 0) {
++            return null;
++        }
++        return budget.subtract(consumedAmount).max(ZERO);
++    }
++
++    private static void validate(CampaignDraft draft) {
++        if (draft.name() == null || draft.name().isBlank()) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN", "Campaign name must be supplied.");
++        }
++        if (draft.name().trim().length() > 80) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN", "Campaign name must be 80 characters or less.");
++        }
++        if (draft.campaignType() == null) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_TYPE", "Campaign type must be supplied.");
++        }
++        if (draft.startAt() == null || draft.endAt() == null) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_PERIOD", "Campaign start and end time must be supplied.");
++        }
++        if (!draft.startAt().isBefore(draft.endAt())) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_PERIOD", "Campaign start time must be before end time.");
++        }
++        if (draft.minTransactionAmount() != null && draft.minTransactionAmount().signum() < 0) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_RULE", "Minimum transaction amount must not be negative.");
++        }
++        if (draft.maxRewardsPerCard() != null && draft.maxRewardsPerCard() <= 0) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_RULE", "Max rewards per card must be greater than zero.");
++        }
++        if (draft.budget() != null && draft.budget().signum() < 0) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_RULE", "Budget must not be negative.");
++        }
++        if (draft.categoryCode() != null && !draft.categoryCode().isBlank()
++                && !draft.categoryCode().trim().matches("\\d{4}")) {
++            throw new BusinessRuleException("INVALID_CAMPAIGN_RULE", "Category code must be 4 digits.");
++        }
++        switch (draft.campaignType()) {
++            case FIRST_PURCHASE_CASHBACK -> {
++                if (draft.fixedRewardAmount() == null || draft.fixedRewardAmount().signum() <= 0) {
++                    throw new BusinessRuleException("INVALID_CAMPAIGN_RULE",
++                            "First purchase campaign requires a positive fixed reward amount.");
++                }
++            }
++            case CATEGORY_CASHBACK -> {
++                boolean hasRate = draft.rewardRate() != null && draft.rewardRate().signum() > 0;
++                boolean hasFixed = draft.fixedRewardAmount() != null && draft.fixedRewardAmount().signum() > 0;
++                if (!hasRate && !hasFixed) {
++                    throw new BusinessRuleException("INVALID_CAMPAIGN_RULE",
++                            "Category cashback requires a reward rate or fixed reward amount.");
++                }
++                if (hasRate && draft.rewardRate().compareTo(BigDecimal.ONE) > 0) {
++                    throw new BusinessRuleException("INVALID_CAMPAIGN_RULE", "Reward rate must not exceed 100%.");
++                }
++                if (draft.budget() == null || draft.budget().signum() <= 0) {
++                    throw new BusinessRuleException("BUDGET_REQUIRED", "Cashback campaign requires a positive budget.");
++                }
++            }
++            case POINTS_MULTIPLIER -> {
++                if (draft.pointsMultiplier() == null || draft.pointsMultiplier().signum() <= 0) {
++                    throw new BusinessRuleException("INVALID_CAMPAIGN_RULE",
++                            "Points campaign requires a positive multiplier.");
++                }
++            }
++            default -> throw new BusinessRuleException("INVALID_CAMPAIGN_TYPE", "Unsupported campaign type.");
++        }
++    }
++
++    private static String blankToNull(String value) {
++        return value == null || value.isBlank() ? null : value.trim();
++    }
++
++    public String getCampaignId() {
++        return campaignId;
++    }
++
++    public String getName() {
++        return name;
++    }
++
++    public String getDescription() {
++        return description;
++    }
++
++    public CampaignType getCampaignType() {
++        return campaignType;
++    }
++
++    public CampaignStatus getStatus() {
++        return status;
++    }
++
++    public LocalDateTime getStartAt() {
++        return startAt;
++    }
++
++    public LocalDateTime getEndAt() {
++        return endAt;
++    }
++
++    public String getTargetGroupId() {
++        return targetGroupId;
++    }
++
++    public String getCategoryCode() {
++        return categoryCode;
++    }
++
++    public BigDecimal getMinTransactionAmount() {
++        return minTransactionAmount;
++    }
++
++    public BigDecimal getRewardRate() {
++        return rewardRate;
++    }
++
++    public BigDecimal getFixedRewardAmount() {
++        return fixedRewardAmount;
++    }
++
++    public BigDecimal getMaxRewardPerTransaction() {
++        return maxRewardPerTransaction;
++    }
++
++    public Integer getMaxRewardsPerCard() {
++        return maxRewardsPerCard;
++    }
++
++    public BigDecimal getBudget() {
++        return budget;
++    }
++
++    public BigDecimal getConsumedAmount() {
++        return consumedAmount;
++    }
++
++    public BigDecimal getPointsMultiplier() {
++        return pointsMultiplier;
++    }
++
++    public boolean isEnrollmentRequired() {
++        return enrollmentRequired;
++    }
++
++    public LocalDateTime getCreatedAt() {
++        return createdAt;
++    }
++
++    public LocalDateTime getUpdatedAt() {
++        return updatedAt;
++    }
++
++    public long getVersion() {
++        return version;
++    }
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/CampaignDraft.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/CampaignDraft.java
+new file mode 100644
+index 0000000..faad12d
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/CampaignDraft.java
+@@ -0,0 +1,24 @@
++package com.carddemo.marketing.domain.model;
++
++import java.math.BigDecimal;
++
++/**
++ * 单个活动的规则草案，用于新建/编辑。
++ */
++public record CampaignDraft(
++        String name,
++        String description,
++        CampaignType campaignType,
++        java.time.LocalDateTime startAt,
++        java.time.LocalDateTime endAt,
++        String targetGroupId,
++        String categoryCode,
++        BigDecimal minTransactionAmount,
++        BigDecimal rewardRate,
++        BigDecimal fixedRewardAmount,
++        BigDecimal maxRewardPerTransaction,
++        Integer maxRewardsPerCard,
++        BigDecimal budget,
++        BigDecimal pointsMultiplier,
++        boolean enrollmentRequired) {
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/CampaignStatus.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/CampaignStatus.java
+new file mode 100644
+index 0000000..cd3467e
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/CampaignStatus.java
+@@ -0,0 +1,8 @@
++package com.carddemo.marketing.domain.model;
++
++public enum CampaignStatus {
++    DRAFT,
++    ACTIVE,
++    PAUSED,
++    ENDED
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/service/EligibilityPolicy.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/service/EligibilityPolicy.java
+new file mode 100644
+index 0000000..915bd6e
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/service/EligibilityPolicy.java
+@@ -0,0 +1,99 @@
++package com.carddemo.marketing.domain.service;
++
++import com.carddemo.marketing.domain.model.AccountSnapshot;
++import com.carddemo.marketing.domain.model.Campaign;
++import com.carddemo.marketing.domain.model.CampaignType;
++import com.carddemo.marketing.domain.model.RewardComputation;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++/**
++ * MK-ELI-01..09：资格判定。判定顺序即原因码优先级；命中第一个不满足条件即返回。
++ */
++public final class EligibilityPolicy {
++
++    public static final String NOT_ACTIVE = "CAMPAIGN_NOT_ACTIVE";
++    public static final String ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND";
++    public static final String ACCOUNT_INACTIVE = "ACCOUNT_INACTIVE";
++    public static final String GROUP_MISMATCH = "ACCOUNT_GROUP_MISMATCH";
++    public static final String CATEGORY_MISMATCH = "CATEGORY_MISMATCH";
++    public static final String AMOUNT_TOO_LOW = "AMOUNT_TOO_LOW";
++    public static final String NOT_ENROLLED = "NOT_ENROLLED";
++    public static final String CARD_LIMIT_REACHED = "CARD_LIMIT_REACHED";
++    public static final String ALREADY_REWARDED = "FIRST_PURCHASE_ALREADY_REWARDED";
++    public static final String BUDGET_EXHAUSTED = "BUDGET_EXHAUSTED";
++    public static final String REWARD_ZERO = "REWARD_ZERO";
++
++    private EligibilityPolicy() {
++    }
++
++    public record Evaluation(boolean eligible, String reason, RewardComputation reward) {
++
++        static Evaluation eligible(RewardComputation reward) {
++            return new Evaluation(true, null, reward);
++        }
++
++        static Evaluation rejected(String reason) {
++            return new Evaluation(false, reason, null);
++        }
++    }
++
++    /**
++     * 活动中心用：只判断"能否参与"，不含具体交易金额/类别。
++     */
++    public static Evaluation evaluateParticipation(Campaign campaign, AccountSnapshot account,
++                                                   boolean enrolled, LocalDateTime now) {
++        if (!campaign.isActiveAt(now)) {
++            return Evaluation.rejected(NOT_ACTIVE);
++        }
++        if (account == null) {
++            return Evaluation.rejected(ACCOUNT_NOT_FOUND);
++        }
++        if (!"Y".equals(account.activeStatus())) {
++            return Evaluation.rejected(ACCOUNT_INACTIVE);
++        }
++        if (!campaign.matchesGroup(account.groupId())) {
++            return Evaluation.rejected(GROUP_MISMATCH);
++        }
++        if (campaign.isEnrollmentRequired() && !enrolled) {
++            return Evaluation.rejected(NOT_ENROLLED);
++        }
++        return Evaluation.eligible(null);
++    }
++
++    /**
++     * 交易发生后用：完整判定并计算奖励。
++     */
++    public static Evaluation evaluateTransaction(Campaign campaign, AccountSnapshot account,
++                                                 BigDecimal transactionAmount, String categoryCode,
++                                                 boolean enrolled, long rewardsOnCard,
++                                                 LocalDateTime now) {
++        Evaluation participation = evaluateParticipation(campaign, account, enrolled, now);
++        if (!participation.eligible()) {
++            return participation;
++        }
++        if (!campaign.matchesCategory(categoryCode)) {
++            return Evaluation.rejected(CATEGORY_MISMATCH);
++        }
++        if (transactionAmount.compareTo(campaign.getMinTransactionAmount()) < 0) {
++            return Evaluation.rejected(AMOUNT_TOO_LOW);
++        }
++        if (campaign.getMaxRewardsPerCard() != null
++                && rewardsOnCard >= campaign.getMaxRewardsPerCard()) {
++            return Evaluation.rejected(CARD_LIMIT_REACHED);
++        }
++        if (campaign.getCampaignType() == CampaignType.FIRST_PURCHASE_CASHBACK && rewardsOnCard > 0) {
++            return Evaluation.rejected(ALREADY_REWARDED);
++        }
++
++        RewardComputation reward = RewardCalculator.compute(campaign, transactionAmount);
++        if (reward.amount().signum() <= 0 && reward.points() <= 0) {
++            return Evaluation.rejected(REWARD_ZERO);
++        }
++        if (!campaign.hasBudgetFor(reward.amount())) {
++            return Evaluation.rejected(BUDGET_EXHAUSTED);
++        }
++        return Evaluation.eligible(reward);
++    }
++}

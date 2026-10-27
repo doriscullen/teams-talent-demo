@@ -1,0 +1,229 @@
+diff --git a/services/marketing-service/src/test/java/com/carddemo/marketing/domain/model/CampaignTest.java b/services/marketing-service/src/test/java/com/carddemo/marketing/domain/model/CampaignTest.java
+new file mode 100644
+index 0000000..73f260a
+--- /dev/null
++++ b/services/marketing-service/src/test/java/com/carddemo/marketing/domain/model/CampaignTest.java
+@@ -0,0 +1,102 @@
++package com.carddemo.marketing.domain.model;
++
++import com.carddemo.marketing.domain.exception.BusinessRuleException;
++import org.junit.jupiter.api.Test;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++
++class CampaignTest {
++
++    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 25, 10, 0);
++
++    static CampaignDraft cashbackDraft() {
++        return new CampaignDraft("餐饮返现", "测试", CampaignType.CATEGORY_CASHBACK,
++                NOW.minusDays(1), NOW.plusDays(30), null, "0001",
++                new BigDecimal("50.00"), new BigDecimal("0.0500"), null,
++                new BigDecimal("30.00"), 5, new BigDecimal("1000.00"), null, true);
++    }
++
++    @Test
++    void createsDraftAndConsumesBudget() {
++        Campaign campaign = new Campaign("c1", cashbackDraft(), NOW);
++
++        assertThat(campaign.getStatus()).isEqualTo(CampaignStatus.DRAFT);
++        assertThat(campaign.getConsumedAmount()).isEqualByComparingTo("0.00");
++        assertThat(campaign.remainingBudget()).isEqualByComparingTo("1000.00");
++
++        campaign.activate(NOW);
++        campaign.consumeCashback(new BigDecimal("30.00"));
++
++        assertThat(campaign.getStatus()).isEqualTo(CampaignStatus.ACTIVE);
++        assertThat(campaign.getConsumedAmount()).isEqualByComparingTo("30.00");
++        assertThat(campaign.remainingBudget()).isEqualByComparingTo("970.00");
++    }
++
++    @Test
++    void budgetCannotBeExceeded() {
++        Campaign campaign = new Campaign("c1", cashbackDraft(), NOW);
++        campaign.activate(NOW);
++
++        assertThatThrownBy(() -> campaign.consumeCashback(new BigDecimal("1000.01")))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("BUDGET_EXHAUSTED");
++    }
++
++    @Test
++    void stateMachineOnlyAllowsLegalTransitions() {
++        Campaign campaign = new Campaign("c1", cashbackDraft(), NOW);
++
++        assertThatThrownBy(() -> campaign.pause(NOW))
++                .isInstanceOf(BusinessRuleException.class);
++        campaign.activate(NOW);
++        assertThatThrownBy(() -> campaign.activate(NOW))
++                .isInstanceOf(BusinessRuleException.class);
++        campaign.pause(NOW);
++        campaign.activate(NOW);
++        campaign.end(NOW);
++        assertThat(campaign.getStatus()).isEqualTo(CampaignStatus.ENDED);
++        assertThatThrownBy(() -> campaign.activate(NOW))
++                .isInstanceOf(BusinessRuleException.class);
++    }
++
++    @Test
++    void cannotEditActiveCampaign() {
++        Campaign campaign = new Campaign("c1", cashbackDraft(), NOW);
++        campaign.activate(NOW);
++
++        assertThatThrownBy(() -> campaign.applyDraft(cashbackDraft(), NOW))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("CAMPAIGN_NOT_EDITABLE");
++    }
++
++    @Test
++    void rejectsInvalidPeriodAndMissingReward() {
++        CampaignDraft badPeriod = new CampaignDraft("x", null, CampaignType.CATEGORY_CASHBACK,
++                NOW, NOW.minusDays(1), null, "0001", BigDecimal.ZERO,
++                new BigDecimal("0.05"), null, null, 1, new BigDecimal("100"), null, true);
++        assertThatThrownBy(() -> new Campaign("c1", badPeriod, NOW))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("INVALID_CAMPAIGN_PERIOD");
++
++        CampaignDraft noReward = new CampaignDraft("x", null, CampaignType.CATEGORY_CASHBACK,
++                NOW.minusDays(1), NOW.plusDays(1), null, "0001", BigDecimal.ZERO,
++                null, null, null, 1, new BigDecimal("100"), null, true);
++        assertThatThrownBy(() -> new Campaign("c1", noReward, NOW))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("INVALID_CAMPAIGN_RULE");
++    }
++
++    @Test
++    void rejectsCashbackWithoutBudget() {
++        CampaignDraft draft = new CampaignDraft("x", null, CampaignType.CATEGORY_CASHBACK,
++                NOW.minusDays(1), NOW.plusDays(1), null, "0001", BigDecimal.ZERO,
++                new BigDecimal("0.05"), null, null, 1, BigDecimal.ZERO, null, true);
++        assertThatThrownBy(() -> new Campaign("c1", draft, NOW))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("BUDGET_REQUIRED");
++    }
++}
+diff --git a/services/marketing-service/src/test/java/com/carddemo/marketing/domain/service/EligibilityPolicyTest.java b/services/marketing-service/src/test/java/com/carddemo/marketing/domain/service/EligibilityPolicyTest.java
+new file mode 100644
+index 0000000..344a836
+--- /dev/null
++++ b/services/marketing-service/src/test/java/com/carddemo/marketing/domain/service/EligibilityPolicyTest.java
+@@ -0,0 +1,115 @@
++package com.carddemo.marketing.domain.service;
++
++import com.carddemo.marketing.domain.model.AccountSnapshot;
++import com.carddemo.marketing.domain.model.Campaign;
++import com.carddemo.marketing.domain.model.CampaignDraft;
++import com.carddemo.marketing.domain.model.CampaignType;
++import org.junit.jupiter.api.Test;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++class EligibilityPolicyTest {
++
++    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 25, 10, 0);
++    private static final AccountSnapshot ACCOUNT = new AccountSnapshot("00000000001", "Y",
++            new BigDecimal("1940.00"), "A000000000");
++
++    private Campaign campaign(CampaignType type, String category, BigDecimal min,
++                             BigDecimal rate, BigDecimal fixed, BigDecimal budget,
++                             boolean enrollmentRequired, int maxPerCard) {
++        CampaignDraft draft = new CampaignDraft("测试", null, type,
++                NOW.minusDays(10), NOW.plusDays(10), null, category, min,
++                rate, fixed, new BigDecimal("50.00"), maxPerCard, budget, null, enrollmentRequired);
++        Campaign campaign = new Campaign("c1", draft, NOW);
++        campaign.activate(NOW);
++        return campaign;
++    }
++
++    private Campaign categoryCampaign() {
++        return campaign(CampaignType.CATEGORY_CASHBACK, "0001", new BigDecimal("50.00"),
++                new BigDecimal("0.05"), null, new BigDecimal("1000.00"), true, 5);
++    }
++
++    @Test
++    void eligibleWhenAllConditionsMet() {
++        EligibilityPolicy.Evaluation evaluation = EligibilityPolicy.evaluateTransaction(
++                categoryCampaign(), ACCOUNT, new BigDecimal("120.00"), "0001", true, 0, NOW);
++
++        assertThat(evaluation.eligible()).isTrue();
++        assertThat(evaluation.reward().amount()).isEqualByComparingTo("6.00");
++    }
++
++    @Test
++    void rejectsNotActiveCampaign() {
++        Campaign campaign = new Campaign("c1", new CampaignDraft("测试", null,
++                CampaignType.CATEGORY_CASHBACK, NOW.minusDays(1), NOW.plusDays(1), null, "0001",
++                BigDecimal.ZERO, new BigDecimal("0.05"), null, null, 1, new BigDecimal("100"),
++                null, true), NOW);
++
++        assertThat(EligibilityPolicy.evaluateParticipation(campaign, ACCOUNT, true, NOW).reason())
++                .isEqualTo(EligibilityPolicy.NOT_ACTIVE);
++    }
++
++    @Test
++    void rejectsInactiveAccountAndGroupMismatch() {
++        AccountSnapshot inactive = new AccountSnapshot("00000000001", "N",
++                BigDecimal.ZERO, "A000000000");
++        assertThat(EligibilityPolicy.evaluateParticipation(categoryCampaign(), inactive, true, NOW).reason())
++                .isEqualTo(EligibilityPolicy.ACCOUNT_INACTIVE);
++
++        AccountSnapshot otherGroup = new AccountSnapshot("00000000001", "Y",
++                BigDecimal.ZERO, "B000000000");
++        Campaign targeted = new Campaign("c2", new CampaignDraft("测试", null,
++                CampaignType.CATEGORY_CASHBACK, NOW.minusDays(1), NOW.plusDays(1), "A000000000",
++                "0001", BigDecimal.ZERO, new BigDecimal("0.05"), null, null, 1,
++                new BigDecimal("100"), null, true), NOW);
++        targeted.activate(NOW);
++        assertThat(EligibilityPolicy.evaluateParticipation(targeted, otherGroup, true, NOW).reason())
++                .isEqualTo(EligibilityPolicy.GROUP_MISMATCH);
++    }
++
++    @Test
++    void rejectsWrongCategoryOrAmount() {
++        assertThat(EligibilityPolicy.evaluateTransaction(categoryCampaign(), ACCOUNT,
++                new BigDecimal("120.00"), "0002", true, 0, NOW).reason())
++                .isEqualTo(EligibilityPolicy.CATEGORY_MISMATCH);
++        assertThat(EligibilityPolicy.evaluateTransaction(categoryCampaign(), ACCOUNT,
++                new BigDecimal("49.99"), "0001", true, 0, NOW).reason())
++                .isEqualTo(EligibilityPolicy.AMOUNT_TOO_LOW);
++    }
++
++    @Test
++    void rejectsWhenNotEnrolledOrLimitReached() {
++        assertThat(EligibilityPolicy.evaluateTransaction(categoryCampaign(), ACCOUNT,
++                new BigDecimal("120.00"), "0001", false, 0, NOW).reason())
++                .isEqualTo(EligibilityPolicy.NOT_ENROLLED);
++        assertThat(EligibilityPolicy.evaluateTransaction(categoryCampaign(), ACCOUNT,
++                new BigDecimal("120.00"), "0001", true, 5, NOW).reason())
++                .isEqualTo(EligibilityPolicy.CARD_LIMIT_REACHED);
++    }
++
++    @Test
++    void rejectsFirstPurchaseWhenAlreadyRewarded() {
++        Campaign first = campaign(CampaignType.FIRST_PURCHASE_CASHBACK, null,
++                new BigDecimal("100.00"), null, new BigDecimal("20.00"),
++                new BigDecimal("1000.00"), false, 2);
++
++        assertThat(EligibilityPolicy.evaluateTransaction(first, ACCOUNT,
++                new BigDecimal("150.00"), "0001", false, 1, NOW).reason())
++                .isEqualTo(EligibilityPolicy.ALREADY_REWARDED);
++    }
++
++    @Test
++    void rejectsWhenBudgetExhausted() {
++        Campaign campaign = campaign(CampaignType.CATEGORY_CASHBACK, "0001",
++                new BigDecimal("50.00"), new BigDecimal("0.05"), null,
++                new BigDecimal("5.00"), false, 5);
++
++        assertThat(EligibilityPolicy.evaluateTransaction(campaign, ACCOUNT,
++                new BigDecimal("120.00"), "0001", false, 0, NOW).reason())
++                .isEqualTo(EligibilityPolicy.BUDGET_EXHAUSTED);
++    }
++}

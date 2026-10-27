@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "72965a7c-be81-4e0c-9c6a-bac8f37c7a76",
+  "name": "跨服务幂等入账与失败重试",
+  "description": "跨服务奖励幂等入账开发范式：重复评估检查、账户入账去重、失败保留待处理状态及人工重试",
+  "scenario": "跨服务幂等入账与失败重试：实现跨服务奖励幂等入账，包含重复评估检查、账户入账去重、失败保留待处理状态及人工重试。",
+  "scenarioSource": "user",
+  "mode": "diff",
+  "repository": {
+    "path": "/Users/doris/work/temp/carddemo-java-1025",
+    "branch": "master",
+    "commit": "b0823de07b463f51e5066457d60b608f7b4174db"
+  },
+  "snippets": [
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-idempotent-posting/snippets/01-reward-orchestration.patch",
+      "archived": "input/snippets/snippets/01-reward-orchestration.patch",
+      "sha256": "f7acb9aa763d30fcf1b3e476a892db7ac101ab4bc64d946a103beedd4fdd8c77",
+      "size": 20617
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-idempotent-posting/snippets/02-account-credit.patch",
+      "archived": "input/snippets/snippets/02-account-credit.patch",
+      "sha256": "071fbe0f02e78d6c82aca33df0054c7223ce6a17bfef1b2ed3fe820f753ac256",
+      "size": 6892
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-idempotent-posting/snippets/03-tests.patch",
+      "archived": "input/snippets/snippets/03-tests.patch",
+      "sha256": "a30dc0641803b4c3e540b98db9d1637801cb8de15ddc3953b320ed65ec04da70",
+      "size": 13808
+    }
+  ],
+  "template": {
+    "kind": "default",
+    "original": null,
+    "archived": "input/template.md",
+    "sha256": "c5f0ede39dccccd21d003707cd548b9ca8bd2f76f2e20c620e01218187f2211d"
+  },
+  "engine": {
+    "id": "icode-miner-diff",
+    "version": "0.1.0"
+  },
+  "executionId": "ed90b38f-adef-4f3c-87e1-4ad37b10eeec",
+  "createdAt": "2026-10-27T17:44:44+08:00"
+}

@@ -57,11 +57,12 @@ export function fileLabel(key: string) {
   if (name === 'summary.md') return '范式总结';
   if (name === 'analyzer.md') return '代码分析报告';
   if (name === 'metadata.json') return 'PR #' + parts.pop();
+  if (name === 'meta.json') return parts[1] ? parts[1] + '：挖掘元数据' : '挖掘元数据';
   if (name === 'index.md') return parts[0] === 'miner' ? '范式索引' : '索引';
   if (/^Skill改进-/.test(name)) return 'Skill 改进：' + name.replace(/^Skill改进-|\.md$/g, '');
   return name.replace(/\.(md|html)$/, '');
 }
-/** Miner artifacts list files per spec: 范式总结, 代码分析报告, then the PR records. */
+/** Miner artifacts list files per spec: 范式总结, 代码分析报告, then PR records (PR mode) or mining metadata (diff mode). */
 export function fileGroups(a: Artifact, list: string[]) {
   if (a.folder !== 'miner') return [{ title: '', items: list }];
   const groups: { title: string; items: string[] }[] = [{ title: '', items: list.filter(f => f === 'miner/index.md') }], by: Record<string, { title: string; items: string[] }> = {};

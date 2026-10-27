@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "c89e5e0d-7d84-4e9a-94cd-0ecb750e5b48",
+  "name": "用户维护与删除保护",
+  "description": "用户新增、修改与删除的开发范式：类型校验、密码哈希存储、禁止自删除与保留最后一名管理员",
+  "scenario": "用户维护与删除保护：实现用户新增、修改与删除，包含用户类型校验、密码哈希处理、禁止自删除及保留最后一名管理员。",
+  "scenarioSource": "user",
+  "mode": "diff",
+  "repository": {
+    "path": "/Users/doris/work/temp/carddemo-java-1025",
+    "branch": "master",
+    "commit": "b0823de07b463f51e5066457d60b608f7b4174db"
+  },
+  "snippets": [
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-role-access/snippets/01-user-maintenance.patch",
+      "archived": "input/snippets/snippets/01-user-maintenance.patch",
+      "sha256": "571138b77c96829cbe465054fa3f442fdbfc9ea2963e498911a92f23943cd398",
+      "size": 13037
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-role-access/snippets/02-api-validation.patch",
+      "archived": "input/snippets/snippets/02-api-validation.patch",
+      "sha256": "1abcc09b1a4fd89a88dfdcf4a1db8695aed5f7d29beb7995856b545257d17f90",
+      "size": 8441
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-role-access/snippets/03-tests.patch",
+      "archived": "input/snippets/snippets/03-tests.patch",
+      "sha256": "63a52bd4c1d13f85ed5163065bc6c5083534dda7381096e4d89476ed9c0c7849",
+      "size": 6219
+    }
+  ],
+  "template": {
+    "kind": "default",
+    "original": null,
+    "archived": "input/template.md",
+    "sha256": "c5f0ede39dccccd21d003707cd548b9ca8bd2f76f2e20c620e01218187f2211d"
+  },
+  "engine": {
+    "id": "icode-miner-diff",
+    "version": "0.1.0"
+  },
+  "executionId": "86c6aec4-ffc6-4123-bde9-4489cb80cc44",
+  "createdAt": "2026-10-27T18:50:50+08:00"
+}

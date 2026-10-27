@@ -13,12 +13,15 @@ export function readContent(key: string, dir = contentDir): string | null {
 function prMap(dir = contentDir): Record<string, string> {
   return JSON.parse(readContent('miner/pr-map.json', dir) ?? '{}');
 }
-/** Files of a development-pattern library: index, then per spec 范式总结, 代码分析报告 and its PR records. */
+/** Files of a development-pattern library: index, then per spec 范式总结, 代码分析报告, its PR records (PR mode)
+ *  or its mining metadata (diff mode: meta.json records the scenario, repository and engine). */
 export function minerFiles(specs: string[], dir = contentDir) {
   const map = prMap(dir), out = ['miner/index.md'];
   for (const name of specs) {
     out.push(`miner/${name}/summary.md`, `miner/${name}/analyzer.md`);
-    for (const pr of Object.keys(map).filter(pr => map[pr] === name)) out.push(`miner/${name}/input/prs/${pr}/metadata.json`);
+    const prs = Object.keys(map).filter(pr => map[pr] === name);
+    if (prs.length) for (const pr of prs) out.push(`miner/${name}/input/prs/${pr}/metadata.json`);
+    else if (readContent(`miner/${name}/meta.json`, dir) != null) out.push(`miner/${name}/meta.json`);
   }
   return out;
 }
@@ -36,6 +39,7 @@ export function fileLabel(key: string) {
   if (name === 'summary.md') return parts[1] ? parts[1] + '：范式总结' : '范式总结';
   if (name === 'analyzer.md') return parts[1] ? parts[1] + '：代码分析报告' : '代码分析报告';
   if (name === 'metadata.json') return 'PR #' + parts.pop();
+  if (name === 'meta.json') return parts[1] ? parts[1] + '：挖掘元数据' : '挖掘元数据';
   if (name === 'index.md') return parts[0] === 'miner' ? '范式索引' : '索引';
   if (name.startsWith('Skill改进-')) return 'Skill 改进：' + name.replace(/^Skill改进-|\.md$/g, '');
   return name.replace(/\.(md|html)$/, '');

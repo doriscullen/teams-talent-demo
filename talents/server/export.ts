@@ -50,11 +50,14 @@ export function buildExport(state: TalentsState, dir = contentDir, exportedAt = 
 
 /** Writes the export into `target` (a shared data or seed directory) and removes files of versions no longer published. */
 export async function writeExport(target: string, data: Export) {
+  const filesDir = join(target, 'talents', 'files');
   for (const [key, list] of data.files) {
     const [id, v] = key.split('/'), version = Number(v.slice(1));
+    // Recreate the version directory so files no longer in the published list (e.g. removed specs) do not linger.
+    const dir = join(filesDir, id, 'v' + version);
+    await rm(dir, { recursive: true, force: true });
     for (const f of list) await atomicText(join(target, sharedPaths.talentsFile(id, version, f.path)), f.text);
   }
-  const filesDir = join(target, 'talents', 'files');
   for (const id of await list(filesDir)) {
     for (const v of await list(join(filesDir, id))) if (!data.files.has(id + '/' + v)) await rm(join(filesDir, id, v), { recursive: true, force: true });
     if (!(await list(join(filesDir, id))).length) await rm(join(filesDir, id), { recursive: true, force: true });

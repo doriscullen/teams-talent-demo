@@ -33,10 +33,38 @@ function PrRecord({ text }: { text: string }) {
     <p className="caption">diff 未随产物保存，需要时用 <code>git show</code> 或打开 PR 链接查看。</p></article>;
 }
 
+/** Mining metadata of a diff-mode spec (miner/<spec>/meta.json): scenario, repository, engine and snippets. */
+function MinerMeta({ text }: { text: string }) {
+  let meta: {
+    name?: string; description?: string; scenario?: string; mode?: string;
+    repository?: { path?: string; branch?: string; commit?: string };
+    snippets?: { archived?: string; size?: number }[];
+    engine?: { id?: string; version?: string }; executionId?: string; createdAt?: string;
+  };
+  try { meta = JSON.parse(text); } catch { return <pre className="plain">{text}</pre>; }
+  const rows: [string, ReactNode][] = [['模式', meta.mode === 'diff' ? '代码片段挖掘（diff）' : (meta.mode ?? '—')]];
+  if (meta.scenario) rows.push(['场景', meta.scenario]);
+  if (meta.repository) rows.push(['代码仓', <span className="path">{meta.repository.path}{meta.repository.branch ? ' · ' + meta.repository.branch : ''}</span>]);
+  if (meta.repository?.commit) rows.push(['提交', <span className="path">{String(meta.repository.commit).slice(0, 12)}</span>]);
+  if (meta.engine) rows.push(['引擎', (meta.engine.id ?? '') + (meta.engine.version ? ' v' + meta.engine.version : '')]);
+  if (meta.executionId) rows.push(['执行 ID', <span className="path">{meta.executionId}</span>]);
+  if (meta.createdAt) rows.push(['归档时间', String(meta.createdAt).replace('T', ' ').slice(0, 16)]);
+  return <article className="markdown"><h1>{meta.name ?? '挖掘元数据'}</h1>
+    {meta.description && <p>{meta.description}</p>}
+    <Fields rows={rows} />
+    {(meta.snippets ?? []).length > 0 && <>
+      <h2>输入代码片段</h2>
+      <ul className="file-lines">{meta.snippets!.map((s, i) => <li key={i}><span className="path">{s.archived ?? ''}</span>{s.size ? <span className="caption"> · {s.size.toLocaleString()} 字节</span> : null}</li>)}</ul>
+      <p className="caption">片段为从历史实现按路径提取的 Git diff，保留原始变更；分析时结合代码仓上下文总结范式。</p>
+    </>}
+  </article>;
+}
+
 export function FileContent({ st, a, file, text }: { st: TalentsState; a: Artifact; file: string; text: string | null }) {
   if (text == null) return <div className="index-summary"><p className="ui-note">内容暂不可预览。</p></div>;
-  if (/\/input\/prs\/\d+\/metadata\.json$/.test(file)) return <PrRecord text={text} />;
   if (/\.html$/.test(file)) return <iframe title="预览" sandbox="" srcDoc={K.reportHtml(st, a, text)} />;
+  if (/\/input\/prs\/\d+\/metadata\.json$/.test(file)) return <PrRecord text={text} />;
+  if (/\/meta\.json$/.test(file)) return <MinerMeta text={text} />;
   if (/\.md$/.test(file)) return <article className="markdown"><Markdown text={text} /></article>;
   return <pre className="plain">{text}</pre>;
 }

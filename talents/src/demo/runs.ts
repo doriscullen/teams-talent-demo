@@ -57,16 +57,17 @@ export function runPlan(st: TalentsState, t: Task): RunPlan {
   }
   if (t.cap === 'miner-pr' || t.cap === 'miner-diff') {
     const run = '.icode-knowledge/miner/.runs/' + hashId(sid, 8);
+    const diff = t.cap === 'miner-diff';
     const lm = ['• iCode：Code Agent 就绪，会话 ' + sid, '→ skill  icode-' + t.cap, '→ script  icode-' + t.cap + '/scripts/prepare_input.py', '  ✓ 0.1s',
-      '准备完成。先读取 PR 资料、模板和分析模板。'];
-    (t.prs ?? []).forEach(n => lm.push('→ read   ' + run + '/input/prs/' + n + '/description.md', '→ read   ' + run + '/input/prs/' + n + '/diff.patch'));
-    if (!t.prs) lm.push('→ read   ' + run + '/input/snippets.md');
-    lm.push('→ resource  icode-miner-pr/assets/analyzer_template.md', '需要补充上下文：读取相关服务的领域对象和应用服务。',
+      diff ? '准备完成。读取场景描述与代码片段。' : '准备完成。先读取 PR 资料、模板和分析模板。'];
+    if (t.prs) (t.prs).forEach(n => lm.push('→ read   ' + run + '/input/prs/' + n + '/description.md', '→ read   ' + run + '/input/prs/' + n + '/diff.patch'));
+    else lm.push('→ read   ' + run + '/input/spec_desc.txt', '→ read   ' + run + '/input/snippets/snippets/01-*.patch', '→ read   ' + run + '/input/template.md');
+    lm.push('→ resource  icode-' + t.cap + '/assets/analyzer_template.md', '需要补充上下文：读取相关服务的领域对象和应用服务。',
       '→ grep   class .*Service in services/', '→ read   services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java',
-      '→ write  ' + run + '/analyzer.md', '→ resource  icode-miner-pr/assets/summarizer_template.md', '→ write  ' + run + '/summary.md',
+      '→ write  ' + run + '/analyzer.md', '→ resource  icode-' + t.cap + '/assets/summarizer_template.md', '→ write  ' + run + '/summary.md',
       '→ write  ' + run + '/naming.json', '→ script  icode-' + t.cap + '/scripts/archive_spec.py', '  ✓ 0.1s',
       '✓ Done · 4m 19s · ' + (17 + (t.prs ?? []).length * 2) + ' tool calls · session ' + sid);
-    return { seconds: 14, steps: ['准备输入', '分析代码变更', '总结并归档范式'], logs: lm };
+    return { seconds: 14, steps: diff ? ['准备输入', '分析代码片段', '总结并归档范式'] : ['准备输入', '分析代码变更', '总结并归档范式'], logs: lm };
   }
   // doc-extract (Skill)
   const names = t.sources.map(id => source(st, id)?.name ?? '');
@@ -145,10 +146,11 @@ export function produce(st: TalentsState, t: Task): Artifact {
   let a = existingArtifact(st, t);
   const draft: Draft = { created: now(), task: t.id, revisions: [], basis: sourceState(source(st, t.sources[0])) };
   if (a) {
-    if (a.folder === 'miner' && t.prs) {
+    if (a.folder === 'miner') {
       const map: Record<string, string> = JSON.parse(content('miner/pr-map.json') ?? '{}');
       const base = (a.draft ? a.specs : a.published?.specs) ?? [];
-      const add = t.prs.map(n => map[n]).filter(Boolean);
+      // PR mode: the selected PRs name the specs to add; diff mode: the task name is the spec.
+      const add = t.prs ? t.prs.map(n => map[n]).filter(Boolean) : (t.name && t.name !== base[base.length - 1] ? [t.name] : []);
       a.specs = base.concat(add.filter((n, i) => !base.includes(n) && add.indexOf(n) === i));
       a.files = minerFiles(a.specs);
     }
@@ -183,9 +185,10 @@ export function produce(st: TalentsState, t: Task): Artifact {
   } else {
     const map: Record<string, string> = JSON.parse(content('miner/pr-map.json') ?? '{}');
     a.specs = (t.prs ?? []).map(n => map[n]).filter((n, i, arr) => n && arr.indexOf(n) === i);
-    if (!a.specs.length) a.specs = ['跨服务幂等记账'];
+    if (!a.specs.length && t.name) a.specs = [t.name];
+    if (!a.specs.length) a.specs = ['消费返现与奖励发放'];
     a.name = src.name + ' 开发范式';
-    a.desc = '从已合并 PR 总结的实现范式，含步骤、约束和示例代码。';
+    a.desc = '从代码变更或代码片段总结的实现范式，含步骤、约束和示例代码。';
     a.folder = 'miner';
     a.files = minerFiles(a.specs);
     a.skills = ['find-reference-spec'];
