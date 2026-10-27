@@ -16,7 +16,8 @@ export interface Talents {
   /** Changes a copy of the state, shows it and saves it; returns what the recipe returns. */
   update<T>(recipe: (draft: TalentsState) => T): T;
   reset(): Promise<void>;
-  submit(request: SubmitRequest): Promise<void>;
+  /** Submits a PR; onStep gets each step as it starts (src/components/submit-pr.tsx). */
+  submit(request: SubmitRequest, onStep: (step: number) => void): Promise<void>;
   go(hash: string): void;
   /** Rewrites the current hash without adding a history entry (e.g. to drop ?new=1 once handled). */
   replace(hash: string): void;
@@ -71,9 +72,9 @@ export function TalentsProvider({ boot, children }: { boot: Boot; children: Reac
     saver.current.revision = fresh.revision;
     stateRef.current = fresh.state; setState(fresh.state); setTeams(fresh.teams);
   }, []);
-  const submit = useCallback(async (request: SubmitRequest) => {
+  const submit = useCallback(async (request: SubmitRequest, onStep: (step: number) => void) => {
     await saver.current.saving;
-    const fresh = await submitPullRequest(request);
+    const fresh = await submitPullRequest(request, onStep);
     saver.current.revision = fresh.revision;
     stateRef.current = fresh.state; setState(fresh.state);
   }, []);

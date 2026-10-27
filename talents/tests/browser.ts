@@ -46,11 +46,13 @@ try {
   await page.goto(origin + '/talents/#/projects?project=carddemo&id=a-biz');
   await page.getByRole('button', { name: '提交 PR', exact: true }).click();
   let dialog = page.getByRole('dialog');
-  await dialog.getByText('检测到 fork 仓', { exact: false }).waitFor();
+  await dialog.locator('input[value="tester/teams-talent-demo"]').waitFor();
   assert.equal(await dialog.getByLabel('GitHub 仓库').inputValue(), 'tester/teams-talent-demo');
   assert.equal(await dialog.getByLabel('目标分支').inputValue(), 'main');
   await dialog.getByRole('button', { name: '提交 PR', exact: true }).click();
   await dialog.getByText('提交失败', { exact: true }).waitFor();
+  assert.equal(await dialog.locator('.submit-steps .ant-steps-item-error').innerText(), '创建 PR');
+  assert.equal(await dialog.locator('.submit-steps .ant-steps-item-finish').count(), 4);
   await dialog.getByRole('button', { name: '提交 PR', exact: true }).click();
   await page.locator('.wb-side').getByRole('link', { name: '查看 PR' }).waitFor();
   await page.reload();
@@ -60,7 +62,7 @@ try {
     await page.locator('.file-item', { hasText: title }).click();
     await page.getByRole('button', { name: '提交改进 PR', exact: true }).click();
     dialog = page.getByRole('dialog');
-    await dialog.getByText('检测到 fork 仓', { exact: false }).waitFor();
+    await dialog.locator('input[value="tester/teams-talent-demo"]').waitFor();
     if (title === '统一 ADR Skill') assert.equal(await dialog.getByLabel('仓内 Skill 目录').inputValue(), 'workspace/.agents/skills/arch-adr-writing');
     await dialog.getByRole('button', { name: '提交 PR', exact: true }).click();
     await page.locator('.wb-side').getByRole('link', { name: '查看 PR' }).waitFor();

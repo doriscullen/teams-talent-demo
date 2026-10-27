@@ -24,6 +24,10 @@ export const github: Github = (method, path, body) => new Promise((resolve, reje
   child.stdin.end(body ? JSON.stringify(body) : undefined);
 });
 
+const pathOf = (path: string) => path.split('/').map(encodeURIComponent).join('/');
+/** gh reports the HTTP status of a failed request as "(HTTP 404)". */
+const status = (error: unknown, code: number) => (error as Error).message?.includes('(HTTP ' + code + ')');
+
 function safePath(path: string) {
   if (!path || path.startsWith('/') || path.split('/').some(p => p === '..' || p === '.git') || path.includes('\\')) throw new HttpError('仓内文件路径无效');
   return path;
@@ -63,24 +67,28 @@ export function knowledgeFiles(a: Artifact) {
   });
 }
 
-/** Creates a commit on a dedicated branch through gh; the developer's checkout is never modified. */
-export async function submitPullRequest(a: Artifact, target: SubmitTarget, suggestionId?: string, gh: Github = github): Promise<Submission> {
+/** Creates a commit on a dedicated branch through gh; the developer's checkout is never modified.
+ *  onStep is called as each step starts: 0 read the base branch, 1 check the files, 2 commit, 3 branch, 4 PR (src/components/submit-pr.tsx). */
+export async function submitPullRequest(a: Artifact, target: SubmitTarget, suggestionId?: string, gh: Github = github, onStep: (step: number) => void = () => undefined): Promise<Submission> {
   const repository = target.repository.trim().replace(/^https:\/\/github.com\//, '').replace(/\.git$/, '');
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !target.base.trim()) throw new HttpError('请填写 GitHub 仓库 owner/repo 和目标分支');
   if (a.kind === 'index') throw new HttpError('远端索引无需提交 PR');
   const root = 'repos/' + repository, directory = target.directory ?? '';
-  const base = await gh('GET', root + '/commits/' + encodeURIComponent(target.base));
+  // Each gh call is a round trip to GitHub, so only small responses are read and independent ones run together.
+  onStep(0);
+  const head = await gh('GET', root + '/git/ref/heads/' + pathOf(target.base)).catch(error => {
+    throw status(error, 404) ? new HttpError('目标分支不存在：' + target.base) : error;
+  });
+  const baseSha: string = head.object.sha;
+  const baseTree: Promise<string> = gh('GET', root + '/git/commits/' + baseSha).then(c => c.tree.sha);
+  baseTree.catch(() => undefined); // awaited below; reading the files may fail first
   /** The file as stored, line endings included; empty when it does not exist. */
-  const read = async (path: string) => {
-    const tree = await gh('GET', root + '/git/trees/' + base.commit.tree.sha + '?recursive=1');
-    const entry = tree.tree.find((f: any) => f.path === path);
-    if (!entry) return '';
-    const blob = await gh('GET', root + '/git/blobs/' + entry.sha);
-    return Buffer.from(blob.content, 'base64').toString('utf8');
-  };
+  const read = (path: string): Promise<string> => gh('GET', root + '/contents/' + pathOf(path) + '?ref=' + baseSha)
+    .then(file => Buffer.from(file.content, 'base64').toString('utf8'), error => { if (status(error, 404)) return ''; throw error; });
   const lf = (text: string) => text.replace(/\r\n/g, '\n');
   // Keep a file's CRLF line endings so the PR shows only the suggested change.
   const like = (stored: string, text: string) => stored.includes('\r\n') ? lf(text).replace(/\n/g, '\r\n') : text;
+  onStep(1);
   let title = a.name;
   let files: { path: string; text: string }[];
   if (suggestionId) {
@@ -90,13 +98,12 @@ export async function submitPullRequest(a: Artifact, target: SubmitTarget, sugge
     title = suggestion.title;
     if (suggestion.kind === 'skill') {
       const dir = safePath(target.skillDirectory?.trim() || posix.join(directory, '.agents/skills', suggestion.skill));
-      files = [];
-      for (const f of suggestion.files) {
+      files = await Promise.all(suggestion.files.map(async (f: any) => {
         const path = safePath(posix.join(dir, safePath(f.path)));
         const before = await read(path);
         if (lf(before).trim() !== lf(f.before).trim()) throw new HttpError('目标文件与建议依据不同，请更新诊断后重试：' + path);
-        files.push({ path, text: like(before, f.after) });
-      }
+        return { path, text: like(before, f.after) };
+      }));
     } else {
       const rules = JSON.parse(readContent('trajectory/' + a.topic + '/rules.json') ?? '{}');
       if (!rules[suggestionId]) throw new HttpError('建议缺少项目规则');
@@ -111,16 +118,15 @@ export async function submitPullRequest(a: Artifact, target: SubmitTarget, sugge
   const version = (a.submission?.version ?? a.published?.version ?? 0) + 1;
   const digest = createHash('sha256').update(JSON.stringify([repository, target.base, a.id, suggestionId, files])).digest('hex').slice(0, 16);
   const branch = 'talents/' + digest;
-  // A stable branch also lets retries recover a PR created before the local record was saved.
-  const existing = await gh('GET', root + '/pulls?state=all&head=' + encodeURIComponent(repository.split('/')[0] + ':' + branch));
-  let url = existing[0]?.html_url;
-  if (!url) {
-    const tree = await gh('POST', root + '/git/trees', { base_tree: base.commit.tree.sha, tree: files.map(f => ({ path: f.path, mode: '100644', type: 'blob', content: f.text })) });
-    const commit = await gh('POST', root + '/git/commits', { message: title, tree: tree.sha, parents: [base.sha] });
-    const refs = await gh('GET', root + '/git/matching-refs/heads/' + branch);
-    if (!refs.length) await gh('POST', root + '/git/refs', { ref: 'refs/heads/' + branch, sha: commit.sha });
-    const pr = await gh('POST', root + '/pulls', { title, head: branch, base: target.base, body: [target.note || title, '', '来源：Talents · ' + a.name + (suggestionId ? ' / ' + suggestionId : ''), '', '变更文件：', ...files.map(f => '- `' + f.path + '`'), '', '请审阅内容后合入。'].join('\n') });
-    url = pr.html_url;
-  }
+  onStep(2);
+  const tree = await gh('POST', root + '/git/trees', { base_tree: await baseTree, tree: files.map(f => ({ path: f.path, mode: '100644', type: 'blob', content: f.text })) });
+  const commit = await gh('POST', root + '/git/commits', { message: title, tree: tree.sha, parents: [baseSha] });
+  onStep(3);
+  // The branch name is stable, so an existing branch means an earlier attempt got this far: reuse its PR if it has one.
+  const created = await gh('POST', root + '/git/refs', { ref: 'refs/heads/' + branch, sha: commit.sha }).then(() => true, error => { if (status(error, 422)) return false; throw error; });
+  onStep(4);
+  const existing = created ? [] : await gh('GET', root + '/pulls?state=all&head=' + encodeURIComponent(repository.split('/')[0] + ':' + branch));
+  const url: string = existing[0]?.html_url ?? (await gh('POST', root + '/pulls', { title, head: branch, base: target.base,
+    body: [target.note || title, '', '来源：Talents · ' + a.name + (suggestionId ? ' / ' + suggestionId : ''), '', '变更文件：', ...files.map(f => '- `' + f.path + '`')].join('\n') })).html_url;
   return { url, repository, base: target.base, branch, at: new Date().toISOString(), version, ...(suggestionId ? { suggestionId } : {}), files };
 }

@@ -42,6 +42,14 @@
 .field>.label{font-weight:600}
 .step{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:6px;border-radius:50%;background:var(--ui-color-primary-soft);color:var(--ui-color-primary);font-size:11px}
 .stack{display:flex;flex-direction:column;gap:var(--ui-space-1)}
+.submit-steps{margin:4px 0 16px}
+/* PR progress: done green, failed red, everything else (running included) grey */
+.submit-steps .ant-steps-item .ant-steps-item-icon{background:var(--ui-color-faint)!important;border-color:var(--ui-color-faint)!important}
+.submit-steps .ant-steps-item-finish .ant-steps-item-icon{background:var(--ui-color-success)!important;border-color:var(--ui-color-success)!important}
+.submit-steps .ant-steps-item-error .ant-steps-item-icon{background:var(--ui-color-danger)!important;border-color:var(--ui-color-danger)!important}
+.submit-steps .ant-steps-item-rail{border-color:var(--ui-color-divider)!important;background:var(--ui-color-divider)!important}
+.submit-steps .ant-steps-item-finish .ant-steps-item-rail:not(.ant-steps-item-rail-error){border-color:var(--ui-color-success)!important;background:var(--ui-color-success)!important}
+.submit-steps .ant-steps-item-finish .ant-steps-item-title{color:var(--ui-color-success)!important}
 .option-list{display:flex;flex-direction:column;gap:var(--ui-space-1)}
 .option-list>.ant-radio-wrapper{align-items:flex-start;padding:10px 12px;margin:0;border:1px solid var(--ui-color-border);border-radius:var(--ui-radius)}
 .option-list>.ant-radio-wrapper-checked{border-color:var(--ui-color-primary);background:var(--ui-color-primary-ghost)}

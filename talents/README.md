@@ -75,7 +75,7 @@ Talents 自己的状态（任务、产物、PR 提交记录与提交内容、诊
 | `PUT /api/state` | 保存页面上的状态（`{ revision, state }`，按 revision 检查冲突）。服务端去掉来自 Teams 的部分，只保存 Talents 自己的数据，然后更新共享目录中的知识 |
 | `POST /api/reset` | 恢复初始数据 |
 | `GET /api/pull-requests/target?project=<项目>` | 项目默认的 PR 目标：`{ repository, base, fork, directory }` |
-| `POST /api/pull-requests` | 提交 PR（`{ artifactId, suggestionId?, repository, base, note, skillDirectory? }`），成功后返回最新状态；同一产物或建议提交中时返回 409 |
+| `POST /api/pull-requests` | 提交 PR（`{ artifactId, suggestionId?, repository, base, note, skillDirectory? }`）。每开始一步返回一行 `{ step }`（0 读取目标分支、1 核对文件、2 生成提交、3 创建分支、4 创建 PR），最后一行是 `{ boot }`（最新状态）或 `{ error }`；弹窗据此显示进度。同一产物或建议提交中时返回 409 |
 
 ## 演示脚本（约 10 分钟）
 

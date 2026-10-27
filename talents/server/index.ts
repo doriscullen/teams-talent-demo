@@ -102,9 +102,12 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
         if (!artifact) throw new HttpError('产物不存在', 404);
         const existing = body.suggestionId ? artifact.suggestions?.find(s => s.id === body.suggestionId)?.submission : !artifact.draft && artifact.submission;
         if (existing) { json(200, await bootstrap()); return; }
+        // One JSON line per step as it starts ({ step }), then { boot } or { error }, so the page can show progress.
+        response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
+        const send = (value: unknown) => response.write(JSON.stringify(value) + '\n');
         submissions.add(key);
         try {
-          const submitted = await submitPullRequest(structuredClone(artifact), { repository: body.repository, base: body.base, note: body.note, skillDirectory: body.skillDirectory, directory: artifact.projectId ? projectRepositories[artifact.projectId]?.directory : undefined }, body.suggestionId);
+          const submitted = await submitPullRequest(structuredClone(artifact), { repository: body.repository, base: body.base, note: body.note, skillDirectory: body.skillDirectory, directory: artifact.projectId ? projectRepositories[artifact.projectId]?.directory : undefined }, body.suggestionId, undefined, step => send({ step }));
           await store.mutate(null, previous => {
             const next = structuredClone(previous), a = next.artifacts.find(a => a.id === body.artifactId)!;
             if (body.suggestionId) {
@@ -117,8 +120,11 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
             }
             return next;
           });
-          json(200, await bootstrap());
-        } finally { submissions.delete(key); }
+          send({ boot: await bootstrap() });
+        } catch (error) {
+          if (!(error instanceof HttpError)) console.error(error);
+          send({ error: error instanceof Error ? error.message : '提交失败' });
+        } finally { submissions.delete(key); response.end(); }
         return;
       }
       throw new HttpError('接口不存在', 404);

@@ -9,14 +9,19 @@ const skill = report.suggestions.find(s => s.kind === 'skill');
 const files = Object.fromEntries(skill.files.map(f => ['workspace/.agents/skills/' + skill.skill + '/' + f.path, f.before.replace(/\n/g, '\r\n')]));
 files['workspace/AGENTS.md'] = '# Existing project rules\n';
 let result = { sha: 'test-generated' };
+const fail = message => { process.stderr.write('gh: ' + message); process.exit(1); };
 // The repository itself: anything but the project repository is a fork of it.
 if (method === 'GET' && /^repos\/[^/]+\/[^/]+$/.test(path)) result = { full_name: path.slice(6), fork: path !== 'repos/zhuyuloveai/teams-talent-demo', parent: { full_name: 'zhuyuloveai/teams-talent-demo' } };
-else if (path.includes('/commits/')) result = { sha: 'test-base', commit: { tree: { sha: 'test-tree' } } };
-else if (method === 'GET' && path.includes('/git/trees/')) result = { tree: Object.keys(files).map(path => ({ path, sha: path })) };
-else if (path.includes('/git/blobs/')) result = { content: Buffer.from(files[path.split('/git/blobs/')[1]]).toString('base64') };
-else if (path.includes('/matching-refs/') || path.includes('/pulls?')) result = [];
+else if (path.endsWith('/git/ref/heads/main')) result = { object: { sha: 'test-base' } };
+else if (path.endsWith('/git/commits/test-base')) result = { sha: 'test-base', tree: { sha: 'test-tree' } };
+else if (path.includes('/contents/')) {
+  const file = decodeURIComponent(path.split('/contents/')[1].split('?')[0]);
+  if (!(file in files)) fail('Not Found (HTTP 404)');
+  result = { content: Buffer.from(files[file]).toString('base64'), encoding: 'base64' };
+}
+else if (method === 'GET' && path.includes('/pulls?')) result = [];
 else if (method === 'POST' && path.endsWith('/pulls')) {
-  if (existsSync(process.env.TEST_GH_FAIL)) { unlinkSync(process.env.TEST_GH_FAIL); process.stderr.write('模拟提交失败，请重试'); process.exit(1); }
+  if (existsSync(process.env.TEST_GH_FAIL)) { unlinkSync(process.env.TEST_GH_FAIL); fail('模拟提交失败，请重试'); }
   result = { html_url: 'https://github.com/example/project/pull/42' };
 }
 process.stdout.write(JSON.stringify(result));

@@ -13,11 +13,15 @@ function fakeGithub(contents: Record<string, string> = {}, existing = false) {
   const calls: { method: string; path: string; body: any }[] = [];
   const gh: Github = async (method, path, body) => {
     calls.push({ method, path, body });
-    if (path.includes('/commits/main')) return { sha: 'base', commit: { tree: { sha: 'base-tree' } } };
-    if (method === 'GET' && path.includes('/git/trees/')) return { tree: Object.keys(contents).map(path => ({ path, sha: path })) };
-    if (path.includes('/git/blobs/')) return { content: Buffer.from(contents[path.split('/git/blobs/')[1]]).toString('base64') };
+    if (path.endsWith('/git/ref/heads/main')) return { object: { sha: 'base' } };
+    if (path.endsWith('/git/commits/base')) return { sha: 'base', tree: { sha: 'base-tree' } };
+    if (path.includes('/contents/')) {
+      const file = decodeURIComponent(path.split('/contents/')[1].split('?')[0]);
+      if (!(file in contents)) throw new Error('gh: Not Found (HTTP 404)');
+      return { content: Buffer.from(contents[file]).toString('base64'), encoding: 'base64' };
+    }
+    if (method === 'POST' && path.endsWith('/git/refs') && existing) throw new Error('gh: Reference already exists (HTTP 422)');
     if (method === 'GET' && path.includes('/pulls?')) return existing ? [{ html_url: 'https://github.com/example/project/pull/7' }] : [];
-    if (path.includes('/matching-refs/')) return [];
     if (method === 'POST' && path.endsWith('/pulls')) return { html_url: 'https://github.com/example/project/pull/7' };
     return { sha: 'generated' };
   };
@@ -35,12 +39,14 @@ test('knowledge PR contains revised text, stable branch and a snapshot; never up
   assert.deepEqual(a, before);
   assert.equal(fake.calls.filter(c => c.path.endsWith('/pulls') && c.method === 'POST').length, 1);
   assert.ok(fake.calls.some(c => c.path.endsWith('/git/trees') && c.body.base_tree === 'base-tree'));
+  assert.ok(!fake.calls.some(c => /\/commits\/main|\/git\/trees\/|\/git\/blobs\/|matching-refs/.test(c.path)), 'only small responses are read');
   a.submission = submission;
   assert.ok(!buildExport(state).knowledge.artifacts.some(a => a.id === 'a-biz'));
   const retry = fakeGithub({}, true);
   const recovered = await submitPullRequest(before, target, undefined, retry.gh);
   assert.equal(recovered.branch, submission.branch);
-  assert.equal(retry.calls.filter(c => c.method === 'POST').length, 0);
+  assert.equal(recovered.url, submission.url);
+  assert.ok(!retry.calls.some(c => c.method === 'POST' && c.path.endsWith('/pulls')), 'an existing branch reuses its PR');
 });
 
 test('rule PR preserves existing AGENTS.md and does not write Skill versions or local rules', async () => {
@@ -112,4 +118,22 @@ test('the Skill suggestion is based on the Skill in workspace/.agents/skills of 
   const contents = Object.fromEntries(suggestion.files.map((f: any) => [dir + f.path, readFileSync(join(repositoryRoot, dir + f.path), 'utf8')]));
   const result = await submitPullRequest(a, { ...target, directory: 'workspace' }, suggestion.id, fakeGithub(contents).gh);
   assert.equal(result.files.length, suggestion.files.length);
+});
+
+test('a missing base branch is reported, and a new branch skips the PR lookup', async () => {
+  const a = seedState().artifacts.find(a => a.id === 'a-biz')!;
+  await assert.rejects(submitPullRequest(a, { ...target, base: 'release' }, undefined, async () => { throw new Error('gh: Not Found (HTTP 404)'); }), /目标分支不存在：release/);
+  const fake = fakeGithub();
+  await submitPullRequest(a, target, undefined, fake.gh);
+  assert.ok(!fake.calls.some(c => c.path.includes('/pulls?')));
+  assert.equal(fake.calls.length, 6);
+});
+
+test('steps are reported in order as they start, and stop at the one that fails', async () => {
+  const biz = seedState().artifacts.find(a => a.id === 'a-biz')!, steps: number[] = [];
+  await submitPullRequest(biz, target, undefined, fakeGithub().gh, step => steps.push(step));
+  assert.deepEqual(steps, [0, 1, 2, 3, 4]);
+  const a = seedState().artifacts.find(a => a.kind === 'diagnosis')!, failed: number[] = [];
+  await assert.rejects(submitPullRequest(a, target, 'change-02', fakeGithub().gh, step => failed.push(step)), /建议依据不同/);
+  assert.deepEqual(failed, [0, 1]);
 });
