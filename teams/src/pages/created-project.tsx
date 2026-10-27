@@ -1,3 +1,4 @@
+import { projectTasksVisibleTo } from '../task-visibility.js';
 import { defaultTeamId, findTeam, projectTeam } from '../teams-domain.js';
 import { ProjectTaskManagement } from '../components/project-task-management.js';
 import { useState } from 'react';
@@ -12,6 +13,12 @@ import { ProjectAssets } from '../components/project-assets.js';
 import { ProjectKnowledge } from '../components/project-knowledge.js';
 import { ProjectWorkLaunch } from '../components/project-work-launch.js';
 import { Mono, Origin } from '../components/common.js';
+import { preferredDeliveryTask, projectDeliveryTasks } from '../project-delivery-tasks.js';
+import type { RequirementNode } from '../delivery-requirements.js';
+import { DeliveryTaskSidebar } from '../components/delivery-task-sidebar.js';
+import { visibleGenericTasks } from '../task-visibility.js';
+import { LiveTaskDelivery } from '../components/live-task-delivery.js';
+import { TaskExecutionRecords } from '../components/task-execution-records.js';
 
 /** Fields follow RealProjectIndex in Teams project-real.tsx; project creation carries an explicit team scope. */
 function ProjectFields({ teamName }: { teamName: string }) {
@@ -49,7 +56,7 @@ export function CreatedProjectCard({ project }: { project: CreatedProject }) {
   const { state, role, navigate } = useDemo();
   return <FrameworkCard title={project.name} action={<Tag>新建项目</Tag>}>
     <p>{project.description || '尚未填写项目说明。'}</p>
-    <Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[{ key: 'team', label: '所属团队', children: projectTeam(state, project.id).name }, { key: 'owner', label: '项目 Owner', children: '林悦' }, { key: 'repository', label: '主仓', children: project.repositoryIdentity }, { key: 'scope', label: '项目数据', children: `${(state.workspace.genericTasks ?? []).filter(task => task.projectId === project.id).length} 个通用任务` }]} />
+    <Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[{ key: 'team', label: '所属团队', children: projectTeam(state, project.id).name }, { key: 'owner', label: '项目 Owner', children: '林悦' }, { key: 'repository', label: '主仓', children: project.repositoryIdentity }, { key: 'scope', label: '项目数据', children: `${visibleGenericTasks(state, project.id, role).length} 个通用任务` }]} />
     <Space wrap><Button type="primary" data-project-primary={project.id} aria-label={(role === 'owner' ? '进入任务管理：' : '进入任务交付：') + project.name} onClick={() => navigate(createdProjectRoute(project.id, role === 'owner' ? 'management' : 'delivery'))}>{role === 'owner' ? '进入任务管理' : '进入任务交付'}</Button><Button onClick={() => navigate(createdProjectRoute(project.id))}>项目资料</Button>{role === 'owner' && <Button aria-label={'编辑项目：' + project.name} onClick={() => navigate(createdProjectRoute(project.id, 'settings'))}>编辑项目</Button>}</Space>
   </FrameworkCard>;
 }
@@ -57,17 +64,24 @@ export function CreatedProjectCard({ project }: { project: CreatedProject }) {
 export function CreatedProjectPage({ project, tab }: { project: CreatedProject; tab: string }) {
   const { state, role, busy, update, navigate } = useDemo();
   const [failed, setFailed] = useState(false);
-  const jump = (next: string) => navigate(createdProjectRoute(project.id, next));
+  if (!projectTasksVisibleTo(state, project.id, role)) return <Alert type="info" title="当前身份不在该项目任务范围内" description="请由项目 Owner 确认团队成员范围。" />;
+  const tasks = projectDeliveryTasks(state, project.id, role);
+  const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
+  const requestedTask = params.get('task');
+  const selected = requestedTask ? tasks.find(task => task.id === requestedTask) : preferredDeliveryTask(tasks, role);
+  const requestedNode = params.get('node');
+  const node: RequirementNode = requestedNode && ['prepare', 'develop', 'verify', 'accept'].includes(requestedNode) ? requestedNode as RequirementNode : selected?.node ?? 'prepare';
+  const jump = (next: string) => navigate(createdProjectRoute(project.id, next) + (next === 'delivery' && selected ? '&task=' + encodeURIComponent(selected.id) : ''));
   if (![...projectPages.map(page => page.key), 'settings'].includes(tab)) return <Alert type="error" title="项目页面不存在" action={<Button onClick={() => jump('content')}>进入项目概览</Button>} />;
   const empty = { delivery: ['任务交付', '尚无可交付任务'] };
   return <div className="page-stack project-workspace project-detail created-project">
-    <ProjectToolbar activeKey={tab} onChange={jump} actions={<>{role === 'owner' ? <Button type="text" icon={<SettingOutlined />} aria-label="项目设置" onClick={() => jump('settings')}><span className="project-secondary-action-label">项目设置</span></Button> : <Tag>项目成员</Tag>}<ProjectWorkLaunch target={{ projectId: project.id, tab }} /></>} />
+    <ProjectToolbar activeKey={tab} onChange={jump} actions={<>{selected?.record && <TaskExecutionRecords key={project.id + ':' + selected.id + ':' + role} task={selected.record} />}{role === 'owner' ? <Button type="text" icon={<SettingOutlined />} aria-label="项目设置" onClick={() => jump('settings')}><span className="project-secondary-action-label">项目设置</span></Button> : <Tag>项目成员</Tag>}{(tab !== 'delivery' || selected) && <ProjectWorkLaunch target={{ projectId: project.id, tab, ...(tab === 'delivery' && selected ? { taskId: selected.id, nodeId: node } : {}) }} />}</>} />
     {tab === 'content' ? <ProjectContentTemplate projectId={project.id} name={project.name} description={project.description} origin={<Origin kind="simulated" />}
       information={[{ key: 'team', label: '所属团队', children: projectTeam(state, project.id).name }, { key: 'owner', label: '项目 Owner', children: '林悦' }, { key: 'repository', label: '主仓', span: 2, children: <><strong>{project.repositoryIdentity}</strong><p><Mono>{project.remoteUrl}</Mono></p></> }, { key: 'id', label: '项目标识', span: 2, children: <Mono>{project.id}</Mono> }, { key: 'directory', label: '本机目录', span: 2, children: '尚未绑定本机工作目录' }]}
       members={<><p>所属团队成员可查看项目，由 Owner 林悦维护项目资料。</p><Button onClick={() => navigate('team?team=' + projectTeam(state, project.id).id)}>查看团队成员</Button></>}
       assets={<ProjectAssets projectId={project.id} />}
       knowledge={<ProjectKnowledge projectId={project.id} />}
-      requirements={<><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未登记需求材料" /><p className="muted">可在项目资产中关联来源数据；需求交付尚未接入此项目；通用工作可在任务管理中创建。</p></>}
+      requirements={<>{tasks.length ? <p>已登记 {tasks.length} 项交付需求。</p> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未登记交付需求" />}<p className="muted">来源资料与实际交付需求分别管理；已建立的交付需求可查看节点进度，通用工作保留独立入口。</p><Button onClick={() => jump('management')}>查看任务管理</Button></>}
       skills={[]}
     /> : tab === 'management' ? <ProjectTaskManagement projectId={project.id} /> : tab === 'settings' ? <>
       <Button className="self-start" onClick={() => jump('content')}>返回项目概览</Button>
@@ -79,6 +93,6 @@ export function CreatedProjectPage({ project, tab }: { project: CreatedProject; 
           {role === 'owner' && <Button type="primary" htmlType="submit" loading={busy}>保存项目信息</Button>}
         </Form>
       </FrameworkCard>
-    </> : <FrameworkCard title={empty[tab as keyof typeof empty][0]}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={empty[tab as keyof typeof empty][1]} /><p className="muted">{project.name}当前没有此类记录。</p><Button onClick={() => jump('content')}>查看项目概览</Button></FrameworkCard>}
+    </> : selected?.record ? <LiveTaskDelivery key={project.id + ':' + selected.id + ':' + role} task={selected.record} node={node} /> : <div className="project-delivery-layout without-background"><DeliveryTaskSidebar projectId={project.id} selectedTaskId="" /><div className="project-node-main">{requestedTask ? <Alert type="info" title="此项目中不存在该需求任务" action={<Button onClick={() => navigate(createdProjectRoute(project.id, 'delivery'))}>查看本项目任务</Button>} /> : <FrameworkCard title={empty[tab as keyof typeof empty][0]}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={role === 'member' ? '本项目尚无交付任务' : empty[tab as keyof typeof empty][1]} /><p className="muted">{project.name}当前没有此类记录。</p><Button onClick={() => jump('content')}>查看项目概览</Button></FrameworkCard>}</div></div>}
   </div>;
 }

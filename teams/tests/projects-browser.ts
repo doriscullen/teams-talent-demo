@@ -21,7 +21,7 @@ async function publishFromTalents(projectId: string, id: string, name: string) {
   const file = 'doc-knowledge/' + name + '.md';
   published.push({ id, projectId, name, description: name + '（Talents 发布）', capability: 'doc-extract', capabilityName: '业务知识提取', category: 'doc', kind: 'files', version: 1, publishedAt: '2026-10-27T10:00:00.000Z', note: '', delivery: 'local', files: [{ path: file, title: name, type: 'markdown' }] });
   await mkdir(join(shared, 'talents', 'files', id, 'v1', 'doc-knowledge'), { recursive: true });
-  await writeFile(join(shared, sharedPaths.talentsFile(id, 1, file)), '# ' + name + '\n\n- 来源：' + projectId);
+  await writeFile(join(shared, sharedPaths.talentsFile(id, 1, file)), '# ' + name + '\n\n- 来源：' + projectId + '\n<script>parent.__publishedArtifactExecuted = true</script><img src="https://invalid.example/preview-probe" onerror="parent.__publishedArtifactExecuted = true">');
   await writeFile(join(shared, sharedPaths.talentsKnowledge), JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), artifacts: published } satisfies TalentsKnowledge));
 }
 await mkdir('test-results', { recursive: true });
@@ -54,7 +54,9 @@ try {
   assert.deepEqual(await state(), initial, 'legacy Teams knowledge flag is not shown as published knowledge and is left unchanged');
   await publishFromTalents('carddemo', 'a-card', '白金卡返现业务规则'); await page.reload(); await openPanel('查看知识');
   await page.locator('[data-artifact="a-card"]').getByText('白金卡返现业务规则', { exact: true }).waitFor();
-  await page.locator('[data-artifact="a-card"]').getByRole('button', { name: /查\s*看/ }).click(); await page.locator('.talents-artifact-drawer .talents-markdown h1').getByText('白金卡返现业务规则', { exact: true }).waitFor();
+  await page.locator('[data-artifact="a-card"]').getByRole('button', { name: /查\s*看/ }).click(); await page.frameLocator('.talents-artifact-drawer .talents-markdown').locator('h1').getByText('白金卡返现业务规则', { exact: true }).waitFor();
+  assert.equal(await page.locator('.talents-artifact-drawer .talents-markdown').getAttribute('sandbox'), '');
+  assert.equal(await page.evaluate(() => (window as Window & { __publishedArtifactExecuted?: boolean }).__publishedArtifactExecuted), undefined, 'published Markdown cannot execute against the Teams origin');
   await page.locator('.talents-artifact-drawer .ant-drawer-close').click(); await page.locator('.talents-artifact-drawer').waitFor({ state: 'hidden' }); await closePanels();
   const synced = await state(); assert.equal(synced.knowledgeVersion, '白金卡返现业务规则 v1'); assert.equal(synced.audit.at(-1).detail, 'Talents 已发布项目知识：白金卡返现业务规则 v1');
   initial = synced;
@@ -119,7 +121,7 @@ try {
   await visit('projects?project=' + projectId + '&tab=content');
   await openPanel('项目资料'); await page.getByRole('button', { name: '关联项目资产', exact: true }).click();
   await page.getByRole('combobox', { name: '筛选资产来源', exact: true }).click(); await page.locator('.ant-select-item-option-content').getByText('需求平台', { exact: true }).click();
-  const sourcePicker = page.getByRole('combobox', { name: '选择来源资产', exact: true }); await sourcePicker.click(); await sourcePicker.fill('信用卡消费返现'); await page.locator('.ant-select-item-option-content').getByText('信用卡消费返现 · 需求平台 · 信用卡营销交付', { exact: true }).waitFor(); await sourcePicker.press('Enter');
+  const sourcePicker = page.getByRole('combobox', { name: '选择来源资产', exact: true }); await sourcePicker.click(); await sourcePicker.fill('信用卡消费返现'); await page.locator('.ant-select-item-option-content').getByText('信用卡消费返现 · 需求平台 · Credit Card', { exact: true }).waitFor(); await sourcePicker.press('Enter');
   await save('asset.link', '关联所选资产');
   await page.getByRole('button', { name: '查看来源：信用卡消费返现', exact: true }).click();
   assert.ok((await page.locator('.drawer-console').innerText()).includes('来源插件')); await closeText();

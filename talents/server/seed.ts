@@ -3,6 +3,7 @@
 // What is here is owned by Talents: capabilities, tasks, artifacts, the developer's machine, the local
 // document source, and Talents' own metadata about Teams sources (document versions, commits, PRs).
 import { minerFiles } from './content.ts';
+import { platinumCashbackPageArtifact } from './platinum-cashback-page.ts';
 import type { TalentsState } from './model.ts';
 
 /** Bump when the seed changes shape or content; a stored state from another seed version is replaced. */
@@ -110,6 +111,7 @@ export function seedState(): TalentsState {
     // published: what developers see; draft: the latest run, waiting for review (revisions are added while reviewing).
     // basis: the source state the artifact was built from (a document version, or a commit for code).
     artifacts: [
+      platinumCashbackPageArtifact(),
       { id: 'a-cg-java', projectId: PROJECT_ID, cap: 'codegraph', name: 'carddemo-java-1025 CodeGraph', desc: '查询 carddemo-java-1025 中类、方法的定义与调用关系。', sources: [REPO_ID], kind: 'index',
         stats: [], mcpName: 'codegraph',
         published: { version: 3, at: '2026-10-26 02:05', note: '同步代码变化：3 个新提交', delivery: 'cloud', agents: ['Code'], basis: { commit: '4e1b7c2' }, auto: true }, draft: null },

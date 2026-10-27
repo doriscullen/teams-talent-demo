@@ -1,0 +1,11 @@
+/* Reuse FrameworkSidebar's collapsed contract and upstream 72px navigation rail.
+   Keep the adaptation in the Teams shell; project sidebars and Talent are untouched. */
+.framework-root:not(.talent-root) .global-navigation-toggle.ant-btn{flex:none;width:28px;height:28px;padding:0;font-size:16px}
+.framework-root:not(.talent-root) .framework-sidebar .sidebar-profile-row .nav-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.framework-root:not(.talent-root) .teams-navigation-collapsed>.framework-sidebar{width:72px}
+.teams-navigation-collapsed>.framework-sidebar .nav-label{display:none}
+.teams-navigation-collapsed>.framework-sidebar nav a{justify-content:center;gap:0}
+.teams-navigation-collapsed>.framework-sidebar nav .nav-group{text-align:center}
+.teams-navigation-collapsed>.framework-sidebar .sidebar-profile-row{display:none}
+.framework-root:not(.talent-root) .teams-navigation-collapsed>.framework-sidebar .sidebar-profile-menu{display:flex!important}
+@media(max-width:760px){.framework-root:not(.talent-root) .teams-navigation-collapsed>.framework-sidebar{display:none}}

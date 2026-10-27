@@ -71,7 +71,7 @@ test('Skill PR checks the diagnosis basis and preserves nested file paths', asyn
 test('gh failures propagate and indexes cannot be submitted', async () => {
   const a = seedState().artifacts.find(a => a.id === 'a-biz')!;
   await assert.rejects(submitPullRequest(a, target, undefined, async () => { throw new Error('mock: gh not authenticated'); }), /not authenticated/);
-  await assert.rejects(submitPullRequest(seedState().artifacts[0], target, undefined, fakeGithub().gh), /远端索引/);
+  await assert.rejects(submitPullRequest(seedState().artifacts.find(a => a.kind === 'index')!, target, undefined, fakeGithub().gh), /远端索引/);
 });
 
 test('files go under the project directory, and a CRLF skill file keeps its line endings', async () => {

@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type { StoredGraphSnapshot } from '../../shared/codegraph.ts';
 import type { TalentsState } from './model.ts';
 import { root } from './config.ts';
@@ -25,5 +26,20 @@ export function withCodegraph(state: TalentsState): TalentsState {
   return { ...state, artifacts: state.artifacts.map(a => a.id !== 'a-cg-java' ? a : {
     ...a, stats: [['文件', m.files.toLocaleString('en-US')], ['节点', m.nodes.toLocaleString('en-US')], ['关系', m.edges.toLocaleString('en-US')]],
     ...(a.published ? { published: { ...a.published, at: m.indexedAt, note: `远端图谱快照 · ${m.snapshotId}`, basis: { commit: m.revision } } } : {}),
+  }) };
+}
+/** Undoes withCodegraph on a state the page saves back: the snapshot values are only shown, never stored. */
+export function withoutCodegraph(saved: TalentsState, previous: TalentsState): TalentsState {
+  const before = previous.artifacts.find(a => a.id === 'a-cg-java');
+  if (!before) return saved;
+  const shown = withCodegraph({ ...previous, artifacts: [before] }).artifacts[0];
+  return { ...saved, artifacts: saved.artifacts.map(a => {
+    if (a.id !== 'a-cg-java') return a;
+    const next = { ...a };
+    if (isDeepStrictEqual(next.stats, shown.stats)) next.stats = before.stats;
+    const p = next.published, q = shown.published;
+    if (p && q && before.published && p.version === q.version && p.at === q.at && p.note === q.note && isDeepStrictEqual(p.basis, q.basis))
+      next.published = { ...p, at: before.published.at, note: before.published.note, basis: before.published.basis };
+    return next;
   }) };
 }

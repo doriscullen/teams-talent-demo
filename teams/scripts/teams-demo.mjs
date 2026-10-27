@@ -8,12 +8,14 @@ const help = `Teams CLI · 本机接入
 context get | inputs adopt | progress add | result submit | operation get
 --endpoint http://127.0.0.1:45970 (或 DEMO_ORIGIN)
 --input '{"projectId":"…","taskId":"…","nodeId":"…"}' 或 --input-file FILE
-context get 可用 --project / --task / --node；--output FILE 保存完整 JSON。
+context get 可用 --project / --task / --node；默认 --view model 去重上下文，--view full 查看完整响应。
+--output FILE 保存所选上下文，stdout 只返回保存回执；不带 --output 才打印上下文。
 写操作：--operation-id ID；input 包含 expectedRevision、runId、sessionId（未知时 null）。
 inputs adopt：basisDigest、readReferences（实际阅读的引用 ID）。
 progress add：adoptionId、phase=started|progress|blocked、summary、blocker（阻塞时）、evidence[]。
-result submit：adoptionId、summary、至少一条 evidence[{kind:reference|local-file,value,description}]。
-成果报告只记录成员贡献；Owner 验收和质量门槛保持原流程。
+result submit：adoptionId、summary、completedCriteria[]、evidence[{kind:reference|local-file,value,description,artifact,version,codeVersion?,source:actual|preset}]。
+context.nodeContract 返回本节点输入、交付物类型与标准ID；上游引用ID/版本原样采用。prepare采用不代表澄清完成，需提交PRD。verify checks按artifact关联功能/Review/安全报告，同批失败不能放行。
+成果报告只记录交付人的贡献；Owner 本人交付也必须经过人工验收和质量门槛。
 operation get：--operation-id ID。--receipt-dir DIR 指定本地请求和回执目录。
 开发/验证进度携带 sessionId 会自动关联任务；Owner 验收通过后自动归集，无需再次上报。
 读取上下文不会冻结或采用；写失败保留原请求并返回非零退出码。`;
@@ -21,9 +23,11 @@ let requestPath;
 async function atomic(path, text) { await mkdir(dirname(path), { recursive: true }); const temp = path + '.' + randomUUID() + '.tmp'; const f = await open(temp, 'wx', 0o600); try { await f.writeFile(text); await f.sync(); } finally { await f.close(); } await rename(temp, path); }
 try {
   const tokens = process.argv.slice(2), options = {}, positional = [];
-  const allowed = new Set(['endpoint','input','input-file','project','task','node','tab','operation-id','output','receipt-dir','role']);
+  const allowed = new Set(['endpoint','input','input-file','project','task','node','tab','operation-id','output','receipt-dir','role','view']);
   for (let i = 0; i < tokens.length; i++) { const token = tokens[i]; if (token === '--help' || token === '-h') { console.log(help); process.exit(0); } if (!token.startsWith('--')) { positional.push(token); continue; } const name = token.slice(2); if (!allowed.has(name) || Object.hasOwn(options,name) || tokens[i+1] === undefined || tokens[i+1].startsWith('--')) throw new Error('未知、重复或缺少值的参数：' + token); options[name] = tokens[++i]; }
   const command = positional.join(' '), base = options.endpoint ?? process.env.DEMO_ORIGIN ?? configuredOrigin;
+  const contextCommand = command === 'context get' || command === 'status';
+  if (options.view && (!contextCommand || !['model','full'].includes(options.view))) throw new Error('--view 仅供 context get/status 使用，值为 model 或 full');
   const parsed = new URL(base); if (parsed.hostname !== '127.0.0.1' || parsed.protocol !== 'http:' || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) throw new Error('Teams CLI 仅允许明确的本机 HTTP origin');
   const origin = parsed.origin;
   async function request(path, body, token) { const response = await fetch(origin + path, { redirect: 'error', signal: AbortSignal.timeout(15000), ...(body ? { method: 'POST', headers: { 'content-type':'application/json', origin, 'x-demo-token':token }, body:JSON.stringify(body) } : {}) }); const value = await response.json(); if (!response.ok) throw new Error(`HTTP ${response.status}: ${value.error ?? '请求失败'}`); return value; }
@@ -33,8 +37,8 @@ try {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('input 必须为 JSON 对象');
   for (const [flag,key] of [['project','projectId'],['task','taskId'],['node','nodeId'],['tab','tab']]) if (options[flag]) { if (input[key] !== undefined) throw new Error(key + ' 重复'); input[key] = options[flag]; }
   let result;
-  if (command === 'context get' || command === 'status') {
-    const query = new URLSearchParams(); for (const key of ['projectId','taskId','nodeId','tab']) if (input[key] !== undefined) query.set(key,input[key]);
+  if (contextCommand) {
+    const query = new URLSearchParams({role:options.role??'member',view:options.view??'model'}); for (const key of ['projectId','taskId','nodeId','tab']) if (input[key] !== undefined) query.set(key,input[key]);
     if (!input.projectId) throw new Error('读取上下文必须指定 projectId，任务上下文同时指定 taskId 和 nodeId');
     result = await request('/api/collaboration/context?' + query);
   } else if (command === 'operation get') {
@@ -54,6 +58,10 @@ try {
     const session = await request('/api/session'); result = await request('/api/collaboration',payload,session.token);
     const receiptPath = requestPath.replace('.request.json','.receipt.json'); await atomic(receiptPath,JSON.stringify(result,null,2)+'\n'); result = { ...result, requestPath, receiptPath };
   }
-  if (options.output) { const path=resolve(options.output); await atomic(path,JSON.stringify(result,null,2)+'\n'); result={...result,outputPath:path}; }
+  if (options.output) {
+    const path=resolve(options.output), content=JSON.stringify(result,null,2)+'\n';
+    await atomic(path,content);
+    result=contextCommand ? {ok:true,kind:'context.saved',view:options.view??'model',outputPath:path,scope:result.scope,revision:result.revision,basisDigest:result.basisDigest,resources:{skills:result.skills.length,knowledge:result.knowledge.assets.length,references:result.references.length},bytes:Buffer.byteLength(content)} : {...result,outputPath:path};
+  }
   console.log(JSON.stringify(result,null,2));
 } catch (error) { console.error(JSON.stringify({ok:false,error:error.message,...(requestPath?{requestPath,retry:'先 operation get 核对原 operation-id；结果未知时保留相同 ID 和原载荷，不自动重试。'}:{})},null,2)); process.exitCode=1; }

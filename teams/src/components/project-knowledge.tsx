@@ -22,8 +22,14 @@ function FileView({ artifact, file }: { artifact: PublishedArtifact; file: Publi
   }, [artifact.id, artifact.version, file.path]);
   if (failure) return <Alert type="error" showIcon title="无法读取产物文件" description={failure} />;
   if (content === null) return <Spin size="small" />;
-  if (file.type === 'markdown') return <div className="talents-markdown" dangerouslySetInnerHTML={{ __html: marked.parse(content, { async: false }) }} />;
-  if (file.type === 'html') return <iframe className="talents-report" title={file.title} sandbox="" srcDoc={content} />;
+  if (file.type === 'markdown' || file.type === 'html') {
+    const html = file.type === 'markdown' ? marked.parse(content, { async: false }) : content;
+    // Published content is untrusted. Keep its rendering outside the Teams origin,
+    // with no scripts, network, forms or parent navigation privileges.
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; form-action 'none'"><style>body{font:14px/1.7 system-ui,sans-serif;margin:16px;color:${dark ? '#e5e7eb' : '#1f2937'};background:${dark ? '#18181b' : '#ffffff'};overflow-wrap:anywhere}pre{white-space:pre-wrap}img{max-width:100%}table{border-collapse:collapse}th,td{padding:6px;border:1px solid #888}a{color:${dark ? '#93c5fd' : '#2459a6'}}</style>`;
+    return <iframe className={'talents-report' + (file.type === 'markdown' ? ' talents-markdown' : '')} title={file.title} sandbox="" referrerPolicy="no-referrer" srcDoc={head + html} />;
+  }
   return <pre className="talents-plain">{content}</pre>;
 }
 
@@ -55,7 +61,7 @@ export function ProjectKnowledge({ projectId, compact = false }: { projectId: st
     getTalentsKnowledge(projectId).then(value => { if (live) setArtifacts(value.artifacts); }).catch(error => { if (live) setFailure((error as Error).message); });
     return () => { live = false; };
   }, [projectId, state.revision, attempt]);
-  useEffect(() => setArtifacts(null), [projectId]);
+  useEffect(() => { setArtifacts(null); setOpened(null); setExpanded(false); }, [projectId, role]);
   useEffect(() => { const refresh = () => setAttempt(value => value + 1); window.addEventListener('focus', refresh); return () => window.removeEventListener('focus', refresh); }, []);
   const loading = artifacts === null && !failure, ready = !!artifacts?.length;
   const status = loading ? '读取中' : failure ? '读取失败' : ready ? `已发布 ${artifacts!.length} 项` : '尚未发布';
@@ -74,7 +80,7 @@ export function ProjectKnowledge({ projectId, compact = false }: { projectId: st
       {role === 'owner' && <Button href={talentLink('knowledge', { projectId, role })}>在 Talents 挖掘知识</Button>}
       {!loading && <Button size="small" onClick={() => setAttempt(value => value + 1)}>刷新</Button>}
     </Space>
-    {opened && <ArtifactDrawer artifact={opened} onClose={() => setOpened(null)} />}
+    {opened?.projectId === projectId && <ArtifactDrawer key={opened.id + ":" + opened.version} artifact={opened} onClose={() => setOpened(null)} />}
   </div>;
   const card = <FrameworkCard title="项目知识" action={<Tag color={ready && !failure ? 'green' : undefined}>{status}</Tag>}>{content}</FrameworkCard>;
   if (!compact) return card;

@@ -52,7 +52,7 @@ try {
   // A previous selection of a new team must not replace the original project's assignee list.
   await page.locator(`[data-team-id="${teamId}"]`).click(); await visit('projects?project=carddemo&tab=management&item=requirements%3Acarddemo%3ADEMO-MKT-001');
   await page.getByRole('button', { name: '分配交付人', exact: true }).click(); await page.getByRole('combobox', { name: '选择需求交付人', exact: true }).click();
-  assert.deepEqual(await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').allTextContents(), ['陈晨','苏晴','杨帆','赵宁','王晓']); await page.keyboard.press('Escape'); await page.getByRole('button', { name: /取\s*消/ }).click();
+  assert.deepEqual(await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').allTextContents(), ['林悦','陈晨','苏晴','杨帆','赵宁','王晓']); await page.keyboard.press('Escape'); await page.getByRole('button', { name: /取\s*消/ }).click();
   // Shared role identity only sees teams it joined; management remains Owner-only.
   const member = await browser.newPage({ viewport: { width: 1440, height: 1050 } }); await member.addInitScript(() => localStorage.setItem('carddemo-role', 'member')); await member.goto(origin + '/teams#/team?team=' + teamId); await member.locator(`[data-selected-team="${teamId}"]`).waitFor();
   assert.equal(await member.locator('[data-team-id]').count(), 2); assert.equal(await member.getByRole('button', { name: '新建团队', exact: true }).count(), 0); assert.equal(await member.getByRole('button', { name: '邀请成员', exact: true }).count(), 0); assert.equal(await member.getByRole('button', { name: '关联已有项目', exact: true }).count(), 0);

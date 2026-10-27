@@ -1,0 +1,151 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "交付与 Talent 协作 · 讨论方案",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "lanes": [
+    {
+      "id": "delivery-line",
+      "label": "交付主线"
+    },
+    {
+      "id": "talent-auto",
+      "label": "Talent · 自动协作"
+    }
+  ],
+  "groups": [],
+  "mainPath": [
+    "ready-requirement",
+    "build-feature",
+    "check-delivery",
+    "owner-acceptance"
+  ],
+  "nodes": [
+    {
+      "id": "ready-requirement",
+      "lane": "delivery-line",
+      "col": 0,
+      "type": "cloud",
+      "label": "需求准备",
+      "sublabel": "成员确认采用",
+      "width": 218,
+      "height": 98
+    },
+    {
+      "id": "build-feature",
+      "lane": "delivery-line",
+      "col": 1,
+      "type": "cloud",
+      "label": "功能开发",
+      "sublabel": "成员 / iCode",
+      "tag": "关联 session（1 个或多个）",
+      "width": 218,
+      "height": 98
+    },
+    {
+      "id": "check-delivery",
+      "lane": "delivery-line",
+      "col": 2,
+      "type": "cloud",
+      "label": "测试验证",
+      "sublabel": "成员 / iCode + 质量工具",
+      "tag": "关联 session（1 个或多个）",
+      "width": 218,
+      "height": 98
+    },
+    {
+      "id": "owner-acceptance",
+      "lane": "delivery-line",
+      "col": 3,
+      "type": "cloud",
+      "label": "需求验收",
+      "sublabel": "Owner 确认",
+      "width": 218,
+      "height": 98
+    },
+    {
+      "id": "import-knowledge",
+      "lane": "talent-auto",
+      "col": 0,
+      "type": "backend",
+      "label": "知识导入",
+      "sublabel": "业务知识与相关 Skill",
+      "tag": "自动",
+      "width": 230,
+      "height": 112
+    },
+    {
+      "id": "collect-task-data",
+      "lane": "talent-auto",
+      "col": 3,
+      "type": "backend",
+      "label": "数据收集",
+      "sublabel": "归集本任务关联的全部 session",
+      "tag": "自动",
+      "width": 230,
+      "height": 112
+    }
+  ],
+  "edges": [
+    {
+      "id": "prepare-to-build",
+      "from": "ready-requirement",
+      "to": "build-feature",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "build-to-check",
+      "from": "build-feature",
+      "to": "check-delivery",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "check-to-accept",
+      "from": "check-delivery",
+      "to": "owner-acceptance",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "knowledge-import-to-preparation",
+      "from": "import-knowledge",
+      "to": "ready-requirement",
+      "label": "任务开始前导入",
+      "role": "branch",
+      "variant": "default"
+    },
+    {
+      "id": "accepted-sessions-to-talent",
+      "from": "owner-acceptance",
+      "to": "collect-task-data",
+      "label": "验收通过后自动上报",
+      "role": "async",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "任务过程",
+      "items": [
+        "开发、验证节点关联一个或多个 session；验收通过后由 Teams 汇总去重、统一上报。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "异步分析",
+      "items": [
+        "数据收集后，Talent 独立开展轨迹分析、知识挖掘与 Skill / Agent 优化，不影响任务完成。"
+      ]
+    }
+  ]
+}

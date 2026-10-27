@@ -1,4 +1,7 @@
-import type { DeliveryRequirement } from './delivery-requirements.js';
+import { createProjectIssue, type ProjectIssue } from './project-issues.js';
+import { deliveryRequirement, type DeliveryRequirement } from './delivery-requirements.js';
+import { userSkillExamples } from './project-skill-examples.js';
+import { selectedSkillBindings } from './resource-sharing.js';
 import { updateTeam, requireTeamOwner, defaultTeamId, type TeamRecord, type TeamMember } from './teams-domain.js';
 import { requireCurrentTaskMember } from './task-assignment.js';
 import { linkTaskSession, type TaskAutomation } from './task-automation.js';
@@ -15,6 +18,7 @@ import type { CollaborationState } from './collaboration.js';
 export interface Asset { id: string; title: string; kind: string; location: string; sourceAssetId?: string }
 export interface Material { id: string; title: string; body: string }
 export interface WorkspaceState {
+  projectIssues?: ProjectIssue[];
   deliveryRequirements?: DeliveryRequirement[];
   teams?: TeamRecord[];
   projectTeamId?: string;
@@ -37,9 +41,10 @@ export interface WorkspaceState {
 export const defaultSkills = projectSkillIds;
 export function initialWorkspace(): WorkspaceState {
   return {
-    acquiredResources:[],project: { name: '信用卡营销交付', description: '针对白金卡客户未来 3 个月的消费，额外增加 0.5% 的消费返现。', repository: 'carddemo-java-1025', assets: [
+    acquiredResources:[],project: { name: 'Credit Card', description: '针对白金卡客户未来 3 个月的消费，额外增加 0.5% 的消费返现。', repository: 'carddemo-java-1025', assets: [
       { id:'code',title:'白金卡返现规则',kind:'repository',location:'teams/src/cashback.ts',sourceAssetId:'repository:carddemo:carddemo-java-1025' },
       { id:'design',title:'消费返现规则',kind:'document',location:'teams/docs/cashback-contract.md',sourceAssetId:'design-library:carddemo:marketing-capability' },
+
       { id:'history',title:'白金卡消费返现需求',kind:'requirement',location:'requirements:carddemo:DEMO-MKT-001' },
       { id:'adr',title:'交易处理边界',kind:'document',location:'workspace/carddemo-java-1025/docs/design/adr/ADR-009-marketing-integration.md',sourceAssetId:'design-library:carddemo:ADR-009' },
       { id:'security',title:'权限与安全范围',kind:'document',location:'workspace/carddemo-java-1025/docs/design/adr/ADR-007-authentication-scope.md',sourceAssetId:'design-library:carddemo:ADR-007' },
@@ -54,10 +59,10 @@ export function initialWorkspace(): WorkspaceState {
     ].map(([id,name,kind,description])=>({id,name,kind,description,enabled:true})),
   };
 }
-export const workspaceActions = ['session.link','task.create','task.assign','task.start','task.complete','project.create','project.metadata.update','project.update','asset.link','asset.add','material.add','skills.select','resource.publish','resource.publish-all','resource.acquire','team.create','team.project.assign','team.update','member.invite','member.approve','member.role','member.remove','progress.sync','session.report','analysis.run','connection.update','foundation.update'] as const;
+export const workspaceActions = ['issue.create','session.link','task.create','task.assign','task.start','task.complete','project.create','project.metadata.update','project.update','asset.link','asset.add','material.add','skills.select','resource.publish','resource.publish-all','resource.acquire','team.create','team.project.assign','team.update','member.invite','member.approve','member.role','member.remove','progress.sync','session.report','analysis.run','connection.update','foundation.update'] as const;
 export type WorkspaceAction = typeof workspaceActions[number];
-const ownerActions: WorkspaceAction[] = ['task.create','task.assign','project.create','project.metadata.update','resource.publish','resource.publish-all','project.update','asset.link','asset.add','team.create','team.project.assign','team.update','member.invite','member.approve','member.role','member.remove','analysis.run','connection.update'];
-const memberActions: WorkspaceAction[] = ['session.link','task.start','task.complete','material.add','skills.select','progress.sync','session.report'];
+const ownerActions: WorkspaceAction[] = ['issue.create','task.create','task.assign','project.create','project.metadata.update','resource.publish','resource.publish-all','project.update','asset.link','asset.add','team.create','team.project.assign','team.update','member.invite','member.approve','member.role','member.remove','analysis.run','connection.update'];
+const memberActions: WorkspaceAction[] = ['material.add','skills.select','progress.sync','session.report'];
 function need(ok:unknown,message:string):asserts ok { if(!ok)throw new DomainError(message); }
 function text(p:Record<string,unknown>,key:string,max=1000){ const value=p[key];need(typeof value==='string'&&value.trim().length>0&&value.length<=max,`${key} 不能为空或超出长度`);return value.trim(); }
 export function updateWorkspace(previous:DemoState,kind:WorkspaceAction,role:Role,p:Record<string,unknown>,sourceAssets:readonly SourcePluginAsset[]=[],catalog:readonly SkillCatalogEntry[]=[]):DemoState {
@@ -75,6 +80,7 @@ export function updateWorkspace(previous:DemoState,kind:WorkspaceAction,role:Rol
   };
   let label='';
   switch(kind){
+    case 'issue.create': {const before=w.projectIssues?.length??0;createProjectIssue(s,role,p,at);if(w.projectIssues!.length===before)return previous;label='新建问题';break;}
     case 'session.link': linkTaskSession(s,role,p,at);label='关联任务工作会话';break;
     case 'task.create': case 'task.assign': case 'task.start': case 'task.complete': label=updateGenericTask(s,role,kind,p,at);break;
     case 'project.create': {const projectId=createdProjectId(p.id),fields=createdProjectFields(p);need(!w.projects?.some(project=>project.id===projectId),'项目标识已存在');w.projects=[...(w.projects??[]),{id:projectId,...fields,teamId:requireTeamOwner(s,role,p.teamId===undefined?defaultTeamId:text(p,'teamId',100)).id,owner:'owner',createdAt:at,updatedAt:at}];label='添加项目';break;}
@@ -89,7 +95,7 @@ export function updateWorkspace(previous:DemoState,kind:WorkspaceAction,role:Rol
     }
     case 'asset.add': {const assets=writableAssets();need(assets.length<50,'项目资产数量已达上限');assets.push({id,title:text(p,'title',120),kind:text(p,'kind',40),location:text(p,'location',500)});label='关联项目资产';break;}
     case 'material.add': need(!s.context,'上下文已冻结，请在下一次任务中采用新增材料');need(w.materials.length<20,'材料数量已达上限');w.materials.push({id,title:text(p,'title',120),body:text(p,'body',5000)});label='补充需求材料';break;
-    case 'skills.select': {const allowed=availableSkillIdsFor(s,role);need(!s.context,'本次上下文已冻结');need(Array.isArray(p.skills)&&p.skills.length>0&&p.skills.length<=allowed.length&&p.skills.every(x=>typeof x==='string'&&allowed.includes(x)),'请选择有效的项目或用户 Skill；外部 Skill 需由当前用户订阅');w.selectedSkills=[...new Set(p.skills as string[])];label='选择需求业务 Skill';break;}
+    case 'skills.select': {const allowed=availableSkillIdsFor(s,role),task=deliveryRequirement(s,'carddemo','DEMO-MKT-001');need(task?!task.preparedAt:!s.context,'本次上下文已冻结');need(Array.isArray(p.skills)&&p.skills.length>0&&p.skills.length<=allowed.length&&p.skills.every(x=>typeof x==='string'&&allowed.includes(x)),'请选择有效的项目或用户 Skill；外部 Skill 需由当前用户订阅');w.selectedSkills=[...new Set(p.skills as string[])];if(task){task.userSkillIds=w.selectedSkills.filter(id=>userSkillExamples.some(skill=>skill.id===id));task.skillIds=w.selectedSkills.filter(id=>!task.userSkillIds!.includes(id));task.skillBindings=selectedSkillBindings(s,role);const preparation=w.taskAutomation?.find(item=>item.projectId==='carddemo'&&item.taskId===task.id)?.knowledge;if(preparation){preparation.status='waiting';preparation.error='选用 Skill 已改变，请重新检查任务输入';}}label='选择需求业务 Skill';break;}
     case 'resource.publish':
     case 'resource.publish-all': {
       const ids=kind==='resource.publish-all'?catalog.map(item=>item.id):[text(p,'id',120)];
@@ -119,7 +125,7 @@ export function updateWorkspace(previous:DemoState,kind:WorkspaceAction,role:Rol
       w.resourceSubscriptions=[...(w.resourceSubscriptions??[]),{id:name,version:publication.version,sha256:publication.sha256??'',contentSha256:publication.contentSha256,actor:role,subscribedAt:at,source:'subscription'}];label='订阅共享资源';break;
     }
     case 'team.create': case 'team.project.assign': case 'team.update': case 'member.invite': case 'member.approve': case 'member.role': case 'member.remove': label=updateTeam(s,role,kind,p,at);break;
-    case 'progress.sync': need(w.foundation.progressEnabled,'请先启用团队协作进度同步能力');need(s.context&&['developing','failed','fixed','returned'].includes(s.stage),'请先开始 iCode 开发作业');w.progress.push({id,text:text(p,'text',2000),at,node:'develop'});label='iCode 进度同步';break;
+    case 'progress.sync': need(!deliveryRequirement(s,'carddemo','DEMO-MKT-001'),'开发与验证进度请通过当前任务 Teams CLI 回传');need(w.foundation.progressEnabled,'请先启用团队协作进度同步能力');need(s.context&&['developing','failed','fixed','returned'].includes(s.stage),'请先开始 iCode 开发作业');w.progress.push({id,text:text(p,'text',2000),at,node:'develop'});label='iCode 进度同步';break;
     case 'session.report': throw new DomainError('会话在开发或验证期间关联；验收通过后自动归集，无需成员再次上报');
     case 'analysis.run': need(w.sessionReported,'请先上报并关联交付会话');need(p.scope==='single'||p.scope==='project','分析范围无效');need(s.evolution==='none','已有改进候选，请保留本次分析依据');w.analysis={scope:p.scope,status:'analyzed'};label=p.scope==='project'?'项目多需求分析':'单需求轨迹分析';break;
     case 'connection.update': {let c=w.connections.find(c=>c.id===p.id);if(!c&&typeof p.id==='string'){const seeded=externalPlatformDefault(p.id);if(seeded){c=w.connections.find(connection=>connection.id===seeded.id);if(!c){c=seeded;w.connections.push(c);}}}need(c,'连接不存在');need(typeof p.enabled==='boolean','启用状态无效');c.enabled=p.enabled;c.description=text(p,'description',1500);label=externalPlatformDefault(c.id)?'更新企业连接配置':'更新能力配置';break;}

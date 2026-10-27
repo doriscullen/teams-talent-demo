@@ -48,7 +48,7 @@ export function ProjectSkills({ projectName, skills, projectFooter }: { projectN
       showText(skill.name + ' · Skill 说明', [
     `名称：${skill.name}`, `用途：${skill.description}`, `版本：${displayText(skill.version)}`, `来源：${displayText(skill.source)}`, `作用范围：${range}`,
     ...(skill.path ? [`资料路径：${skill.path}`] : []),
-    '', subscriptions.get(skill.name)?.sha256 ? '当前用户已订阅此资源。应用到 iCode 是独立操作，请以应用回执中的路径与发现核验结果为准；运行中的会话是否重新加载需另行确认。' : scope === 'user' ? skill.source.startsWith('本地接入') ? '本地 Skill 和 CLI 已提供；iCode 启动材料明确引用文件和读取命令，当前会话实际加载需会话确认。' : '尚未读取本机用户 Skill 目录；安装、工具发现和实际加载均未核验。' : '项目已有资源可在需求准备中采用；本机应用与会话加载需另行核验。',
+    '', subscriptions.get(skill.name)?.sha256 ? '当前用户已订阅此资源。应用到 iCode 是独立操作，请以应用回执中的路径与发现核验结果为准；运行中的会话是否重新加载需另行确认。' : scope === 'user' ? skill.source.startsWith('本地接入') ? '本地 Skill 和 CLI 已提供；iCode 启动材料明确引用文件和读取命令，当前会话实际加载需会话确认。' : '尚未读取本机用户 Skill 目录；安装、工具发现和实际加载均未核验。' : '项目已有资源可在需求澄清中采用；本机应用与会话加载需另行核验。',
     '', content,
   ].join('\n'));
     } catch (cause) { setReadError((cause as Error).message); }
@@ -66,7 +66,7 @@ export function ProjectSkills({ projectName, skills, projectFooter }: { projectN
       {!entries.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未关联项目 Skill" />}
       <Pagination size="small" responsive hideOnSinglePage current={page} pageSize={5} total={entries.length} showSizeChanger={false} onChange={setPage} />
       {scope === 'project' && projectFooter}
-      <p className="muted project-skill-note">此处展示项目已有资源与当前用户资源；本次采用以需求准备中的选择与冻结记录为准。Office 用户 Skill 仅保留能力说明，不属于市场的 {data.skills.length} 项 Skill。</p><Button size="small" onClick={() => navigate('subscriptions')}>查看我的订阅</Button>
+      <p className="muted project-skill-note">此处展示项目已有资源与当前用户资源；本次采用以需求澄清中的选择与冻结记录为准。Office 用户 Skill 仅保留能力说明，不属于市场的 {data.skills.length} 项 Skill。</p><Button size="small" onClick={() => navigate('subscriptions')}>查看我的订阅</Button>
     </FrameworkCard>
   </div>;
 }

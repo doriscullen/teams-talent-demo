@@ -244,7 +244,7 @@
       "sha256": "28ee7e1d9aba4fe3d9bff25ca412e24b5a6a855b8cbb25c49913139fb5bcd7f5",
       "sourceRevision": "d3deae7ea4e47026925ccbd06ab6eec03f4648c7",
       "sourceSha256": "28ee7e1d9aba4fe3d9bff25ca412e24b5a6a855b8cbb25c49913139fb5bcd7f5",
-      "targetSha256": "71b051936a504d8ae88cbcf63aa666808e2a6c0dae35ee707afd472c62a4fa4c",
+      "targetSha256": "477e51971d0969ea42cceefa439638ad4e006a986fc33d1a9eb4e4f77f592d6b",
       "mode": "extracted-component-adapter",
       "adaptation": "Extracted ConfirmWork fixed request identity, pending guard, original-request retry and presentation. Host-specific startBoundWork/UiMountContext replaced with typed demo native adapter; children provide scoped project context and verified directory/session choices. No claim of production native hook or work association protocol."
     },
@@ -254,7 +254,7 @@
       "sha256": "8f9685019c3f7b66a210d9bfe400c5e47f943d14e0046dc26fe3faeb56b4c5c9",
       "sourceRevision": "d3deae7ea4e47026925ccbd06ab6eec03f4648c7",
       "sourceSha256": "8f9685019c3f7b66a210d9bfe400c5e47f943d14e0046dc26fe3faeb56b4c5c9",
-      "targetSha256": "546fde27c4f48d60f81c36c281bd66ffe628e7f2006d0630ff0f3291842da50d",
+      "targetSha256": "896835d44ac8f94db46a60278790c4013bba1c3e10fb0ea7c6126a906adb9a85",
       "mode": "layout-adapter",
       "adaptation": "Adapts RealGraphCanvas Antd Button header/status/participant hierarchy, compact 124–140px by 94px cards, 6px corners and muted thin arrows. Uses local task state and measured edge anchors; adds scoped automatic knowledge/collection nodes and receipts. Not an exact copy or the original graph engine."
     },
@@ -264,7 +264,7 @@
       "sha256": "8f9685019c3f7b66a210d9bfe400c5e47f943d14e0046dc26fe3faeb56b4c5c9",
       "sourceRevision": "d3deae7ea4e47026925ccbd06ab6eec03f4648c7",
       "sourceSha256": "8f9685019c3f7b66a210d9bfe400c5e47f943d14e0046dc26fe3faeb56b4c5c9",
-      "targetSha256": "77e8d9da64d0fc6c5f1e18a6710bfd558d8cd0aae114ae57045bac8aae6bf2d9",
+      "targetSha256": "76f37ddd279f64b36f7c3f9750c0f8cdf6a7fc343d07ef5edb7d819bf6bcb714",
       "mode": "layout-adapter",
       "adaptation": "Adapts RealGraphCanvas Antd Button header/status/participant hierarchy, compact 124–140px by 94px cards, 6px corners and muted thin arrows. Uses local task state and measured edge anchors; adds scoped automatic knowledge/collection nodes and receipts. Not an exact copy or the original graph engine."
     }

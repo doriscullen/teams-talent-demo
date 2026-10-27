@@ -17,11 +17,16 @@ const appConfigStore = useAppConfigStore();
 const spanDetailFetcher = computed(() =>
   appConfigStore.lazyDetailEnabled() ? fetchSpanDetail : undefined,
 );
+
+function backToList() {
+  if (window.parent !== window) window.parent.postMessage({ type: "teams-trace-route", projectId, sessionId, traceId: null }, window.location.origin);
+  router.push({ path: "/", query: route.query });
+}
 </script>
 
 <template>
   <div class="tm-detail-page">
-    <button class="tm-back" type="button" @click="router.push('/')">← 返回列表</button>
+    <button class="tm-back" type="button" @click="backToList">← 返回列表</button>
     <TraceDetail
       :project-id="projectId"
       :trace-id="traceId"

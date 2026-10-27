@@ -21,7 +21,6 @@ if not exist "teams\trace-monitor\node_modules" (
 )
 
 rem ---- python trace-server (started automatically by the Teams service) ----
-set "DEMO_TRACE_PYTHON="
 for /f "delims=" %%P in ('where python 2^>nul') do if not defined DEMO_TRACE_PYTHON set "DEMO_TRACE_PYTHON=%%P"
 if not defined DEMO_TRACE_PYTHON (
   where py >nul 2>nul

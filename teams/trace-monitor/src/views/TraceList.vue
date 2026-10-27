@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Trace 列表页：表格 + Agent/状态/ID 筛选 + 可配置列 + 分页 + 行点击跳详情
 import { computed, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import dayjs from "dayjs";
 import { ElMessage } from "element-plus";
 import { Refresh } from "@element-plus/icons-vue";
@@ -11,6 +11,7 @@ import { fetchTraces, downloadTraceJsonl } from "@/api/traces";
 import type { Trace } from "@/types";
 import StatusBadge from "@/components/StatusBadge.vue";
 
+const route = useRoute();
 const router = useRouter();
 const projectStore = useProjectStore();
 const appConfigStore = useAppConfigStore();
@@ -33,6 +34,7 @@ type ColumnKey = (typeof ALL_COLUMNS)[number]["key"];
 const items = ref<Trace[]>([]);
 const total = ref(0);
 const loading = ref(false);
+const loadError = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const agentName = ref<string | undefined>();
@@ -47,10 +49,23 @@ const agentOptions = computed<{ label: string; value: string }[]>(() => {
 });
 const visibleKeys = ref<Set<ColumnKey>>(new Set(ALL_COLUMNS.map((c) => c.key)));
 
-async function load() {
+function notifyHost(projectId: string, sessionId: string | null, traceId: string | null) {
+  if (window.parent === window) return;
+  window.parent.postMessage({ type: "teams-trace-route", projectId, sessionId, traceId }, window.location.origin);
+}
+
+function applyHostScope() {
+  const project = typeof route.query.project === "string" ? route.query.project : "";
+  const session = typeof route.query.session === "string" ? route.query.session : "";
+  if (project) projectStore.applySelection(project);
+  if (session) { keywordInput.value = session; idKeyword.value = session; }
+}
+
+async function load(preserveOnError = false) {
   const pid = projectStore.projectId();
   if (!pid) return;
   loading.value = true;
+  loadError.value = false;
   try {
     const resp = await fetchTraces(pid, {
       page: page.value,
@@ -63,8 +78,8 @@ async function load() {
     items.value = resp.items;
     total.value = resp.total;
   } catch {
-    items.value = [];
-    total.value = 0;
+    loadError.value = true;
+    if (!preserveOnError) { items.value = []; total.value = 0; }
     ElMessage.error("加载 Trace 列表失败，请确认 API 可用");
   } finally {
     loading.value = false;
@@ -87,6 +102,7 @@ watch([agentName, status], () => {
 
 // 存储模式：file 模式下 list_traces 只返回 {id, projectId, sessionId}，摘要列无数据
 onMounted(() => {
+  applyHostScope();
   appConfigStore.load();
   load();
 });
@@ -150,18 +166,18 @@ function onProjectChange(v: string) {
   projectStore.applySelection(v);
 }
 function reload() {
-  router.go(0);
+  load(true);
 }
 
 function rowClick(row: Trace) {
   const pid = row.projectId || projectStore.projectId();
   if (!pid) return;
-  // 带 sessionId：file 后端按 <pid>/<sid>/<trace_id>.jsonl 路径直查详情提速
-  router.push(
-    row.sessionId
-      ? `/traces/${pid}/${row.sessionId}/${row.id}`
-      : `/traces/${pid}/${row.id}`,
-  );
+  // 详情与返回都保留真实项目/会话范围，宿主可据此恢复同一条 Trace。
+  notifyHost(pid, row.sessionId || null, row.id);
+  router.push({
+    path: row.sessionId ? `/traces/${pid}/${row.sessionId}/${row.id}` : `/traces/${pid}/${row.id}`,
+    query: { project: pid, ...(row.sessionId ? { session: row.sessionId } : {}) },
+  });
 }
 
 // 下载该行 trace 还原出的 jsonl：操作列按钮，需阻止冒泡避免触发行点击跳详情
@@ -261,6 +277,8 @@ async function onDownload(row: Trace) {
         <el-button :icon="Refresh" @click="reload">刷新</el-button>
       </div>
     </div>
+
+    <div v-if="loadError" class="tm-load-error" role="alert"><span>{{ items.length ? "刷新失败，当前展示最近一次成功结果。" : "Trace 数据加载失败，请检查服务后重试。" }}</span><el-button size="small" @click="reload">重试</el-button></div>
 
     <div class="tm-panel">
       <div class="tm-table-wrap">
@@ -388,6 +406,19 @@ async function onDownload(row: Trace) {
   background: var(--danger);
   box-shadow: 0 0 0 3px var(--danger-soft);
 }
+.tm-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  font-size: 12px;
+}
 .tm-panel {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
@@ -439,5 +470,38 @@ async function onDownload(row: Trace) {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-mid);
+}
+@media (max-width: 600px) {
+  .tm-page-head {
+    align-items: stretch;
+  }
+  .tm-toolbar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .tm-project-select {
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+  .tm-toolbar :deep(.el-input) {
+    width: 100% !important;
+    min-width: 0;
+    grid-column: 1 / -1;
+  }
+  .tm-toolbar :deep(.el-select) {
+    max-width: 100%;
+  }
+  .tm-table-wrap :deep(.el-table) {
+    min-width: 560px;
+  }
+  .tm-pagination {
+    justify-content: center;
+    padding: 12px 8px;
+  }
+  .tm-pagination :deep(.el-pagination__total),
+  .tm-pagination :deep(.el-pagination__sizes) {
+    display: none;
+  }
 }
 </style>

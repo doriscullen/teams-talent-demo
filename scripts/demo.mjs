@@ -7,24 +7,14 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { configuredProjects, projectHealth as health } from './service-projects.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const projects = [
-  { id: 'teams', dir: join(root, 'teams'), app: 'teams-talent-carddemo', port: Number(process.env.DEMO_PORT ?? 45970), page: '/teams' },
-  { id: 'talents', dir: join(root, 'talents'), app: 'talents-carddemo', port: Number(process.env.DEMO_TALENT_PORT ?? 45980), page: '/talents' },
-];
+const projects = configuredProjects(root);
 const mode = process.argv[2] ?? 'dev';
 const npm = (dir, args) => spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { cwd: dir, stdio: 'inherit', shell: process.platform === 'win32' });
 const url = project => `http://127.0.0.1:${project.port}${project.page}`;
 
-async function health(project) {
-  try {
-    const response = await fetch(`http://127.0.0.1:${project.port}/api/health`, { signal: AbortSignal.timeout(1000) });
-    const data = await response.json();
-    if (data.app !== project.app) throw new Error(`端口 ${project.port} 已被其他服务占用`);
-    return data;
-  } catch (error) { if (error.cause?.code === 'ECONNREFUSED') return null; throw error; }
-}
 function prepare(project) {
   if (!existsSync(join(project.dir, 'node_modules')) && npm(project.dir, ['ci', '--no-audit', '--no-fund']).status !== 0) process.exit(1);
   // Teams embeds the trace monitor; without its dependencies the build skips it and only that page is unavailable.
@@ -32,7 +22,7 @@ function prepare(project) {
   if (existsSync(join(traceMonitor, 'package.json')) && !existsSync(join(traceMonitor, 'node_modules')) && npm(traceMonitor, ['ci', '--no-audit', '--no-fund']).status !== 0) console.warn('trace-monitor 依赖安装失败，「开发会话轨迹」页面不可用');
   if (npm(project.dir, ['run', 'build']).status !== 0) process.exit(1);
 }
-const server = (project, stdio, detached = false) => spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { cwd: project.dir, stdio, detached, windowsHide: true });
+const server = (project, stdio, detached = false) => spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { cwd: project.dir, env: project.env, stdio, detached, windowsHide: true });
 async function waitReady(project) {
   for (let n = 0; n < 80; n++) { if (await health(project)) return; await new Promise(done => setTimeout(done, 250)); }
   throw new Error(`${project.id} 启动未完成，请查看 ${join(project.dir, '.runtime', 'server.log')}`);

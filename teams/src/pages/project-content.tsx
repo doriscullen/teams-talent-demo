@@ -27,13 +27,13 @@ export function ProjectContent() {
     members={<><Descriptions size="small" column={1} items={[{ key: 'owner', label: '林悦 · 项目 Owner', children: '项目资产与知识、需求分配、质量能力、验收及演进' }, { key: 'member', label: (projectMembers(state, 'carddemo').filter(member => member.status === 'active' && member.role === 'member').map(member => member.name).join('、') || '尚无成员') + ' · 项目成员', children: '需求上下文、开发、验证、交付与会话关联' }]} /><Button onClick={() => navigate('team?team=' + projectTeam(state, 'carddemo').id)}>查看团队成员</Button></>}
     assets={<ProjectAssets projectId="carddemo" />}
     knowledge={<ProjectKnowledge projectId="carddemo" />}
-    requirements={<><RequirementMaterials /><div className="card-actions"><Button type="primary" onClick={() => navigate('projects?tab=delivery&node=prepare')}>进入需求准备</Button></div></>}
+    requirements={<><RequirementMaterials /><div className="card-actions"><Button type="primary" onClick={() => navigate('projects?tab=delivery&node=prepare')}>进入需求澄清</Button></div></>}
     skills={data.skills.filter(skill => data.blueprint.skill_groups.some(group => group.skills.includes(skill.name))).map(skill => {
       const base = { ...skill, source: '项目采用的导入素材', displayPath: skill.path.slice(skill.path.indexOf('/workspace/') + 1), content: data.skillContents[skill.name] };
       const written = talentsSkills.find(version => version.skillId === skill.name);
       return written ? { ...base, version: written.version, source: `Talents 轨迹诊断改进 · 基于 ${written.basedOn.version} · ${written.note}`, content: written.files.find(file => file.path === 'SKILL.md')?.content ?? base.content } : base;
     })}
-    skillFooter={<div className="project-skill-context"><div><strong>本次交付配置</strong><p>前端 Skill {state.adoptedSkill} · Code Agent {state.adoptedAgent} · Review / 测试 / 安全扫描分别保留依据</p><Tag color="green">项目内可用</Tag></div><Space wrap><Button type="primary" onClick={() => navigate('projects?tab=delivery&node=prepare')}>在需求准备中选用</Button><Button onClick={() => navigate('resources')}>查看共享能力</Button>{role === 'owner' && <Button onClick={() => navigate('connections?tab=quality')}>维护质量能力</Button>}</Space></div>}
+    skillFooter={<div className="project-skill-context"><div><strong>本次交付配置</strong><p>前端 Skill {state.adoptedSkill} · Code Agent {state.adoptedAgent} · Review / 测试 / 安全扫描分别保留依据</p><Tag color="green">项目内可用</Tag></div><Space wrap><Button type="primary" onClick={() => navigate('projects?tab=delivery&node=prepare')}>在需求澄清中选用</Button><Button onClick={() => navigate('resources')}>查看共享能力</Button>{role === 'owner' && <Button onClick={() => navigate('connections?tab=quality')}>维护质量能力</Button>}</Space></div>}
   />;
 }
 

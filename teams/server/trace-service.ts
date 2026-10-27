@@ -6,17 +6,20 @@ import { existsSync } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { runtimeDir, traceDataDir, traceOrigin, tracePort, traceServerRoot } from './config.js';
+import { root, runtimeDir, traceDataDir, traceOrigin, tracePort, traceServerRoot } from './config.js';
+
+import { checkNativeTraceReceiver } from '../scripts/native/tui-trace.mjs';
 
 let child: ChildProcess | null = null;
 let starting: Promise<void> | null = null;
 
 async function healthy() {
   try {
-    const response = await fetch(traceOrigin + '/health', { signal: AbortSignal.timeout(1000) });
-    return response.ok;
-  } catch {
-    return false;
+    await checkNativeTraceReceiver(traceOrigin + '/v1/traces', {app:'teams-trace-server',workspaceRoot: root, stateRoot: traceDataDir});
+    return true;
+  } catch (error) {
+    if ((error as {cause?: {code?:string}}).cause?.code === 'ECONNREFUSED') return false;
+    throw error;
   }
 }
 
@@ -30,12 +33,14 @@ export async function startTraceService() {
     await mkdir(runtimeDir, { recursive: true });
     const logPath = join(runtimeDir, 'trace-server.log');
     const log = await open(logPath, 'a', 0o600);
-    const python = process.env.DEMO_TRACE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+    const localPython = join(traceServerRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+    const python = process.env.DEMO_TRACE_PYTHON || (existsSync(localPython) ? localPython : process.platform === 'win32' ? 'python' : 'python3');
     const current = spawn(python, [entry], {
       cwd: traceServerRoot,
       env: {
         ...process.env,
         HOST: '127.0.0.1',
+        TEAMS_TRACE_WORKSPACE_ROOT: root,
         PORT: String(tracePort),
         STORAGE_BACKEND: 'file',
         DATA_FILE: traceDataDir,
@@ -86,7 +91,7 @@ export async function proxyTrace(path: string, search: string, response: ServerR
     response.end(body);
   } catch {
     response.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    response.end(JSON.stringify({ detail: 'trace 查询服务不可用，请确认 demo 启动正常' }));
+    response.end(JSON.stringify({ detail: 'trace 查询服务不可用，请确认 Teams 启动正常' }));
   }
 }
 

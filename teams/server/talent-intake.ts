@@ -3,13 +3,22 @@ import { DomainError, type DemoState } from '../src/domain.js';
 import { deliveryRequirement } from '../src/delivery-requirements.js';
 import { collectTaskSessions } from '../src/task-automation.js';
 import type { TalentTaskInputs, TalentTaskIntake, TalentTaskSession, TalentTaskSessionPayload } from '../src/talent-contract.js';
-import type { NativeSkillPackage } from './skill-installation.js';
-import { loadSourceSkillPackage } from './skill-packages.js';
+import type { SkillBinding } from '../src/resource-sharing.js';
+import { loadSourceSkillPackage, loadNativeSkillPackage } from './skill-packages.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { atomicJson } from './store.js';
 import { sharedDir, talentOrigin } from './config.js';
 import { projectKnowledge } from './shared-data.js';
+
+/** Resolve the recorded immutable package; never relabel current bytes as an old version. */
+export async function registeredTaskSkill(id:string,binding?:SkillBinding):Promise<TalentTaskInputs['skills'][number]>{
+ const pkg=binding?.sha256?await loadNativeSkillPackage(id,binding.version,binding.sha256):await loadSourceSkillPackage(id);
+ if(binding&&pkg.version!==binding.version)throw new DomainError('已登记 Skill 与所选版本不一致',409);
+ const main=pkg.files.find(file=>file.path==='SKILL.md');if(!main)throw new DomainError('已登记 Skill 缺少正文',500);
+ if(binding?.contentSha256&&binding.contentSha256!==main.sha256)throw new DomainError('固定 Skill 正文摘要不一致',409);
+ return{id:pkg.id,name:pkg.name,version:pkg.version,sha256:pkg.sha256,contentSha256:main.sha256,content:main.bytes.toString('utf8'),source:'teams-registered-package'};
+}
 
 /** Task facts stay in Teams; published knowledge comes from the Talents shared directory. */
 export async function sharedTaskInputs(state: DemoState, projectId: string, taskId: string): Promise<TalentTaskInputs> {
@@ -18,11 +27,7 @@ export async function sharedTaskInputs(state: DemoState, projectId: string, task
   const published = await projectKnowledge(projectId);
   const sourceDigest = createHash('sha256').update(JSON.stringify({ title: task.title, description: task.description, skillIds: task.skillIds })).digest('hex');
   const version = 'requirement-' + sourceDigest.slice(0, 12);
-  const skills = await Promise.all(task.skillIds.map(async id => {
-    const pkg = await loadSourceSkillPackage(id), main = pkg.files.find(file => file.path === 'SKILL.md');
-    if (!main) throw new DomainError('已登记 Skill 缺少正文', 500);
-    return { id: pkg.id, name: pkg.name, version: pkg.version, sha256: pkg.sha256, contentSha256: main.sha256, content: main.bytes.toString('utf8'), source: 'teams-registered-package' as const };
-  }));
+  const skills = await Promise.all(task.skillIds.map(id=>registeredTaskSkill(id,task.skillBindings?.find(binding=>binding.id===id))));
   return { projectId, taskId, generation: state.talentGeneration ?? 'initial', origin: talentOrigin,
     requirement: { id: taskId, title: task.title, description: task.description },
     knowledge: { status: 'ready', version, assets: [

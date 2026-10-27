@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "platinum-cashback-page-v1",
+  "artifactId": "a-platinum-cashback-page",
+  "version": 1,
+  "projectId": "carddemo",
+  "exactTitle": "白金卡消费返现权益说明页",
+  "origin": "scenario-fixture",
+  "authorship": "User-authorized scenario reference plus directly inspected repository sources; no mining/model execution claimed.",
+  "adoption": "recommendation-only; actual requirement description and frozen adoption remain independent",
+  "sourceFiles": [
+    {
+      "path": "workspace/carddemo-java-1025/services/web-ui/src/main/resources/static/app.js",
+      "sha256": "91b731eda5f1632c943fae5daf3fb31c476419f303fe30d21f1f0e78aa521304"
+    },
+    {
+      "path": "workspace/carddemo-java-1025/services/web-ui/src/main/resources/static/styles.css",
+      "sha256": "2f66b387664b610ab393f41835aca164c436565b05e666842e65024a63da8182"
+    },
+    {
+      "path": "workspace/carddemo-java-1025/services/web-ui/src/main/resources/static/index.html",
+      "sha256": "db2067454925b49bff4cd17b4c9450459f72813d42ce2cd982f2238e0e3f0224"
+    },
+    {
+      "path": "workspace/carddemo-java-1025/services/card-service/src/main/java/com/carddemo/card/interfaces/rest/CardController.java",
+      "sha256": "d28193754455b570c6ff99528022668de898e8b22518e76c1fa13b6aa45afa67"
+    },
+    {
+      "path": "workspace/carddemo-java-1025/services/card-service/src/main/java/com/carddemo/card/interfaces/rest/dto/CardResponse.java",
+      "sha256": "792d4fa10a61a66fbe4872afb2ccfdc8ba5a8c796ff092ae305b3724cd039f29"
+    }
+  ],
+  "knowledgeFiles": [
+    {
+      "path": "platinum-cashback-page/待确认清单.md",
+      "sha256": "800ba03116bf79c7e85bc30d1bfc90a6c40f55b5e25bb04d7c60301af2f81a78"
+    },
+    {
+      "path": "platinum-cashback-page/权益展示规则.md",
+      "sha256": "bfd5fd3375a7b457f2dfa1711e6f1da03252165d08a1f5278bad37ab230125d1"
+    },
+    {
+      "path": "platinum-cashback-page/现有模块与UI参考.md",
+      "sha256": "ca523fe2d18e2419c24755c45aa373168383b83b50e3766347f85fe65004f94c"
+    },
+    {
+      "path": "platinum-cashback-page/验收用例.md",
+      "sha256": "932fd6c273b9ffd6de71d10da3ad5598ad8f319203aae09d220b3b71fd114dc4"
+    }
+  ]
+}

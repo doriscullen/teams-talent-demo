@@ -1,43 +1,30 @@
 ---
 name: teams-demo-collaboration
-description: 在本机 Teams中开始或继续项目任务，读取所选任务节点上下文，明确采用依据，并向同一任务回传进度、阻塞和成果引用。用于 Teams启动材料提供了项目与任务范围的会话。
+description: 在 Teams 已提供项目、任务、节点和原生会话入口时，读取当前节点依据、明确采用，并用本机 CLI 回传真实进展、阻塞与成果。适用于交付人开始或继续该任务，不代替 Owner 验收。
 ---
 
 # Teams 协作
 
-使用启动材料给出的 Teams endpoint、projectId、taskId、nodeId 和 runId。CLI 位于当前工程的 `scripts/teams-demo.mjs`；使用启动材料提供的当前绝对路径；运行 `node <CLI> --help` 查看合同。此 Skill 与 `teams` 命令分别管理。所有写入仅在本机 Teams 服务发生。
+使用启动材料中的 CLI 绝对路径、endpoint、`--role`、projectId、taskId、nodeId、runId。读取原生观察器提供的 `native-session.json`，核对范围并使用真实 sessionId；尚未取得时等待或报告，不能借用其他任务身份。Owner 也可作为交付人，但只有当前被分配的人能写入。
 
-开始工作先运行：
+## 读取与采用
 
-```sh
-node /ABSOLUTE/PATH/TO/teams/scripts/teams-demo.mjs --endpoint http://127.0.0.1:45970 context get --project PROJECT --task TASK --node NODE --output /tmp/teams-task-context.json
-```
+首次开展业务工作时，执行启动材料中的 `context get --input-file SCOPE.json --output CONTEXT.json` 并读取保存的内容。CLI 默认返回去重后的模型上下文；有 `--output` 时 stdout 只是保存回执，不是正文。命令写法、参数与 PowerShell 注意事项见 [CLI 参数](references/cli.md)，需要构造请求时再读。
 
-Windows PowerShell 中，优先复制启动材料给出的 `& 'Node绝对路径' 'CLI绝对路径' ... --input-file 'scope文件绝对路径'` 命令；scope 文件已由作业入口导出。手工读取也可使用上面的 `--project / --task / --node` 分字段形式，并将输出改为本机路径，例如 `--output "$env:TEMP/teams-task-context.json"`。写入 JSON 使用 `--input-file`，不要在 PowerShell 5.1 中通过 `--input` 内联 JSON，避免原生参数绑定剥掉双引号。文件内容使用 UTF-8；命令只获取材料，不自动采用。
+以 `nodeContract` 为本节点输入、交付物、完成标准的唯一依据；正文在顶层 `knowledge.assets` 与 `skills`，其他位置按 ID 引用。只读取当前工作所需材料，不扩展到全部项目 Skill。缺失、未配置或本节点知识未就绪时停在等待/阻塞，不拿其他节点或新版本补成已就绪。`historical-subset` 仅是历史采用子集。
 
-从启动材料复制标识和 endpoint，勿照抄占位符或改用固定任务。项目级材料没有任务时只读取项目上下文；先在 Teams 选择有效任务与节点，再回传任务进度。原生 sessionId 尚未观测时传 null，以 runId 保留启动关联；已知后续 sessionId 需要明确重新采用并保留原记录。
+对已实际读过且版本未变的材料直接复用，不每轮全文重读。开发者明确切换节点、输入版本变化或服务报告依据冲突时，再获取该节点的上下文；保持项目、任务、角色、run/session 身份，不复用初始 scope 的旧 nodeId。
 
-读取输出中的范围、约定与验收标准、节点工作要求、版本、关联正文和缺失项。`mode=preparation` 表示当前准备信息，`mode=frozen` 表示冻结版本。获取文件不等于已阅读或采用。Talent 不可用、冻结知识版本缺失、Skill 只有示例正文等限制会显式返回；先报告影响，不用其他版本替代。
+实际阅读后通过 `inputs adopt` 保存依据：使用刚读取的 revision、basisDigest、完整 scope（含返回的 tab）和真实 readReferences，保留 adoptionId。读取、Hook 提醒、会话就绪均不等于已阅读或采用；采用也不等于节点完成。每个节点独立采用，不能跨节点复用 adoptionId。
 
-阅读实际需要的材料后，用 `inputs adopt --operation-id OP --input-file REQUEST.json` 明确采用。JSON 字段为 `projectId, taskId, nodeId, runId, sessionId, expectedRevision, basisDigest, readReferences`；若 context 返回的 `scope.tab` 存在，也须原样保留 `tab`，读与写的 scope 必须完全一致；版本和 digest 使用刚读取的值，readReferences 只列实际阅读的引用 ID，允许如实为空。保留返回的 adoptionId 与 revision。
+## 回传与交接
 
-开始实际工作时，以及有意义的里程碑、阻塞和收尾时，运行 `progress add` 或 `result submit`。不要按时间高频刷状态。输入保留同一 scope、runId、sessionId、adoptionId 和当前 expectedRevision：
+开始实际工作及有意义的里程碑用 `progress add`；阻塞写明原因，解决后回传解除依据。完成后按当前 `nodeContract` 用 `result submit` 提交产物引用、版本和已满足的标准 ID。构造成果或检查结果时读 [回传字段](references/reporting.md)。只报告实际发生的工作；验证阶段按节点合同允许的预置检查标 `preset`，真实执行标 `actual`；开发单测不能预置。
 
-- `progress add`：`phase` 为 started / progress / blocked，`summary` 写实际进展，阻塞时填 `blocker`，`evidence` 为证据引用数组。解除阻塞时明确说明原因并发 progress，最新回报决定当前协作阻塞提示。
-- `result submit`：提供 summary 及至少一个 `evidence`，每项为 `{kind:"reference"|"local-file",value,description}`。本地路径只是一条本机引用，未上传团队存储；引用声明尚未由远端 provider 验真。成员成果报告保持待确认，质量检查和 Owner 验收仍走原流程。
-- 开发/验证进度携带 `sessionId` 时，Teams 自动关联本项目、本任务、当前节点。Owner 验收通过后自动汇总去重；不要在提交后另行执行会话上报。数据归集不代表 Talent 已接收或完成分析。
+完成开发前，必须按变更影响确定必要测试范围并实际执行通过；写了测试/报告、仅编译或部分套件通过都不够。必要测试失败、跳过或未运行时用 `progress add` 报阻塞，不提交开发完成，也不以“已说明剩余限制”豁免；细则见 [回传字段](references/reporting.md)。
 
-每次写入使用一个稳定 operationId。CLI 发送前保存完整请求，成功后保存服务回执；默认目录为 demo `.runtime/cli-receipts`，可用 `--receipt-dir` 指定。非零退出码或失败回执必须向会话明确报告。超时/响应丢失时先 `operation get --operation-id OP`；需要重试时保持原 ID 和完整原载荷。revision 冲突时重新读取并判断如何协调，不能换 ID 绕过冲突。相同 ID 不同载荷会被拒绝。
+上游成果按合同通过后，下一节点知识会自动获取；等待该节点输入 ready 才采用和执行。会话可继续使用，但不自动连续执行全部节点。影响开发的未确认事项不能自行确认；节点成果只是交付人声明，不等于远端证据已核验。
 
-当前角色只用于本机流程校验，不代表企业认证。不要通过 CLI 改 Owner 验收或旧需求的测试、安全字段。独立需求的检查结果按下方明确的 checks 合同回传。启动提示提供这份文件和读取命令；模型是否实际读取由会话执行确认，不能声称自动加载或自动完成同步。
+每个逻辑写操作用稳定 operationId，保留 CLI 保存的请求与回执。超时/响应丢失先 `operation get` 核对；重试保持原 ID 和完整载荷。revision/依据冲突先重读并协调，不换 ID 绕过冲突，不直接改状态文件补成功。
 
-## 独立需求交付任务
-
-若上下文中的需求 ID 是独立任务（例如 `MKT-E2E-001`），必须沿此任务身份回传，不能替换为其他需求 ID。每条写入携带原生会话提供的真实 `sessionId` 与本次 `runId`，不能编造或复用历史会话。启动材料提供 `native-session.json` 时，等待并读取该文件，它由原生进程观察器记录，不是业务完成回执。
-
-1. 在 `prepare` 节点读取 `context get`，实际核对 Talent 返回的知识与 Skill 正文，然后 `inputs adopt`；只列出实际读过的 `readReferences`。该操作保存本任务输入版本并完成准备，不代表开发完成。
-2. 切换 `develop` 后重新读取上下文并采用当前节点依据；通过 `progress add` 回传 `started`、`progress` 或 `blocked`。真实实施代码变更、执行检查后，用 `result submit` 提交至少一条真实文件/成果引用。开发结果保存后进入验证。
-3. 在 `verify` 节点重新读取与采用，检查回传可以携带 `checks` 数组，每项为 `{ "status": "passed"或"failed", "source": "actual"或"preset", "summary": "实际执行或预置检查的具体范围与结果" }`。允许的预置检查必须写 `preset`；真实命令执行结果写 `actual`，不能混淆。失败后回传阻塞/修复说明，复检通过后 `result submit`。必须有通过的检查结果和成果引用，才能进入待 Owner 验收。
-4. 停在待 Owner 验收，不得调用 Owner 验收接口或冒充 Owner。验收通过后的会话归集与 Talent 上报由 Teams 自动触发，接收回执与验收状态分开保存。
-
-每次写前使用最新 `revision`；节点变更需重新 `context get`、`inputs adopt`，不能把上一节点的采用记录跨节点使用。遇到明确失败先读取错误及最新上下文，不通过页面或直接改状态文件补成成功。
+开发/验证回传会关联同一任务的真实 session。最终停在待 Owner 人工验收，即使交付人是 Owner 也不能用 CLI 代验收。验收后的归集/上报由 Teams 触发；本地归集不代表 Talents 已接收或分析完成。

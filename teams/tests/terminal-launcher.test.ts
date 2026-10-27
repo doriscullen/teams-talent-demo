@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve, win32 } from 'node:path';
-import { createTerminalLauncher, findExecutable, formatShellCommand, windowsArgument, type TerminalRuntime } from '../server/terminal-launcher.js';
+import { createTerminalLauncher, findExecutable, formatShellCommand, launchEnvironment, windowsArgument, type TerminalRuntime } from '../server/terminal-launcher.js';
 
 const shell = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const executable = "C:\\工具 O'Brien & $ %;\\icode.exe";
@@ -73,11 +73,45 @@ test('executable resolution pins relative PATH entries before changing project c
   assert.equal(await findExecutable('icode','win32',{PATH:'relative-bin'},async()=>true),win32.resolve('relative-bin/icode.exe'));
   await assert.rejects(findExecutable('icode','darwin',{PATH:'/bin'},async()=>{throw Object.assign(new Error('access denied'),{code:'EACCES'});}),/access denied/);
 });
+test('Windows PATH discovery skips inaccessible app execution aliases but explicit paths still fail', async () => {
+  const denied=async()=>{throw Object.assign(new Error('access denied'),{code:'EACCES'});};
+  assert.equal(await findExecutable('wt.exe','win32',{Path:'C:\\WindowsApps'},denied),null);
+  await assert.rejects(findExecutable('C:\\WindowsApps\\wt.exe','win32',{},denied),/access denied/);
+});
 test('macOS still uses one Terminal AppleScript with shell-quoted cwd, instruction, and argv', async () => {
   const t=setup({},'darwin'); const receipt=await t.launcher.launch({executable:'/tools/icode',directory:"/tmp/project O'Brien &;",args:['--agent','a b','--model',"x'y"],instruction:'read $context;'});
   assert.equal(receipt.terminal,'Terminal');assert.equal(t.calls.length,1);assert.equal(t.calls[0].file,'/usr/bin/osascript');assert.match(t.calls[0].args[1],/tell application "\/System\/Applications\/Utilities\/Terminal.app"/);
   assert.ok(receipt.command.includes("O'\\''Brien"));assert.ok(receipt.command.includes("'--model' 'x'\\''y'"));
   t.fail();await assert.rejects(t.launcher.launch({executable:'/tools/icode',directory:'/tmp',args:[]}),/process launch denied/);assert.equal(t.calls.length,2);
+});
+test('interactive launch removes non-interactive color suppression from the child environment', async () => {
+  const env = launchEnvironment({ NO_COLOR: '1', TERM: 'dumb', CLICOLOR: '0', CLICOLOR_FORCE: '0', FORCE_COLOR: '0', PATH: 'C:\\bin' });
+  assert.equal(env.NO_COLOR, undefined); assert.equal(env.CLICOLOR, undefined); assert.equal(env.CLICOLOR_FORCE, undefined);
+  assert.equal(env.FORCE_COLOR, undefined); assert.equal(env.TERM, 'xterm-256color'); assert.equal(env.COLORTERM, 'truecolor'); assert.equal(env.PATH, 'C:\\bin');
+  const t = setup({ DEMO_WINDOWS_TERMINAL: 'none', NO_COLOR: '1', TERM: 'dumb' });
+  await t.launcher.launch(input);
+  const launched = t.calls[0].options as { env: NodeJS.ProcessEnv };
+  assert.equal(launched.env.NO_COLOR, undefined); assert.equal(launched.env.TERM, 'xterm-256color'); assert.equal(launched.env.COLORTERM, 'truecolor');
+});
+test('macOS cleans both osascript and the new terminal surface without changing a chosen theme or capable terminal', async () => {
+  const { execFile } = await import('node:child_process'), { promisify } = await import('node:util');
+  const inherited = { ...process.env, NO_COLOR: '1', CLICOLOR: '0', CLICOLOR_FORCE: '0', FORCE_COLOR: '0', TERM: 'xterm-ghostty', COLORTERM: 'truecolor', TEXTUAL_THEME: 'chosen-theme' };
+  for (const terminal of ['terminal', 'ghostty']) {
+    const t = setup(inherited, 'darwin');
+    t.runtime.resolveExecutable = async name => name === process.execPath ? process.execPath : null;
+    const receipt = await createTerminalLauncher(t.runtime).launch({ executable: process.execPath, directory: process.cwd(), terminal, args: ['-e', 'console.log(JSON.stringify(Object.fromEntries(["NO_COLOR","CLICOLOR","CLICOLOR_FORCE","FORCE_COLOR","TERM","COLORTERM","TEXTUAL_THEME"].map(k=>[k,process.env[k]??null]))))'] });
+    const launch = t.calls[0].options as { env: NodeJS.ProcessEnv };
+    assert.equal(launch.env.NO_COLOR, undefined); assert.equal(launch.env.TERM, 'xterm-ghostty');
+    // Existing GUI processes can ignore osascript's environment. Execute the
+    // actual surface command with the original dirty environment as regression.
+    assert.match(receipt.command, /^unset NO_COLOR CLICOLOR CLICOLOR_FORCE;/);
+    if (process.platform !== 'win32') {
+      const { stdout } = await promisify(execFile)('/bin/sh', ['-c', receipt.command], { env: inherited });
+      assert.deepEqual(JSON.parse(stdout), { NO_COLOR: null, CLICOLOR: null, CLICOLOR_FORCE: null, FORCE_COLOR: null, TERM: 'xterm-ghostty', COLORTERM: 'truecolor', TEXTUAL_THEME: 'chosen-theme' });
+    }
+  }
+  assert.equal(inherited.NO_COLOR, '1');
+  assert.equal(launchEnvironment({ FORCE_COLOR: '3', TERM: 'screen-256color', COLORTERM: '24bit', TEXTUAL_THEME: 'personal' }).FORCE_COLOR, '3');
 });
 test('argument quoting retains empty values, internal quotes, and trailing backslashes for CRT; probe mode can exit',async()=>{
   assert.equal(windowsArgument(''),'""');assert.equal(windowsArgument('a"b'),'"a\\"b"');assert.equal(windowsArgument('a\\'),'"a\\\\"');assert.equal(windowsArgument('a\\"b'),'"a\\\\\\"b"');

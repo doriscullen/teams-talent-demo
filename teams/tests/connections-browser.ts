@@ -38,7 +38,7 @@ try{
     if(id==='requirements')assert.deepEqual(recordIds.map(value=>value.split(':').at(-1)),['DEMO-MKT-001','MKT-002','MKT-003','MKT-004','MKT-005','REQ-T104','REQ-T105','REQ-T106','REQ-T107','REQ-T108','REQ-WINDOWS-RECONNECT']);
     if(id==='defects')assert.deepEqual(recordIds.map(value=>value.split(':').at(-1)),['CARD-BUG-001','CARD-BUG-002','CARD-BUG-003','CARD-BUG-004','CARD-BUG-005','CARD-BUG-006','CARD-BUG-007','TEAMS-BUG-001']);
     const firstPage=drawer.locator('.ant-pagination-item-1');if(await firstPage.count())await firstPage.click();
-    await drawer.getByText('信用卡营销交付',{exact:true}).first().waitFor();await drawer.getByText('iCode Teams',{exact:true}).first().waitFor();
+    await drawer.getByText('Credit Card',{exact:true}).first().waitFor();await drawer.getByText('iCode Teams',{exact:true}).first().waitFor();
     await drawer.getByRole('button',{name:title,exact:true}).click();await drawer.getByRole('heading',{name:title,exact:true}).waitFor();await drawer.getByText(record,{exact:true}).waitFor();
     assert.ok((await drawer.locator('.enterprise-source-detail').innerText()).includes('来源记录'));
     if(id==='design-library'){await drawer.getByRole('button',{name:'阅读营销能力设计',exact:true}).click();await drawer.locator('.enterprise-source-reference pre').waitFor();assert.ok((await drawer.locator('.enterprise-source-reference pre').innerText()).includes('白金卡消费额外返现'));}
@@ -57,6 +57,6 @@ try{
   }
   await page.getByRole('combobox',{name:'切换角色'}).click();await page.locator('.ant-select-item-option-content').getByText('陈晨 · 项目成员',{exact:true}).click();await page.getByText('此页面面向项目 Owner',{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'查看需求平台数据',exact:true}).count(),0);
-  assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.deepEqual(knowledgeReads,[],'enterprise connections do not read Talents knowledge');assert.deepEqual(await(await fetch(origin+'/api/state')).json(),initial);assert.equal(await readFile(join(dir,'state.json'),'utf8'),before);
+  assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.deepEqual(knowledgeReads,[],'enterprise connections do not read Talents knowledge');assert.equal((await(await fetch(origin+'/api/state')).json()).revision,initial.revision);assert.equal(await readFile(join(dir,'state.json'),'utf8'),before);
   await writeFile(output+'/result.json',JSON.stringify({passed:true,plugins:checks.map(([id])=>id),businessKnowledgePluginRemoved:true,knowledgeReads,layouts,pageErrors:errors,posts:writes,stateUnchanged:true,memberGuard:true},null,2));console.log('PASS: 5 source plugin drawers, no business-knowledge plugin or Talent connection, local reference, read-only state, role guard, 8 layouts');
 }catch(error){await writeFile(output+'/failure.log',String(error)+'\n'+logs);throw error;}finally{await browser?.close();server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));await rm(dir,{recursive:true,force:true});}

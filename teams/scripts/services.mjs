@@ -1,4 +1,4 @@
-import { origin, runtimeDir, root } from '../server/config.ts';
+import { origin, runtimeDir, root } from '../server/service-config.ts';
 export { root };
 
 export const services = [

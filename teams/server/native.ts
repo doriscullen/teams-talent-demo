@@ -7,24 +7,49 @@ import { access, readFile, mkdir, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { binary, workspace, runtimeDir, codeRoot, root, origin } from './config.js';
+import { binary, workspace, runtimeDir, codeRoot, root, origin, traceDataDir, icodeBinarySource, icodeBinaryNotes } from './config.js';
 import { atomicJson, atomicText } from './store.js';
+import { nativeSkillEnvironment } from './native-skill-reader.js';
+import { nativeTraceRuntime } from './native-trace-runtime.js';
+import { ensureNativeTuiHooks } from './native-tui-hooks.js';
+import { nativeTraceEnvironment, checkNativeTraceReceiver, traceLaunchSettings } from '../scripts/native/tui-trace.mjs';
+import type { ProjectWorkPlan } from '../src/project-work.js';
 import type { DemoState } from '../src/domain.js';
 const execute = promisify(execFile);
 let launchBusy = false;
 const launched = new Map<string, { identity: string; result: Promise<unknown> }>();
 const terminalLauncher = createTerminalLauncher();
+const expectedTraceReceiver = () => process.env.DEMO_TRACE_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ? {} : {app:'teams-trace-server',workspaceRoot:root,stateRoot:traceDataDir};
 export const shellQuote = posixQuote;
 export async function installed(path: string) { try { await access(path, constants.X_OK); return true; } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; throw e; } }
 async function openCodePath() {
   return findExecutable(process.env.DEMO_OPENCODE_BINARY ?? 'opencode');
 }
 export async function toolsStatus() {
-  const iCodeInstalled = await installed(binary), opencode = await openCodePath();
-  const version = iCodeInstalled ? (await execute(binary, ['--version'], { timeout: 15000 })).stdout.trim() : null;
-  const unsupportedReason = process.platform === 'win32' && opencode && !/\.exe$/i.test(opencode) ? '检测到 OpenCode .cmd/.bat；自动启动需设置 DEMO_OPENCODE_BINARY 为 opencode.exe 的绝对路径。' : undefined;
-  const openVersion = opencode && !unsupportedReason ? (await execute(opencode, ['--version'], { timeout: 15000 })).stdout.trim() : null;
-  return { ...await terminalPreferences.context(), icode: { installed: iCodeInstalled, path: binary, version, workspace, sessionId: '', sessionAvailable: false, active: null }, opencode: { installed: !!opencode && !unsupportedReason, path: opencode, version: openVersion, unsupportedReason }, verification: null };
+  let installedICode = false, installError: string | undefined;
+  try { installedICode = await installed(binary); }
+  catch (error) { installError = 'iCode 探测失败：' + (error as Error).message; }
+  let version: string | null = null, versionError: string | undefined;
+  if (installedICode) {
+    try { version = (await execute(binary, ['--version'], { timeout: 15000, windowsHide: true })).stdout.trim(); }
+    catch (error) { versionError = 'iCode 版本探测失败：' + (error as Error).message; }
+  }
+  let opencode: string | null = null, openError: string | undefined;
+  try { opencode = await openCodePath(); }
+  catch (error) { openError = 'OpenCode 探测失败：' + (error as Error).message; }
+  const unsupportedReason = openError ?? (process.platform === 'win32' && opencode && !/\.exe$/i.test(opencode) ? '检测到 OpenCode .cmd/.bat；自动启动需设置 DEMO_OPENCODE_BINARY 为 opencode.exe 的绝对路径。' : undefined);
+  let openVersion: string | null = null;
+  if (opencode && !unsupportedReason) {
+    try { openVersion = (await execute(opencode, ['--version'], { timeout: 15000, windowsHide: true })).stdout.trim(); }
+    catch (error) { openError = 'OpenCode 版本探测失败：' + (error as Error).message; }
+  }
+  const notes = [...icodeBinaryNotes, ...(installError ? [installError] : []), ...(versionError ? [versionError] : [])];
+  return {
+    ...await terminalPreferences.context(),
+    icode: { installed: installedICode, path: binary, version, workspace, sessionId: '', sessionAvailable: false, active: null, source: icodeBinarySource, notes },
+    opencode: { installed: !!opencode && !unsupportedReason, path: opencode, version: openVersion, unsupportedReason, notes: openError ? [openError] : [] },
+    verification: null,
+  };
 }
 export async function foundationSkill() {
   const path = join(root, 'skills/teams-demo-collaboration/SKILL.md');
@@ -77,7 +102,7 @@ export function launch(tool: 'icode' | 'opencode', restore: boolean, requestId: 
 }
 
 /** Native work entry: caller has validated and pinned the project directory/configuration. */
-export async function nativeWorkDefaults() {
+export async function nativeWorkDefaults(): Promise<(Omit<ProjectWorkPlan['instance'], 'installed' | 'name'> & {agent:string;agentLabel:string;model:string;modelLabel:string;terminal:{id:string;name:string;error?:string}}) | null> {
   if (!await installed(binary)) return null;
   const [agentReply, modelReply] = await Promise.all([
     execute(binary, ['agent', '--json'], { timeout: 10000, maxBuffer: 262144 }),
@@ -91,17 +116,28 @@ export async function nativeWorkDefaults() {
   const matches = models.models.filter((model: any) => model.id === selector || model.name === selector);
   if (matches.length !== 1) throw new Error('iCode 默认角色的模型配置无效');
   const preference = await terminalPreferences.context();
-  return { agent: role.id, agentLabel: role.displayName, model: matches[0].id, modelLabel: matches[0].name, terminal: { id: preference.selectedTerminal, name: preference.terminalName, error: preference.terminalError } };
+  const trace = nativeTraceEnvironment(process.env, { projectId: 'pending' });
+  const traceStatus: NonNullable<ProjectWorkPlan['instance']['trace']> = { endpoint:trace.endpoint,enabled:trace.enabled,sensitiveData:trace.sensitiveData, readiness: trace.enabled && process.env.DEMO_NATIVE_DISABLED !== '1' ? 'unavailable' : 'disabled', diagnostic: process.env.DEMO_NATIVE_DISABLED === '1' ? '此验证实例未开放原生启动' : trace.enabled ? '' : '按本机显式配置关闭 trace' };
+  if (trace.enabled && process.env.DEMO_NATIVE_DISABLED !== '1') try { await nativeTraceRuntime(); await checkNativeTraceReceiver(trace.endpoint, expectedTraceReceiver()); traceStatus.readiness = 'ready'; traceStatus.diagnostic = '接收端已就绪；实际轨迹以接收记录为准'; } catch (error) { traceStatus.diagnostic = '本机 trace 接收端未就绪：' + (error as Error).message; }
+  return { trace: traceStatus, agent: role.id, agentLabel: role.displayName, model: matches[0].id, modelLabel: matches[0].name, terminal: { id: preference.selectedTerminal, name: preference.terminalName, error: preference.terminalError } };
 }
-export async function startNativeWork(input: { directory: string; agent: string; model: string; sessionId?: string; instruction: string; terminal: string; task?: { runId: string; path: string; scope: { projectId: string; taskId: string; nodeId: string } } }) {
+export async function startNativeWork(input: { directory: string; agent: string; model: string; sessionId?: string; instruction: string; terminal: string; task?: { runId: string; path: string; scope: { projectId: string; taskId: string; nodeId: string }; preparedSession?: { preparationRunId: string; sourceRunId: string; sessionSha256: string; sessionId: string } } }) {
+  if (process.env.DEMO_NATIVE_DISABLED === '1') throw new Error('此验证实例未开放真实原生启动');
   if (input.task) {
-    if (input.sessionId || !/^[0-9a-f-]{36}$/i.test(input.task.runId)) throw new Error('自动任务仅支持明确的新会话请求');
+    if (!/^[0-9a-f-]{36}$/i.test(input.task.runId) || input.sessionId && input.task.preparedSession?.sessionId !== input.sessionId) throw new Error('当前任务只允许新会话或已核验的同任务准备会话');
     const output = join(runtimeDir, 'work-contexts', input.task.runId + '.native');
+    const trace = nativeTraceEnvironment(process.env, { ...input.task.scope, runId: input.task.runId });
+    const traceRuntime = trace.enabled ? await nativeTraceRuntime() : undefined;
+    if (trace.enabled) await checkNativeTraceReceiver(trace.endpoint, expectedTraceReceiver());
     await mkdir(output, { recursive: true });
     const manifest = join(output, 'manifest.json');
-    await atomicJson(manifest, { version: 1, runId: input.task.runId, scope: input.task.scope, executable: binary, directory: input.directory, agent: input.agent, model: input.model, taskFile: input.task.path, taskSha256: createHash('sha256').update(await readFile(input.task.path)).digest('hex') });
+    await atomicJson(manifest, { version: 1, executionMode: 'interactive', runId: input.task.runId, scope: input.task.scope, executable: binary, directory: input.directory, agent: input.agent, model: input.model, ...(input.task.preparedSession?{preparedSession:input.task.preparedSession}:{}), trace: {...traceLaunchSettings(trace),...expectedTraceReceiver(),runtime:traceRuntime}, taskFile: input.task.path, taskSha256: createHash('sha256').update(await readFile(input.task.path)).digest('hex') });
+    const nativeEnvironment = traceRuntime ?? await nativeSkillEnvironment();
+    await ensureNativeTuiHooks(join(root, 'scripts/native/tui-work-hook.mjs'), join(runtimeDir, 'native-hook-backups'), nativeEnvironment.configDirectory, join(root, '..', 'demo', 'scripts/native/tui-work-hook.mjs'));
     const terminal = await terminalPreferences.selected(input.terminal);
-    return terminalLauncher.launch({ executable: process.execPath, directory: input.directory, args: [join(root, 'scripts/native/run-project-task.mjs'), manifest], instruction: 'iCode 将读取本次任务文件并执行；运行记录：' + output, terminal: terminal.id });
+    const receipt = await terminalLauncher.launch({ executable: process.execPath, directory: input.directory, args: [join(root, 'scripts/native/run-project-tui.mjs'), manifest], instruction: input.sessionId ? '恢复当前任务已准备的 iCode 会话；保留阅读背景与待确认问题，等待你继续交互。' : '进入 iCode 交互界面；输入工作指令后，当前任务节点上下文将通过原生 Hook 附带。', terminal: terminal.id });
+    await atomicJson(join(output, 'terminal-receipt.json'), { runId: input.task.runId, ...input.task.scope, directory: input.directory, terminalKind: terminal.id, at: new Date().toISOString(), ...receipt });
+    return receipt;
   }
   const args = ['-C', input.directory, '--agent', input.agent, '--model', input.model, ...(input.sessionId ? ['--session', input.sessionId] : [])];
   const terminal = await terminalPreferences.selected(input.terminal);

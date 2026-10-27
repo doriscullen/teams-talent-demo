@@ -1,0 +1,32 @@
+.task-node-sections{gap:14px}
+.task-node-sections>[data-node-section]{min-width:0}
+.task-node-sections .framework-card p{line-height:1.75;overflow-wrap:anywhere}
+.task-node-sections .task-node-requirement{font-size:14px;margin:0 0 12px;color:var(--ui-color-text)}
+.task-node-input-summary,.task-node-execution-summary{display:flex;gap:8px 18px;flex-wrap:wrap;color:var(--ui-color-muted);font-size:12px;margin-bottom:12px}
+.task-node-sections .ant-collapse{margin-top:10px}
+.task-node-sections .ant-collapse-header{padding-inline:0!important}
+.task-node-sections .ant-collapse-content-box{padding-inline:0!important}
+.task-node-sections .task-node-fulltext{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75}
+.task-node-records>.framework-card{background:var(--ui-color-fill);box-shadow:none}
+.task-node-sections .ant-list-item{gap:12px;align-items:flex-start}
+.task-node-sections .ant-list-item .ant-tag{white-space:normal;overflow-wrap:anywhere}
+@media(max-width:760px){.task-node-sections .framework-card{padding:14px}.task-node-input-summary,.task-node-execution-summary{gap:8px 12px}}
+.project-detail .project-delivery-layout.unified-task-delivery{grid-template-columns:236px minmax(0,1fr) 276px}
+.task-permanent-materials{min-width:0;padding:18px 16px;border-left:1px solid var(--ui-color-divider);background:var(--ui-color-fill);font-size:12px;line-height:1.75;overflow-wrap:anywhere}
+.task-permanent-materials h3{margin:0 0 18px;font-size:14px}
+.task-permanent-materials h4{margin:22px 0 8px;font-size:12px}
+.task-permanent-materials p{margin:7px 0}
+.task-material-title{display:block;font-size:13px;line-height:1.6}
+.task-material-description p+p{margin-top:10px}
+@media(max-width:1279px){.project-detail .project-delivery-layout.unified-task-delivery{grid-template-columns:220px minmax(0,1fr)}.unified-task-delivery>.project-delivery-sidebar{grid-row:1/3}.task-permanent-materials{grid-column:2;border-left:0;border-top:1px solid var(--ui-color-divider)}}
+@media(max-width:950px){.project-detail .project-delivery-layout.unified-task-delivery{grid-template-columns:minmax(0,1fr)}.unified-task-delivery>.project-delivery-sidebar{grid-row:auto}.task-permanent-materials{grid-column:1}.task-permanent-materials{padding:16px}}
+
+.unified-task-delivery .project-flow-heading{flex-wrap:wrap;align-items:flex-start}
+.unified-task-delivery .project-flow-heading>strong{flex:1 1 240px;min-width:0;overflow-wrap:anywhere;line-height:1.6}
+.unified-task-delivery .project-flow-heading>.ant-tag{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0}
+
+.task-material-criteria{margin:8px 0;padding-left:18px}.task-material-criteria>li+li{margin-top:8px}
+
+.task-process-progress>h3{font-size:13px;margin:16px 0 10px}.task-cli-progress .ant-timeline{max-height:360px;overflow-y:auto;padding:8px 4px}.task-cli-progress>.muted{font-size:11px}.task-cli-progress .ant-timeline-item-content p{margin:4px 0}.task-cli-progress .ant-empty{margin:16px 0}
+
+.task-deliverables-heading{font-size:13px;margin:16px 0 10px}

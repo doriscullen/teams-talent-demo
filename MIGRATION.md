@@ -66,6 +66,23 @@ Talents 的功能已移到 `talents/` 项目，技术栈不同，需要在那边
 3. 代码、文档、fixture 中写死的 `demo/...` 路径改为 `teams/...`。
 4. 已有的 trace 数据 `demo/trace-server/trace_data/` 挪到 `teams/trace-server/trace_data/`。trace-monitor 依赖由 `npm run setup` 和启动脚本安装；Python 依赖见 README。
 
+### 已有原生会话
+
+迁移前先停止属于当前目录的服务，并备份本机状态。`demo/.local` 需要整体移动到 `teams/.local`，再修正本机配置中的 Teams 状态路径。旧 Talent 的状态和接收回执保留原样；独立 Talents 使用自己的状态目录，不能把旧状态文件直接交给新 Store。
+
+历史会话中的 manifest、任务文件和采用依据保留原字节。对于确实随 runtime 搬迁的原生会话，在 `teams/` 下显式登记旧、新运行目录和 run 清单：
+
+```sh
+node --import tsx scripts/migrate-native-session-location.ts \
+  --runtime /absolute/new/teams-runtime \
+  --previous-runtime /absolute/old/teams-runtime \
+  --runs RUN_UUID_1,RUN_UUID_2
+```
+
+默认只预检；确认清单后加 `--apply yes`，写入本机迁移映射。读取时核验 run、任务、节点、session 以及原 manifest/归属文件的 SHA256；路径不匹配、损坏和权限错误直接失败。没有会话正文的失败启动仍显示原失败状态，不生成对话或完成记录。
+
+任务登记的历史 `workDirectory` 同样保留。新启动可使用状态目录中的 `project-task-directory-bindings.json`：每条绑定显式记录项目、任务、原登记目录、新 Git 根和 Git 配置 SHA256，启动时重新核验。该本机映射不修改历史任务上下文或已采用版本。
+
 ## 三、接口变化对照
 
 | 原来 | 现在 |

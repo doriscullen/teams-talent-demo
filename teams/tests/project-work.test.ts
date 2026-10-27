@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, mkdir, realpath } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, mkdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import {migrateMainDelivery} from '../server/delivery-migration.js';
 import { initialState } from '../src/domain.js';
 import { updateWorkspace } from '../src/workspace.js';
 import { readFixtures } from '../server/http-shared.js';
@@ -12,6 +13,7 @@ import { ProjectWorkService, resolveProjectWork, type WorkTransport } from '../s
 import { sessionId, workspace } from '../server/config.js';
 import { createDeliveryRequirement } from '../src/delivery-requirements.js';
 const fixtures = await readFixtures();
+function workingMain(role:'owner'|'member'='member'){const state=initialState();state.assigned=true;state.assigneeId=role;state.stage='assigned';migrateMainDelivery(state);return state;}
 function transport() {
   const calls: any[] = []; let active = false, fail = false, terminal = 'ghostty';
   const value: WorkTransport = { defaults: async () => ({agent:'role',agentLabel:'Code',model:'model',modelLabel:'Model',terminal:{id:terminal,name:terminal==='ghostty'?'Ghostty':'Terminal',error:undefined}}), history: async () => ({available:true,directory:workspace,title:'history',configuration:{agent:'original-role',agentLabel:'Original',model:'original-model',modelLabel:'Original model'},active:active?{pid:123,application:'Ghostty',tty:'ttys123',terminal:{id:'surface',title:'history',directory:workspace}}:null}), start: async input => { calls.push(input); if(fail)throw new Error('transport uncertain'); return { terminal: 'PowerShell' }; }, focus:async input=>{calls.push(input);return {status:'terminal-focused',note:'focused known terminal'};} };
@@ -33,7 +35,7 @@ test('work resolves precise Card/Teams/new-project scope and does not substitute
   }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('one confirmation pins scope/config, repeated request does not launch again, changed basis is rejected', async () => {
-  const dir=await mkdtemp(join(tmpdir(),'work-start-')), t=transport();let state=initialState();
+  const dir=await mkdtemp(join(tmpdir(),'work-start-')), t=transport();let state=workingMain();
   try {
     const service=new ProjectWorkService(()=>state,fixtures,dir,t.value), before=JSON.stringify(state), plan=await service.plan('member',{projectId:'carddemo',tab:'delivery',nodeId:'develop'});
     const body={requestId:randomUUID(),target:plan.target,action:'new' as const,planToken:plan.planToken};
@@ -45,7 +47,7 @@ test('one confirmation pins scope/config, repeated request does not launch again
   }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('old restore actions are unavailable and launch uncertainty is retained',async()=>{
-  const dir=await mkdtemp(join(tmpdir(),'work-current-')), t=transport(),state=initialState();t.setActive();
+  const dir=await mkdtemp(join(tmpdir(),'work-current-')), t=transport(),state=workingMain('owner');t.setActive();
   try{
     const service=new ProjectWorkService(()=>state,fixtures,dir,t.value),plan=await service.plan('owner',{projectId:'carddemo',tab:'delivery',nodeId:'prepare'});
     assert.deepEqual(plan.actions.map(a=>a.id),['new']);assert.equal(plan.history,undefined);
@@ -74,7 +76,7 @@ test('old resume request is rejected before launching any native work',async()=>
 });
 
 test('changing saved terminal invalidates the confirmation while active focus remains on its original terminal', async () => {
-  const dir=await mkdtemp(join(tmpdir(),'work-terminal-')), t=transport(), state=initialState();
+  const dir=await mkdtemp(join(tmpdir(),'work-terminal-')), t=transport(), state=workingMain('owner');
   try {
     const service=new ProjectWorkService(()=>state,fixtures,dir,t.value), plan=await service.plan('owner',{projectId:'carddemo',tab:'delivery'});
     assert.equal(plan.instance.terminal?.name,'Ghostty');t.setTerminal('terminal');
@@ -92,14 +94,38 @@ test('independent delivery work pins its own task/directory and sends a real nat
   try {
     const service=new ProjectWorkService(()=>state,fixtures,dir,t.value), target={projectId:'carddemo',tab:'delivery',taskId:task.id,nodeId:'prepare'};
     const plan=await service.plan('member',target);
-    assert.equal(plan.target.taskId,task.id);assert.equal(plan.target.requirementId,task.id);assert.equal(plan.title,task.title);assert.equal(plan.directory.root,await realpath(repo));assert.equal(plan.directory.valid,true);assert.deepEqual(plan.context.selectedSkills,['dev-code-reviewer']);
+    assert.equal(plan.target.taskId,task.id);assert.equal(plan.target.requirementId,task.id);assert.equal(plan.title,task.title);assert.equal(plan.directory.root,await realpath(repo));assert.equal(plan.directory.valid,true);assert.deepEqual(plan.context.selectedSkills,[]);
     assert.throws(()=>resolveProjectWork(state,fixtures,{...target,requirementId:'DEMO-MKT-001'}),/不一致/);
     const ownerPlan=await service.plan('owner',target);assert.equal(ownerPlan.actions[0].enabled,false);assert.match(ownerPlan.actions[0].reason!,/交付人/);
     const requestId=randomUUID(),receipt=await service.start('member',{requestId,target,action:'new',planToken:plan.planToken});
     assert.deepEqual(t.calls[0].task,{runId:requestId,path:receipt.contextPath,scope:{projectId:'carddemo',taskId:task.id,nodeId:'prepare'}});
-    const prompt=await readFile(receipt.contextPath,'utf8');assert.match(prompt,/本次自动执行授权/);assert.match(prompt,/native-session\.json/);assert.match(prompt,/停在待 Owner 验收/);assert.match(prompt,/不得修改 Teams 应用工程/);
+    assert.equal(plan.executionMode,'interactive');assert.equal(receipt.executionMode,'interactive');const prompt=await readFile(receipt.contextPath,'utf8');assert.match(prompt,/本次进入时所选节点为 prepare/);assert.match(prompt,/不自动连跑/);assert.match(prompt,/本次交互工作范围/);assert.match(prompt,/native-session\.json/);assert.match(prompt,/停在待 Owner 验收/);assert.match(prompt,/不得修改 Teams 应用工程/);
+    const exported=JSON.parse(await readFile(join(dir,'work-contexts',requestId+'.json'),'utf8'));assert.equal(exported.view,'model');assert.equal(exported.scope.taskId,task.id);assert.equal('talentInputs' in exported,false);assert.equal(exported.agreement.background,task.description);assert.match(prompt,/只打印保存回执/);
     assert.equal(state.stage,originalStage);assert.equal(state.context,originalContext);assert.equal(task.stage,'preparing');
     task.stage='awaiting-acceptance';assert.equal((await service.plan('member',target)).actions[0].enabled,false);
     task.stage='preparing';task.workDirectory=join(dir,'missing');assert.equal((await service.plan('member',target)).directory.valid,false);
   } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('Owner delivery uses the same native adapter and exact task scope; other users cannot start it',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'work-owner-')),repo=join(dir,'source'),t=transport(),state=initialState();await mkdir(repo);execFileSync('git',['init','-q',repo]);
+ const task=createDeliveryRequirement(state,'owner',{id:'MKT-OWNER-001',projectId:'carddemo',title:'白金卡返现规则说明页',description:'只使用确认事实与待确认项',assigneeId:'owner',skillIds:['dev-frontend-ui'],workDirectory:await realpath(repo)},new Date().toISOString());
+ const before=structuredClone(state);
+ try{const service=new ProjectWorkService(()=>state,fixtures,dir,t.value),target={projectId:'carddemo',tab:'delivery',taskId:task.id,nodeId:'prepare'},owner=await service.plan('owner',target),member=await service.plan('member',target);assert.equal(owner.actions[0].enabled,true);assert.equal(member.actions[0].enabled,false);await assert.rejects(service.start('member',{requestId:randomUUID(),target,action:'new',planToken:member.planToken}),/交付人/);assert.equal(t.calls.length,0);const id=randomUUID(),receipt=await service.start('owner',{requestId:id,target,action:'new',planToken:owner.planToken});assert.equal(t.calls.length,1);assert.equal(t.calls[0].task.scope.taskId,task.id);assert.match(await readFile(receipt.contextPath,'utf8'),/--role owner/);assert.deepEqual(state,before);}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+
+test('explicit relocated task directory preserves business state and rejects stale or altered bindings',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'work-task-relocation-')),repo=join(dir,'moved'),runtime=join(dir,'runtime'),t=transport(),state=initialState();
+  try{
+    await mkdir(repo);await mkdir(runtime);execFileSync('git',['init','-q',repo]);
+    const original=join(dir,'old','task'),task=createDeliveryRequirement(state,'owner',{id:'MKT-RELOCATE',projectId:'carddemo',title:'Relocated task',description:'Keep recorded task evidence',assigneeId:'owner',skillIds:['dev-frontend-ui'],workDirectory:original},new Date().toISOString());
+    const before=JSON.stringify(state),service=new ProjectWorkService(()=>state,fixtures,runtime,t.value),target={projectId:'carddemo',tab:'delivery',taskId:task.id,nodeId:'prepare'};
+    assert.equal((await service.plan('owner',target)).directory.valid,false);
+    const binding={projectId:task.projectId,taskId:task.id,recordedDirectory:original,directory:await realpath(repo),gitConfigSha256:createHash('sha256').update(await readFile(join(repo,'.git/config'))).digest('hex')};
+    const file=join(runtime,'project-task-directory-bindings.json');await writeFile(file,JSON.stringify({version:1,bindings:[binding]}));const plan=await service.plan('owner',target);assert.equal(plan.directory.valid,true);assert.equal(plan.directory.root,await realpath(repo));assert.equal(plan.actions[0].enabled,true);assert.equal(JSON.stringify(state),before);assert.equal(t.calls.length,0);
+    await writeFile(file,JSON.stringify({version:1,bindings:[{...binding,recordedDirectory:'/wrong/source'}]}));assert.match((await service.plan('owner',target)).directory.diagnostic,/登记来源不一致/);
+    await writeFile(file,JSON.stringify({version:1,bindings:[{...binding,gitConfigSha256:'0'.repeat(64)}]}));assert.match((await service.plan('owner',target)).directory.diagnostic,/配置发生变化/);
+    await writeFile(file,'{invalid');assert.equal((await service.plan('owner',target)).directory.valid,false);assert.equal(JSON.stringify(state),before);
+  }finally{await rm(dir,{recursive:true,force:true});}
 });

@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import (
     OTLP_BATCH_SIZE,
@@ -14,6 +17,7 @@ from config import (
     OTLP_FLUSH_INTERVAL,
     OTLP_PATH,
     OTLP_QUEUE_SIZE,
+    OTLP_PATH,
     OTLP_RECONNECT_INTERVAL,
     OTLP_SINK,
     STORAGE_BACKEND,
@@ -89,4 +93,11 @@ if OTLP_ENABLED:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    sink = getattr(app.state, "otlp_sink", None)
+    ready = bool(OTLP_ENABLED and OTLP_PATH == "/v1/traces" and OTLP_SINK == "file" and sink is not None and sink._ready and not sink._closed and not sink.write_failures)
+    return JSONResponse(status_code=200 if ready else 503, content={
+        "status": "ok" if ready else "error", "app": "teams-trace-server",
+        "service": "trace", "protocol": "otlp/http-protobuf", "pid": os.getpid(),
+        "workspaceRoot": str(Path(os.environ.get("TEAMS_TRACE_WORKSPACE_ROOT", Path(__file__).resolve().parents[3])).resolve()),
+        "stateRoot": str(Path(OTLP_FILE_DIR).resolve()),
+    })

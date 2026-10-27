@@ -1,13 +1,11 @@
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { root, selectedServices } from './services.mjs';
-import { tracePort } from '../server/config.ts';
-import { releasePorts } from './ports.mjs';
-// 重启时先让出端口：结束上一轮遗留的 Teams / Talent / trace-server 进程
+import { root, selectedServices, serviceHealth } from './services.mjs';
+// Never kill a listener merely because it occupies a configured port.
 const launching = selectedServices();
-const ports = launching.map(service => Number(new URL(service.origin).port));
-if (launching.some(service => service.id === 'teams')) ports.push(tracePort);
-await releasePorts(ports);
+for (const service of launching) {
+  if (await serviceHealth(service)) throw new Error(service.id + ' 已在当前目录运行；请先用 stop 停止已核验的服务，或使用另一个端口');
+}
 const children = launching.map(service => spawn(process.execPath, ['--import', 'tsx', join(root, service.entry)], { cwd: root, stdio: 'inherit' }));
 let stopping = false;
 function stop() { if (stopping) return; stopping = true; for (const child of children) if (child.exitCode === null) child.kill('SIGTERM'); }

@@ -92,7 +92,7 @@ try {
     const url = new URL(route.request().url()); plans.push(url);
     if (failPlan) { await route.fulfill({ status: 503, json: { error: '应用目录核验暂不可用（测试响应）' } }); return; }
     const scope = Object.fromEntries(['projectId', 'resourceId', 'version', 'sha256'].map(key => [key, url.searchParams.get(key)!])) as Pick<SkillApplicationPlan, 'projectId' | 'resourceId' | 'version' | 'sha256'>;
-    const plan: SkillApplicationPlan = { ...scope, scope: 'native-user', projectName: '信用卡营销交付', targetDirectory: join(dir, '测试用户/.chrys/skills'), skillDirectory: join(dir, '测试用户/.chrys/skills', scope.resourceId), files: [{ path: 'SKILL.md', sha256: scope.sha256 }], planToken: 'ui-plan-fixed-token', canApply: true };
+    const plan: SkillApplicationPlan = { ...scope, scope: 'native-user', projectName: 'Credit Card', targetDirectory: join(dir, '测试用户/.chrys/skills'), skillDirectory: join(dir, '测试用户/.chrys/skills', scope.resourceId), files: [{ path: 'SKILL.md', sha256: scope.sha256 }], planToken: 'ui-plan-fixed-token', canApply: true };
     await route.fulfill({ json: plan });
   });
   await page.route('**/api/native/skill-apply', async route => {

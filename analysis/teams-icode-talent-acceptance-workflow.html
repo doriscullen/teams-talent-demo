@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>任务交付流程 · Teams × Talent</title>
+<!-- Standalone workflow proposal. Visual reference: demo/src/project.css
+     (.project-node-graph, .project-flow-node) and vendor/teams/design-system.ts.
+     This preview changes no task data and performs no service requests. -->
+<style>
+:root {
+  color-scheme:light;
+  --ui-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;
+  --ui-color-workspace:#fff; --ui-color-fill:#f7f7fa; --ui-color-bg:#f7f7fa;
+  --ui-color-text:#282a35; --ui-color-text-secondary:#535563; --ui-color-muted:#737580;
+  --ui-color-faint:#8b8d98; --ui-color-border:#e5e5ed; --ui-color-divider:#e5e5ed;
+  --ui-color-primary:#7855ae; --ui-color-primary-faint:#f4f2fa; --ui-color-primary-soft:#f1ebf9; --ui-color-ring:#c0abe4;
+  --ui-color-success:#08783e; --ui-color-success-soft:#e2f5e9;
+  --ui-color-talent-line:color-mix(in srgb,var(--ui-color-success) 34%,var(--ui-color-border));
+  --ui-color-talent-fill:color-mix(in srgb,var(--ui-color-success-soft) 25%,var(--ui-color-workspace));
+}
+:root[data-theme=dark] {
+  color-scheme:dark;
+  --ui-color-workspace:#19191f; --ui-color-fill:#212128; --ui-color-bg:#19191f;
+  --ui-color-text:#eeeef4; --ui-color-text-secondary:#d0d0db; --ui-color-muted:#aaaab7;
+  --ui-color-faint:#85858e; --ui-color-border:#383842; --ui-color-divider:#383842;
+  --ui-color-primary:#bca1ec; --ui-color-primary-faint:#2b2635; --ui-color-primary-soft:#332b40; --ui-color-ring:#5f5faf;
+  --ui-color-success:#5fd75f; --ui-color-success-soft:#1f3325;
+}
+*{box-sizing:border-box}body{margin:0;background:var(--ui-color-bg);color:var(--ui-color-text);font:14px/1.6 var(--ui-font-family)}
+button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:2px solid var(--ui-color-primary);outline-offset:4px}
+.page{max-width:1560px;margin:0 auto;padding:24px 40px}
+.page-head{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:24px}
+.breadcrumb{font-size:13px;color:var(--ui-color-muted)}.breadcrumb span{margin:0 10px;color:var(--ui-color-faint)}
+h1{font-size:24px;line-height:1.4;margin:10px 0 0;font-weight:600}
+.theme-button{display:flex;align-items:center;gap:8px;border:1px solid var(--ui-color-border);border-radius:6px;background:var(--ui-color-workspace);padding:7px 12px;white-space:nowrap;font-size:13px}
+.theme-button svg{width:16px;height:16px}
+.workspace{background:var(--ui-color-workspace);border:1px solid var(--ui-color-border);border-radius:9px;padding:22px}
+.flow-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.flow-heading h2{font-size:16px;font-weight:600;margin:0}.flow-heading p{font-size:13px;color:var(--ui-color-muted);margin:5px 0 0}
+.flow-heading>span{font-size:12px;color:var(--ui-color-muted)}
+.flow{--column-gap:32px;position:relative}
+.main-rail{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--column-gap);padding:18px 16px;background:var(--ui-color-fill);border:1px solid var(--ui-color-border);border-radius:8px}
+.step{position:relative;min-width:0}
+.step:not(:last-child)::after{content:"";position:absolute;width:14px;height:1px;right:-24px;top:50%;background:var(--ui-color-primary)}
+.step:not(:last-child)::before{content:"";position:absolute;right:-24px;top:calc(50% - 3px);width:6px;height:6px;border-top:1px solid var(--ui-color-primary);border-right:1px solid var(--ui-color-primary);transform:rotate(45deg)}
+.node{width:100%;min-width:0;min-height:106px;display:flex;flex-direction:column;gap:4px;padding:10px 14px;border:1px solid var(--ui-color-border);border-radius:6px;background:var(--ui-color-workspace);text-align:left;position:relative}
+.node:hover{border-color:var(--ui-color-ring)}
+.node[aria-pressed=true]{border-color:var(--ui-color-primary);background:var(--ui-color-primary-faint);box-shadow:0 0 0 1px var(--ui-color-ring)}
+.node-meta{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--ui-color-muted);line-height:18px}
+.node strong{font-size:16px;font-weight:600;line-height:24px}.node small{font-size:13px;color:var(--ui-color-muted);line-height:20px}
+.node .state{font-size:12px;line-height:18px;color:var(--ui-color-muted)}
+.talent-area{margin-top:56px;padding:18px 16px 16px;border:1px dashed var(--ui-color-talent-line);border-radius:8px;background:var(--ui-color-talent-fill)}
+.talent-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:14px;line-height:20px;color:var(--ui-color-success);font-weight:600}
+.talent-heading span{font-size:12px;font-weight:400;color:var(--ui-color-muted)}
+.talent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--column-gap);align-items:center}
+.talent-step{position:relative;min-width:0}.talent-step:last-child{grid-column:4}
+.talent-node{min-height:106px;border-color:var(--ui-color-talent-line)}.talent-node .node-meta{color:var(--ui-color-success)}
+.talent-node:hover,.talent-node[aria-pressed=true]{border-color:var(--ui-color-success);background:var(--ui-color-success-soft);box-shadow:none}
+.auto-tag{display:inline-flex;align-items:center;gap:4px;padding:0 5px;border-radius:4px;background:var(--ui-color-success-soft);font-size:11px;line-height:18px}.auto-tag svg{width:11px;height:11px}
+.connector{position:absolute;width:1px;left:50%;height:130px;top:-130px;background:var(--ui-color-success);pointer-events:none}
+.connector::after{content:"";position:absolute;left:-3px;width:7px;height:7px;border-left:1px solid var(--ui-color-success);border-top:1px solid var(--ui-color-success);transform:rotate(45deg);top:0}
+.connector.down::after{top:auto;bottom:0;transform:rotate(225deg)}
+.connector-label{position:absolute;top:22px;left:10px;background:var(--ui-color-workspace);padding:0 4px;color:var(--ui-color-success);font-size:12px;line-height:20px;white-space:nowrap}
+.talent-note{grid-column:2 / 4;color:var(--ui-color-muted);font-size:13px;line-height:1.8;padding:0 20px;text-align:center}
+.talent-note p{margin:0}.talent-note p+p{margin-top:5px}
+.process-note{display:flex;gap:8px;align-items:flex-start;color:var(--ui-color-muted);font-size:12px;margin:16px 0 0}.process-note svg{width:15px;height:15px;flex-shrink:0;margin-top:2px}
+.detail{margin-top:20px;border-top:1px solid var(--ui-color-divider);padding-top:22px}
+.detail-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.detail-heading h2{font-size:18px;font-weight:600;margin:0}.detail-heading span{font-size:12px;background:var(--ui-color-fill);border-radius:4px;padding:2px 8px;color:var(--ui-color-text-secondary)}
+.detail-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;padding:18px;border:1px solid var(--ui-color-border);border-radius:8px}
+.detail-body div+div{border-left:1px solid var(--ui-color-divider);padding-left:20px}.detail-body dt{font-size:12px;color:var(--ui-color-muted);margin-bottom:7px}.detail-body dd{font-size:14px;color:var(--ui-color-text-secondary);margin:0;line-height:1.8}
+.detail-body dl{margin:0}.page-foot{font-size:12px;color:var(--ui-color-muted);margin:14px 0 0}
+@media(min-width:1700px){.page{padding-top:48px}.workspace{padding:28px}.node{min-height:112px}.talent-area{margin-top:64px}.connector{top:-138px;height:138px}.detail{margin-top:28px}}
+@media(max-width:1000px){.page{padding:24px}.workspace{padding:20px}.node{padding:12px 10px}.node strong{font-size:15px}.node small{font-size:12px}.flow{--column-gap:24px}.step:not(:last-child)::before,.step:not(:last-child)::after{right:-20px}.talent-note{padding:0 6px}.connector-label{font-size:11px;left:6px}}
+@media(max-width:760px){.page{padding:16px}.workspace{padding:16px}.page-head{align-items:flex-start;margin-bottom:18px}.breadcrumb{font-size:12px}h1{font-size:21px}.flow-heading{align-items:flex-start}.flow-heading>span{display:none}.main-rail{grid-template-columns:1fr;padding:12px;gap:24px}.step:not(:last-child)::after{right:auto;top:auto;left:50%;bottom:-18px;width:1px;height:12px}.step:not(:last-child)::before{right:auto;top:auto;left:calc(50% - 3px);bottom:-18px;transform:rotate(135deg)}.node{min-height:102px;padding:12px 14px}.node strong{font-size:16px}.node small{font-size:13px}.talent-area{margin-top:20px;padding:14px 12px}.talent-grid{grid-template-columns:1fr;gap:16px}.talent-step:last-child{grid-column:1}.talent-note{grid-column:1;grid-row:3;padding:0;text-align:left;font-size:12px}.connector{display:none}.talent-heading{margin-bottom:12px}.detail-body{grid-template-columns:1fr;gap:16px;padding:14px}.detail-body div+div{padding:14px 0 0;border-left:0;border-top:1px solid var(--ui-color-divider)}.theme-button{font-size:12px;padding:6px 8px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="page-head">
+    <div><nav class="breadcrumb" aria-label="路径">信用卡营销交付<span>/</span>任务交付</nav><h1>任务交付流程</h1></div>
+    <button type="button" class="theme-button" id="theme-toggle" aria-label="切换为深色主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span id="theme-label">浅色</span></button>
+  </header>
+  <section class="workspace" aria-label="任务交付流程方案">
+    <div class="flow-heading"><div><h2>信用卡消费返现 <span style="font-weight:400;color:var(--ui-color-muted);font-size:12px;margin-left:8px">MKT-001</span></h2><p>白金卡客户 · 3 个月 · 额外 0.5% 消费返现</p></div><span>点击节点查看说明</span></div>
+    <div class="flow">
+      <div class="main-rail" aria-label="交付主流程">
+        <div class="step"><button type="button" class="node" data-node="prepare" aria-pressed="true"><span class="node-meta"><span>01</span><span>成员</span></span><strong>需求准备</strong><small>确认需求与上下文</small><span class="state">待处理</span></button></div>
+        <div class="step"><button type="button" class="node" data-node="develop" aria-pressed="false"><span class="node-meta"><span>02</span><span>成员 · iCode</span></span><strong>功能开发</strong><small>实现需求并关联会话</small><span class="state">待处理</span></button></div>
+        <div class="step"><button type="button" class="node" data-node="verify" aria-pressed="false"><span class="node-meta"><span>03</span><span>成员 · iCode</span></span><strong>测试验证</strong><small>Review、测试与安全检查</small><span class="state">待处理</span></button></div>
+        <div class="step"><button type="button" class="node" data-node="accept" aria-pressed="false"><span class="node-meta"><span>04</span><span>项目 Owner</span></span><strong>需求验收</strong><small>确认功能与质量达标</small><span class="state">待处理</span></button></div>
+      </div>
+      <section class="talent-area" aria-label="Talent 自动协作">
+        <div class="talent-heading">Talent <span>自动协作</span></div>
+        <div class="talent-grid">
+          <div class="talent-step"><div class="connector" aria-hidden="true"><span class="connector-label">开始前导入</span></div><button type="button" class="node talent-node" data-node="knowledge" aria-pressed="false"><span class="node-meta"><span>任务开始前</span><span class="auto-tag">自动</span></span><strong>知识导入</strong><small>加载业务知识与相关 Skill</small><span class="state">待触发</span></button></div>
+          <div class="talent-note"><p>分析、知识挖掘与能力优化在后台异步进行</p><p>不作为交付节点，不影响任务完成</p></div>
+          <div class="talent-step"><div class="connector down" aria-hidden="true"><span class="connector-label">验收通过后上报</span></div><button type="button" class="node talent-node" data-node="collect" aria-pressed="false"><span class="node-meta"><span>验收通过后</span><span class="auto-tag">自动</span></span><strong>数据收集</strong><small>汇总去重并上报关联会话</small><span class="state">待触发</span></button></div>
+        </div>
+      </section>
+      <p class="process-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v7m0-11v1"/></svg><span>开发与验证节点可关联一个或多个 session；Owner 验收通过后，Teams 统一上报到 Talent。</span></p>
+    </div>
+    <section class="detail" aria-label="节点说明" aria-live="polite">
+      <div class="detail-heading"><h2 id="detail-title">需求准备</h2><span id="detail-role">执行人 · 项目成员</span></div>
+      <div class="detail-body"><div><dl><dt id="detail-label-1">开始条件</dt><dd id="detail-value-1">需求已分配，相关业务知识和 Skill 已导入。</dd></dl></div><div><dl><dt id="detail-label-2">主要动作</dt><dd id="detail-value-2">确认需求范围、待确认细则，以及本次采用的上下文。</dd></dl></div><div><dl><dt id="detail-label-3">完成结果</dt><dd id="detail-value-3">冻结采用依据，携带上下文进入 iCode 开发。</dd></dl></div></div>
+    </section>
+  </section>
+  <p class="page-foot">Teams × iCode × Talent · 任务交付协作方案</p>
+</main>
+<script>
+const nodeDetails={
+  prepare:{title:'需求准备',role:'执行人 · 项目成员',rows:[['开始条件','需求已分配，相关业务知识和 Skill 已导入。'],['主要动作','确认需求范围、待确认细则，以及本次采用的上下文。'],['完成结果','冻结采用依据，携带上下文进入 iCode 开发。']]},
+  develop:{title:'功能开发',role:'执行人 · 项目成员 / iCode',rows:[['输入依据','已确认的需求、业务知识、Skill 与 Agent 配置。'],['主要动作','在 iCode 实现需求，通过 Teams CLI / Skill 同步进度。'],['完成结果','保留代码变更，并将一个或多个 session 关联到本任务。']]},
+  verify:{title:'测试验证',role:'执行人 · 项目成员 / iCode',rows:[['开始条件','功能开发完成，质量与安全能力已就绪。'],['主要动作','从 iCode 发起 Review、测试和安全检查，处理发现的问题。'],['完成结果','关联检查报告、复测结果及 session，提交 Owner 验收。']]},
+  accept:{title:'需求验收',role:'确认人 · 项目 Owner',rows:[['验收依据','需求范围、功能结果以及 Review、测试、安全检查报告。'],['主要动作','确认交付达标；未达标则退回补充或修复。'],['通过后','任务完成，自动触发关联 session 的汇总去重与统一上报。']]},
+  knowledge:{title:'知识导入',role:'Talent · 自动执行',rows:[['触发时机','任务开始前，依据项目和需求获取相关知识与 Skill。'],['导入内容','业务规则、项目知识与相关 Skill，作为任务上下文。'],['交付主线','成员在需求准备中确认采用，再携带上下文进入 iCode。']]},
+  collect:{title:'数据收集',role:'Teams → Talent · 自动执行',rows:[['触发时机','Owner 验收通过后自动触发。'],['收集范围','汇总开发、验证等节点关联的一个或多个 session，去重后统一上报。'],['后续处理','Talent 在后台异步分析和挖掘，形成知识及 Skill / Agent 优化候选。']]}
+};
+const buttons=Array.from(document.querySelectorAll('[data-node]'));
+for(const button of buttons)button.addEventListener('click',()=>{
+  for(const other of buttons)other.setAttribute('aria-pressed',String(other===button));
+  const detail=nodeDetails[button.dataset.node];
+  document.getElementById('detail-title').textContent=detail.title;
+  document.getElementById('detail-role').textContent=detail.role;
+  detail.rows.forEach((row,index)=>{document.getElementById('detail-label-'+(index+1)).textContent=row[0];document.getElementById('detail-value-'+(index+1)).textContent=row[1]});
+});
+document.getElementById('theme-toggle').addEventListener('click',()=>{
+  const dark=document.documentElement.dataset.theme!=='dark';
+  document.documentElement.dataset.theme=dark?'dark':'light';
+  document.getElementById('theme-label').textContent=dark?'深色':'浅色';
+  document.getElementById('theme-toggle').setAttribute('aria-label',dark?'切换为浅色主题':'切换为深色主题');
+});
+</script>
+</body>
+</html>

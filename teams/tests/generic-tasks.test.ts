@@ -40,7 +40,7 @@ test('general tasks enforce role, project, assignee and input boundaries', () =>
   assert.throws(() => updateWorkspace(initial, 'task.create', 'owner', { ...input, title: ' ' }), /title 无效/);
   let state = updateWorkspace(initial, 'task.create', 'owner', input);
   assert.throws(() => updateWorkspace(state, 'task.create', 'owner', input), /已存在/);
-  assert.throws(() => updateWorkspace(state, 'task.start', 'owner', input), /无权/);
+  assert.throws(() => updateWorkspace(state, 'task.start', 'owner', input), /被分配/);
   assert.throws(() => updateWorkspace(state, 'task.complete', 'member', { ...input, result: '未开始' }), /先开始/);
   state = updateWorkspace(state, 'task.start', 'member', input);
   assert.throws(() => updateWorkspace(state, 'task.complete', 'member', { ...input, result: ' ' }), /result 无效/);
@@ -52,11 +52,11 @@ test('general tasks enforce role, project, assignee and input boundaries', () =>
   assert.equal(projectOverview(state, data, projectId).counts.all, 0);
 });
 
-test('optional task state loads without migrating existing files and persists under the original revision lock', async () => {
+test('optional task state preserves original backup during main-task migration and persists under the original revision lock', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'general-task-store-'));
   try {
     const path = join(dir, 'state.json'), original = JSON.stringify(initialState()); await writeFile(path, original);
-    const store = new Store(path); await store.init(); assert.equal(await readFile(path, 'utf8'), original);
+    const store = new Store(path); await store.init(); assert.equal(await readFile(path + '.pre-unified-delivery.json', 'utf8'), original); const preserved=structuredClone(store.state); delete preserved.workspace.deliveryRequirements; assert.deepEqual(preserved,JSON.parse(original));
     const input = draft(); await store.update(0, 'task.create', 'owner', input);
     await assert.rejects(store.update(0, 'task.create', 'owner', draft()), /刷新后重试/);
     const reloaded = new Store(path); await reloaded.init(); assert.deepEqual(reloaded.state, store.state);

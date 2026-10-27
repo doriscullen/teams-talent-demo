@@ -1,4 +1,6 @@
+import { validateProjectIssues } from '../src/project-issues.js';
 import { validateDeliveryRequirements } from '../src/delivery-requirements.js';
+import { migrateMainDelivery } from './delivery-migration.js';
 import { validateTeams } from '../src/teams-domain.js';
 import { normalizeLegacyTaskAssignment } from '../src/task-assignment.js';
 import { validateTaskAutomation } from '../src/task-automation.js';
@@ -44,7 +46,14 @@ export class Store {
     validateGenericTasks(this.state);
     validateTaskAutomation(this.state);
     validateDeliveryRequirements(this.state);
+    validateProjectIssues(this.state);
     normalizeLegacyTaskAssignment(this.state);
+    if(!this.state.workspace.deliveryRequirements?.some(task=>task.projectId==='carddemo'&&task.id==='DEMO-MKT-001')){
+      const original=await readFile(this.path,'utf8'),backup=this.path+'.pre-unified-delivery.json';
+      try{const file=await open(backup,'wx',0o600);try{await file.writeFile(original);await file.sync();}finally{await file.close();}}
+      catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;if(await readFile(backup,'utf8')!==original)throw new Error('主需求迁移备份已存在且内容不同；未覆盖状态');}
+      migrateMainDelivery(this.state);validateDeliveryRequirements(this.state);await atomicJson(this.path,this.state);
+    }
   }
   mutate(revision: number, operation: (state: DemoState) => DemoState) {
     const next = this.queue.then(async () => {
@@ -56,7 +65,7 @@ export class Store {
   }
   apply(revision: number, action: Action, role: Role, payload: { reason?: string; assigneeId?: string }) { return this.mutate(revision, state => transition(state, action, role, payload)); }
   update(revision:number,kind:WorkspaceAction,role:Role,payload:Record<string,unknown>,sourceAssets:readonly SourcePluginAsset[]=[],catalog:readonly SkillCatalogEntry[]=[]){return this.mutate(revision,state=>updateWorkspace(state,kind,role,payload,sourceAssets,catalog));}
-  reset(revision: number) { return this.mutate(revision, () => ({ ...initialState(), revision: revision + 1, talentGeneration: randomUUID() })); }
+  reset(revision: number) { return this.mutate(revision, () => {const state={ ...initialState(), revision: revision + 1, talentGeneration: randomUUID() };migrateMainDelivery(state);return state;}); }
   /** Runs idempotency and revision checks together under the same persistence queue. */
   transact(operation: (state: DemoState) => DemoState) {
     const next = this.queue.then(async () => {

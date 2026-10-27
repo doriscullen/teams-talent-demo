@@ -1,3 +1,4 @@
+import {nodeResultFixture} from './node-contract-fixtures.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState } from '../src/domain.js';
@@ -10,7 +11,7 @@ function prepared(){
  const state=initialState();
  const task=createDeliveryRequirement(state,'owner',{projectId:'carddemo',id:'MKT-CHECK-001',title:'检查门禁',description:'校验当前验证批次',assigneeId:'member',skillIds:['dev-code-reviewer']},t0);
  task.preparedAt=t0;task.nodes.prepare={status:'complete',updatedAt:t0,summary:'输入已确认'};
- applyRequirementProgress(task,{nodeId:'develop',phase:'result',summary:'开发完成',sessionId:'session-one'},t0);
+ applyRequirementProgress(task,{nodeId:'develop',phase:'result',summary:'开发完成',sessionId:'session-one',evidence:nodeResultFixture('develop').evidence},t0);
  return {state,task};
 }
 function verify(task:DeliveryRequirement,checks?:unknown,at=t1){applyRequirementProgress(task,{nodeId:'verify',phase:'result',summary:'验证结果',sessionId:'session-one',checks},at);}
@@ -39,7 +40,7 @@ test('Owner return and resumed development invalidate the prior batch until fres
  const {state,task}=prepared();verify(task,[pass]);const history=structuredClone(task.checks);
  assert.throws(()=>returnDeliveryRequirement('member',task,'补充边界',t2),/不能退回/);
  returnDeliveryRequirement('owner',task,'补充边界',t2);assert.deepEqual(task.checks,history);assert.deepEqual(task.verificationCheckIds,[]);
- applyRequirementProgress(task,{nodeId:'develop',phase:'result',summary:'已补充',sessionId:'session-one'},t2);
+ applyRequirementProgress(task,{nodeId:'develop',phase:'result',summary:'已补充',sessionId:'session-one',evidence:nodeResultFixture('develop').evidence},t2);
  assert.throws(()=>verify(task),/本轮新的检查/);assert.equal(task.stage,'verifying');
  verify(task,[{...pass,source:'actual',summary:'新一轮边界测试通过'}],t2);
  assert.equal(task.stage,'awaiting-acceptance');assert.deepEqual(task.checks.slice(0,history.length),history);

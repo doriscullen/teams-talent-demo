@@ -1,8 +1,12 @@
+import { readTalentNodeInputs } from './talent-node-client.js';
+import type {TalentNodeInputs} from '../src/talent-node-inputs.js';
+import { importedNodeStages, importedTaskNodeView } from '../src/imported-delivery.js';
+import { taskArtifactKinds, taskNodeContractVersion, taskNodeDefinitions, taskNodeView, nodeResultErrors, unitTestExecutionShapeErrors } from '../src/task-node-contract.js';
 import { projectMembers } from '../src/teams-domain.js';
 const projectMemberName=(state:DemoState,projectId:string,id:string)=>projectMembers(state,projectId).find(member=>member.id===id)?.name ?? id;
 import { deliveryRequirement, requireDeliveryMember, applyRequirementProgress, type RequirementNode } from '../src/delivery-requirements.js';
 import type { TalentTaskInputs } from '../src/talent-contract.js';
-import { mainTask, taskAutomation } from '../src/task-automation.js';
+import { mainTask, taskAutomation, taskNodeKnowledge, queueNextNodeKnowledge } from '../src/task-automation.js';
 import { requireCurrentTaskMember, taskAssigneeId, taskAssigneeName } from '../src/task-assignment.js';
 import { selectedSkillBindings } from '../src/resource-sharing.js';
 import { currentProjectSkillPackage, loadNativeSkillPackage, loadSourceSkillPackage } from './skill-packages.js';
@@ -31,12 +35,7 @@ export function checkedCollaborationScope(value: unknown): CollaborationScope {
   for (const key of ['taskId', 'nodeId', 'tab'] as const) if (v[key] !== undefined) scope[key] = string(v[key], key);
   need(!scope.nodeId || scope.taskId, 'nodeId 必须携带 taskId'); return scope;
 }
-const cardNodes = {
-  prepare: { name: '需求准备', brief: '核对需求、验收标准和材料，明确采用的 Skill 与知识版本。', output: '准备说明与实际采用依据' },
-  develop: { name: '开发', brief: '按冻结的范围实现；报告里程碑、阻塞与可核对证据。', output: '变更摘要、验证证据及剩余问题' },
-  verify: { name: '验证', brief: '核对功能检查、失败与复测记录；安全缺口保持未验证。', output: '真实检查范围、结果与证据引用' },
-  accept: { name: '验收', brief: 'Owner 对照标准验收；CLI 只提供读取，不能代替确认。', output: 'Owner 验收结论' },
-};
+const cardNodes = Object.fromEntries(Object.entries(taskNodeDefinitions).map(([id,node])=>[id,{name:node.label,brief:node.inputRequirements.map(item=>item.label).join('、'),output:node.deliverableRequirements.map(item=>item.label).join('、')}]));
 /** Reads exact project/task/node basis. Does not freeze, adopt, launch or mutate state. */
 export async function collaborationContext(state: DemoState, data: Presentation, input: unknown) {
   const scope = checkedCollaborationScope(input), card = scope.projectId === 'carddemo', teams = scope.projectId === 'teams';
@@ -47,14 +46,16 @@ export async function collaborationContext(state: DemoState, data: Presentation,
   if (scope.taskId) need(Boolean(live) || (card ? scope.taskId === 'DEMO-MKT-001' : Boolean(task)), '任务不属于所选项目', 404);
   const node = scope.nodeId ? card || live ? cardNodes[scope.nodeId as keyof typeof cardNodes] : task?.nodes.find(n => n.id === scope.nodeId) : undefined;
   if (scope.nodeId) need(node, '节点不属于所选任务', 404);
-  const frozen = card && !!scope.taskId && !live ? state.context : null;
-  const selectedSkills = live ? live.skillIds : card ? frozen?.selectedSkills ?? state.workspace.selectedSkills : [];
-  const materials = live ? [] : card ? frozen?.materials ?? state.workspace.materials : [];
+  const frozen = card && !!scope.taskId && (!live || live.legacyBasis?.contextId && !live.talentInputsSnapshot) ? state.context : null;
+  const scopedNode = scope.nodeId && (live || task) ? (live ? scope.nodeId : importedNodeStages[scope.nodeId] ?? scope.nodeId) as RequirementNode : undefined;
+  const selectedSkills = scopedNode ? [] : live ? [...live.skillIds,...(live.userSkillIds??[])] : card ? frozen?.selectedSkills ?? state.workspace.selectedSkills : [];
+  const materials = card&&scope.taskId==='DEMO-MKT-001' ? frozen?.materials ?? state.workspace.materials : [];
   const assets = card ? frozen?.assets ?? state.workspace.project.assets : created?.assets ?? [];
   const catalog = createSourcePluginCatalog(data);
   const raw = teams ? catalog.list({ sourceProjectId: 'teams' }).filter(a => a.kind === 'repository' || a.kind === 'document') : assets.flatMap(asset => legacyAssetSourceIds(asset).flatMap(id => { const found = catalog.get(id); return found ? [found] : []; }));
-  const references = [...new Map(raw.map(a => [a.id, a])).values()].map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, version: asset.version ?? 'imported-snapshot', origin: asset.origin, references: asset.references.map(ref => ({ ...ref, content: catalog.readReference(ref) ?? null, loadedByAgent: false })) }));
-  const bindings = frozen?.skillBindings ?? (!frozen ? selectedSkillBindings(state, 'member') : []);
+  const nodeReferences=scopedNode?raw.filter(asset=>(scopedNode==='develop'||scopedNode==='verify')&&(asset.kind==='repository'||asset.kind==='code')):raw;
+  const references = [...new Map(nodeReferences.map(a => [a.id, a])).values()].map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, version: asset.version ?? 'imported-snapshot', origin: asset.origin, references: asset.references.map(ref => ({ ...ref, content: catalog.readReference(ref) ?? null, loadedByAgent: false })) }));
+  const bindings = live?.skillBindings??frozen?.skillBindings ?? (!frozen ? selectedSkillBindings(state, 'member') : []);
   let skills: {id:string;scope:string;version:string;path:string|null;content:string|null;availability:string;loadedByAgent:boolean;sha256?:string|null;contentSha256?:string|null;files?:{path:string;sha256:string;executable:boolean}[];error?:string}[] = await Promise.all(selectedSkills.map(async id => {
     const user = userSkillExamples.find(s => s.id === id), project = data.skills.find(s => s.name === id);
     if (user) return {id,scope:'user',version:id==='teams-collaboration'?'demo-cli-v1':'example-v1',path:id==='teams-collaboration'?collaborationSkillPath:null,content:id==='teams-collaboration'?await readFile(collaborationSkillPath,'utf8'):user.content,availability:id==='teams-collaboration'?'demo-local-cli':'example-only',loadedByAgent:false};
@@ -71,13 +72,17 @@ export async function collaborationContext(state: DemoState, data: Presentation,
     }
   }));
   let talentInputs:TalentTaskInputs | null = live?.talentInputsSnapshot ?? null;
+  let nodeInputs:TalentNodeInputs|null=null;
   let knowledge: { status: string; origin: string; selectedVersion: string | null; assets: unknown[]; error?: string };
-  if (live) {
+  if(scopedNode&&scope.taskId){
+    try{nodeInputs=await readTalentNodeInputs(state,data,{projectId:scope.projectId,taskId:scope.taskId,nodeId:scopedNode});talentInputs=nodeInputs;knowledge={status:nodeInputs.knowledge.assets.length?'available':'not-built',origin:talentOrigin,selectedVersion:nodeInputs.knowledge.version??null,assets:nodeInputs.knowledge.assets};skills=nodeInputs.skills.map(item=>({...item,scope:'talent',path:null,files:[],availability:nodeInputs!.selection.basis==='historical-subset'?'historical-node-subset':'talent-node-input',loadedByAgent:false}));}
+    catch(error){knowledge={status:'unavailable',origin:talentOrigin,selectedVersion:null,assets:[],error:(error as Error).message};skills=[];}
+  } else if (live && !frozen) {
     try {
       talentInputs ??= await sharedTaskInputs(state, scope.projectId, live.id);
       if(talentInputs.projectId!==scope.projectId||talentInputs.taskId!==live.id||!Array.isArray(talentInputs.skills)||!Array.isArray(talentInputs.knowledge.assets))throw new Error('Talents 输入范围或结构无效');
       knowledge={status:talentInputs.knowledge.assets.length?'available':'not-built',origin:talentOrigin,selectedVersion:talentInputs.knowledge.version??null,assets:talentInputs.knowledge.assets};
-      skills=talentInputs.skills.map(item=>({id:item.id,scope:'project',version:item.version,sha256:item.sha256,contentSha256:item.contentSha256,path:null,content:item.content,files:[],availability:'teams-registered-package',loadedByAgent:false}));
+      skills=[...talentInputs.skills.map(item=>({id:item.id,scope:'talent',version:item.version,sha256:item.sha256,contentSha256:item.contentSha256,path:null,content:item.content,files:[],availability:'talent-registered-asset',loadedByAgent:false})),...skills.filter(item=>item.scope==='user')];
     }catch(error){knowledge={status:'unavailable',origin:talentOrigin,selectedVersion:null,assets:[],error:(error as Error).message};skills=[];}
   } else {
   try {
@@ -87,19 +92,23 @@ export async function collaborationContext(state: DemoState, data: Presentation,
     knowledge = { status: assets.length ? 'available' : frozen ? 'frozen-version-unavailable' : 'not-built', origin: talentOrigin, selectedVersion: frozen?.knowledgeVersion ?? null, assets };
   } catch (error) { knowledge = { status: 'unavailable', origin: talentOrigin, selectedVersion: frozen?.knowledgeVersion ?? null, assets: [], error: (error as Error).message }; }
   }
-  const agreement = live ? {id:live.id,title:live.title,assignee:{id:live.assigneeId,name:projectMemberName(state,live.projectId,live.assigneeId)},background:live.description,criteria:[],revision:live.inputDigest??'requirement-v1'} : card && scope.taskId ? { id: scope.taskId, title: data.blueprint.scenario.slice, assignee: { id: taskAssigneeId(state), name: taskAssigneeName(state) }, background: data.blueprint.scenario.parent_requirement, criteria: data.blueprint.acceptance_criteria, revision: 'demo-r1' } : task ? { id: task.id, title: task.title, background: task.goal, scope: task.scope, criteria: task.criteria, revision: data.teamsProject.sourceCommit } : { id: scope.projectId, title: card ? state.workspace.project.name : teams ? data.teamsProject.project.name : created!.name, background: card ? state.workspace.project.description : teams ? data.teamsProject.project.description : created!.description, criteria: [], revision: 'project-preparation' };
+  const agreement = live ? {id:live.id,title:live.title,assignee:{id:live.assigneeId,name:projectMemberName(state,live.projectId,live.assigneeId)},background:live.description,criteria:[],revision:'requirement-v1:'+live.createdAt} : card && scope.taskId ? { id: scope.taskId, title: data.blueprint.scenario.slice, assignee: { id: taskAssigneeId(state), name: taskAssigneeName(state) }, background: data.blueprint.scenario.parent_requirement, criteria: data.blueprint.acceptance_criteria, revision: 'demo-r1' } : task ? { id: task.id, title: task.title, background: task.goal, scope: task.scope, criteria: task.criteria, revision: data.teamsProject.sourceCommit } : { id: scope.projectId, title: card ? state.workspace.project.name : teams ? data.teamsProject.project.name : created!.name, background: card ? state.workspace.project.description : teams ? data.teamsProject.project.description : created!.description, criteria: [], revision: 'project-preparation' };
+  const nodeContract=live&&scopedNode?taskNodeView(state,live,scopedNode,data,nodeInputs):task&&scopedNode?importedTaskNodeView(task,scopedNode,nodeInputs,data):null;
   const basis = { scope, mode: frozen || live?.preparedAt ? 'frozen' : 'preparation', contextId: live?.preparedAt ? 'CTX-'+live.id : frozen?.id ?? null, frozenAt: live?.preparedAt ?? frozen?.createdAt ?? null, agreement, node: node ?? null, assets, materials, references, skills,
-    projectSkills: teams ? data.teamsProject.project.skills : [],
+    projectSkills: teams && !scopedNode ? data.teamsProject.project.skills : [],
     agent: { name: 'iCode', configuration: card ? { codeAgentVersion: frozen?.agentVersion ?? state.adoptedAgent, instructions: (frozen?.agentVersion ?? state.adoptedAgent) === 'r2' ? '读取项目上下文 → 分析与实施 → 检查实际测试退出码和报告 → 同步问题及证据 → 提交待确认成果。报告缺失保持待验证。' : '读取项目上下文 → 分析与实施 → 运行项目检查 → 提交成果与验证依据。', origin: 'Teams Code Agent 定义', model: '沿用原生 iCode 配置；此上下文未读取模型或凭据' } : { status: 'native-configuration-selected-at-launch' }, loadedByAgent: false }, knowledge };
-  const basisDigest = hash(basis);
+  const {mode:_mode,contextId:_contextId,frozenAt:_frozenAt,...stableBasis}=basis;
+  const basisDigest = hash({...stableBasis,nodeContract:nodeContract?{version:taskNodeContractVersion,definition:nodeContract.definition,inputs:nodeContract.inputs.map(({id,label,references})=>({id,label,references}))}:null});
+  const acquisition = scope.taskId && scopedNode && scopedNode!=='accept' ? taskNodeKnowledge(taskAutomation(state,{projectId:scope.projectId,taskId:scope.taskId}),scopedNode) : undefined;
+  const preparationReady = !live || !taskAutomation(state,{projectId:live.projectId,taskId:live.id})?.preparation || taskAutomation(state,{projectId:live.projectId,taskId:live.id})!.preparation!.status==='ready';
   return { contract: 'teams-demo-collaboration-v1', revision: state.revision, basisDigest, ...basis,
-    talentInputs,
-    automaticPreparation: scope.taskId ? taskAutomation(state, {projectId:scope.projectId,taskId:scope.taskId})?.knowledge ?? null : null,
-    inputSources: { knowledge: 'Teams 需求与 Talents 已发布知识', skills: 'Teams 项目与固定订阅版本', talentSkillLoading: 'not-connected' },
+    talentInputs, nodeInputs, nodeContract:nodeContract?{version:live?.nodeContractVersion??taskNodeContractVersion,...nodeContract}:null,
+    automaticPreparation: scope.taskId && scope.nodeId!=='accept' ? taskNodeKnowledge(taskAutomation(state, {projectId:scope.projectId,taskId:scope.taskId}),scope.nodeId==='develop'||scope.nodeId==='verify'?scope.nodeId:'prepare') ?? null : null,
+    inputSources: scopedNode ? {knowledge:nodeInputs?.selection.basis==='historical-subset'?'当前节点相关历史采用知识':'Teams 当前节点知识与 Talents 共享产物',skills:'Teams 当前节点所选登记包',talentSkillLoading:nodeInputs?'shared-inputs':'unavailable'} : { knowledge: frozen?'历史冻结的 Talent 知识版本':'Talent 项目知识', skills: live&&!frozen ? 'Talent 登记资产（Teams 源包）' : 'Teams 项目与固定订阅版本', talentSkillLoading: live&&!frozen ? 'connected' : 'not-connected' },
     stage: live ? live.stage : card ? state.stage : task?.status ?? 'no-task',
     adoptedBasis: (state.workspace.collaboration?.adoptions ?? []).filter(a => a.projectId === scope.projectId && a.taskId === scope.taskId && a.nodeId === scope.nodeId),
     events: (state.workspace.collaboration?.events ?? []).filter(e => e.projectId === scope.projectId && (!scope.taskId || e.taskId === scope.taskId) && (!scope.nodeId || e.nodeId === scope.nodeId)),
-    availableActions: scope.taskId && scope.nodeId && scope.nodeId !== 'accept' ? ['inputs.adopt', 'progress.add', 'result.submit'] : ['context.get'],
+    availableActions: live && scope.nodeId && scope.nodeId !== 'accept' && preparationReady && (!acquisition || acquisition.status==='ready' || live.nodeInputSnapshots?.[scope.nodeId as RequirementNode]) ? ['inputs.adopt', 'progress.add', 'result.submit'] : ['context.get'],
     safety: { security: 'unverified', contextReadIsAdoption: false, resultIsAcceptance: false }, skillPath: collaborationSkillPath };
 }
 export function collaborationOperation(state: DemoState, operationId: string) {
@@ -109,7 +118,7 @@ export function collaborationOperation(state: DemoState, operationId: string) {
 export async function collaborationWrite(store: Store, data: Presentation, body: Record<string, any>) {
   if (body.kind === 'session.report') throw new DomainError('会话随开发或验证进度关联；验收通过后自动归集，无需再次上报', 409);
   need(['inputs.adopt', 'progress.add', 'result.submit'].includes(body.kind), '不支持的协作写操作');
-  need(body.role === 'member', 'CLI 贡献写入仅供项目成员；Owner 确认须通过验收流程', 403);
+  need(body.role === 'member'||body.role==='owner', '请选择角色', 403);
   const operationId = string(body.operationId, 'operationId', 100), p = body.input;
   need(p && typeof p === 'object' && !Array.isArray(p), 'input 必须为对象');
   const scope = checkedCollaborationScope(p), runId = string(p.runId, 'runId');
@@ -122,15 +131,8 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
   const context = await collaborationContext(store.state, data, scope);
   need(scope.nodeId !== 'accept', '验收节点不可通过 CLI 提交或确认', 403);
   const live=deliveryRequirement(store.state,scope.projectId,scope.taskId);
-  if(live){requireDeliveryMember(store.state,live,body.role);need(scope.nodeId==='prepare'||live.preparedAt,'请先在准备节点采用输入',409);need(!['awaiting-acceptance','accepted'].includes(live.stage),'需求已进入Owner验收',409);need(sessionId,'实际工作回传必须携带原生会话标识');}
-  else if (scope.projectId === 'carddemo') {
-    requireCurrentTaskMember(store.state);
-    need(store.state.assigned, '请先由 Owner 确认并分配需求', 409);
-    need(scope.nodeId === 'prepare' || store.state.context, '开发与验证须先冻结需求上下文', 409);
-    need(!['submitted', 'accepted'].includes(store.state.stage), '当前交付已提交或已验收；请通过原交付流程处理反馈', 409);
-  } else {
-    need(!['已验收', '待验收'].includes(context.stage), '当前任务已进入验收；保留原确认流程', 409);
-  }
+  if(live){requireDeliveryMember(store.state,live,body.role);const preparation=taskAutomation(store.state,scope as {projectId:string;taskId:string})?.preparation;if(preparation&&preparation.status!=='ready')throw new DomainError('当前需求的知识与会话准备尚未完成',409);const acquisition=taskNodeKnowledge(taskAutomation(store.state,scope as {projectId:string;taskId:string}),scope.nodeId as 'prepare'|'develop'|'verify');if(acquisition&&acquisition.status!=='ready'&&!live.nodeInputSnapshots?.[scope.nodeId as RequirementNode])throw new DomainError('当前节点知识尚未获取完成，请等待或重试后重新读取上下文',409);need(scope.nodeId==='prepare'||live.preparedAt,'请先在准备节点采用输入',409);need(!['awaiting-acceptance','accepted'].includes(live.stage),'需求已进入Owner验收',409);need(sessionId,'实际工作回传必须携带原生会话标识');}
+  else throw new DomainError('所选任务未纳入本地交付；导入快照保持只读',403);
   const at = new Date().toISOString(); let replayed = false;
   const state = await store.transact(current => {
     const prior = current.workspace.collaboration?.operations.find(r => r.operationId === operationId);
@@ -142,10 +144,11 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
     let adoptionId: string, eventId: string | undefined;
     if (body.kind === 'inputs.adopt') {
       need(p.basisDigest === context.basisDigest, '采用依据已变化，请读取当前上下文', 409);
-      const allowed = [...context.references.map(r => r.id), ...context.materials.map(m => m.id), ...context.skills.map(s => s.id), ...context.knowledge.assets.map((a: any) => a.id)];
+      const allowed = [...context.references.map(r => r.id), ...context.materials.map(m => m.id), ...context.skills.map(s => s.id), ...context.knowledge.assets.map((a: any) => a.id),...(context.nodeContract?.inputs.flatMap(item=>item.references.map(reference=>reference.id))??[])];
       need(Array.isArray(p.readReferences) && p.readReferences.every((id: unknown) => typeof id === 'string' && allowed.includes(id)), 'readReferences 只能列出当前上下文内实际阅读的引用');
       const selected=deliveryRequirement(next,scope.projectId,scope.taskId);
-      if(selected&&scope.nodeId==='prepare'&&!selected.preparedAt){need(context.talentInputs && context.skills.length>0,'Skill 尚未就绪',409);selected.talentInputsSnapshot=context.talentInputs;selected.preparedAt=at;selected.inputDigest=context.basisDigest;selected.nodes.prepare={status:'complete',updatedAt:at,summary:'iCode明确采用需求、知识与Skill输入'};selected.updatedAt=at;}
+      if(selected&&scope.nodeId==='prepare'&&!selected.preparedAt){need(context.talentInputs && context.skills.length>0,'Skill 尚未就绪',409);selected.talentInputsSnapshot=context.talentInputs;selected.preparedAt=at;selected.inputDigest=context.basisDigest;selected.nodes.prepare={status:'running',updatedAt:at,summary:'iCode明确采用需求、知识与Skill输入；等待PRD及澄清完成标准'};selected.updatedAt=at;}
+      if(selected){need(context.nodeInputs&&context.nodeInputs.selection.status==='configured','当前节点尚未配置输入',409);selected.nodeInputSnapshots??={};selected.nodeInputSnapshots[scope.nodeId as RequirementNode]??=structuredClone(context.nodeInputs);selected.nodeContractVersion??=taskNodeContractVersion;}
       adoptionId = randomUUID();
       ledger.adoptions.push({ ...scope, id: adoptionId, role: body.role, runId, sessionId, basisDigest: context.basisDigest, readReferences: [...new Set(p.readReferences as string[])], at, revision });
     } else {
@@ -157,13 +160,16 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
       need(['started', 'progress', 'blocked', 'result'].includes(phase) && (body.kind === 'result.submit' || phase !== 'result'), 'phase 无效');
       const summary = string(p.summary, 'summary', 2000), blocker = phase === 'blocked' ? string(p.blocker, 'blocker', 2000) : null;
       need(Array.isArray(p.evidence) && p.evidence.length <= 30, 'evidence 必须为引用数组');
-      const evidence: CollaborationEvidence[] = p.evidence.map((e: any) => { need(e && ['reference', 'local-file'].includes(e.kind), '证据类型无效'); return { kind: e.kind, value: string(e.value, '证据引用', 2000), description: string(e.description, '证据说明', 1000) }; });
+      const evidence: CollaborationEvidence[] = p.evidence.map((e: any) => { need(e && ['reference', 'local-file'].includes(e.kind), '证据类型无效');const result:CollaborationEvidence={kind:e.kind,value:string(e.value,'证据引用',2000),description:string(e.description,'证据说明',1000)};if(e.artifact!==undefined){need(taskArtifactKinds.includes(e.artifact)&&!['owner-decision','delivery-manifest'].includes(e.artifact),'产物类型无效或属于Owner');need(['actual','preset'].includes(e.source),'产物必须明确actual/preset来源');need(e.source!=='preset'||['functional-test-report','code-review-report','static-analysis-report','agent-review-report','security-report','issues-retest'].includes(e.artifact),'仅检查报告可声明为预置');result.artifact=e.artifact;result.version=string(e.version,'产物版本',200);result.source=e.source;if(e.codeVersion!==undefined)result.codeVersion=string(e.codeVersion,'代码版本',200);}
+        if(e.execution!==undefined){need(e.artifact==='unit-test-result','执行声明只属于单元测试结果');const errors=unitTestExecutionShapeErrors(e.execution);need(!errors.length,errors.join('；'));result.execution=structuredClone(e.execution);}return result; });
+      const completedCriteria=p.completedCriteria??[];need(Array.isArray(completedCriteria)&&new Set(completedCriteria).size===completedCriteria.length&&completedCriteria.every((id:unknown)=>typeof id==='string'&&taskNodeDefinitions[scope.nodeId as RequirementNode].completionCriteria.some(item=>item.id===id)),'完成标准只可引用本节点定义的ID');
       if (phase === 'result') need(evidence.length > 0, '成果报告需要至少一条可核对引用；本地文件只作为本机引用');
       eventId = randomUUID();
       const selected=deliveryRequirement(next,scope.projectId,scope.taskId);
-      if(selected)applyRequirementProgress(selected,{nodeId:scope.nodeId as RequirementNode,phase,summary,sessionId,checks:p.checks},at);
-      if (!selected && scope.projectId === 'carddemo' && scope.nodeId === 'develop' && next.stage === 'assigned' && next.context) next.stage = 'developing';
-      ledger.events.push({ ...scope, id: eventId, operationId, role: body.role, runId, sessionId, adoptionId, phase, summary, blocker, evidence, at, revision });
+      if(selected?.nodeContractVersion&&phase==='result'){const errors=nodeResultErrors(next,selected,scope.nodeId as RequirementNode,evidence,completedCriteria,p.checks);need(!errors.length,errors.join('；'),409);}
+      if(selected)applyRequirementProgress(selected,{nodeId:scope.nodeId as RequirementNode,phase,summary,sessionId,checks:p.checks,evidence},at);
+      ledger.events.push({ ...scope, id: eventId, operationId, role: body.role, runId, sessionId, adoptionId, phase, summary, blocker, evidence, completedCriteria, at, revision });
+      if(phase==='result'&&selected)queueNextNodeKnowledge(next,{projectId:scope.projectId,taskId:scope.taskId!},scope.nodeId!,at);
     }
     const receipt: CollaborationReceipt = { ...scope, operationId, requestDigest, revision, kind: body.kind, adoptionId, ...(eventId ? { eventId } : {}), at, status: 'saved' };
     ledger.operations.push(receipt); next.revision = revision;

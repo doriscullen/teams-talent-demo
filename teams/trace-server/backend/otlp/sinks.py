@@ -283,12 +283,16 @@ class FileSink(BaseSink):
                 self._handle(path).write(line)
                 written += 1
             except OSError:
+                self.write_failures += 1
+                self._ready = False
                 logger.exception("OTLP FileSink 写入失败: %s", path)
         for handle in self._handles.values():
             try:
                 handle.flush()
             except (OSError, ValueError):
-                pass
+                self.write_failures += 1
+                self._ready = False
+                logger.exception("OTLP FileSink flush 失败")
         if written:
             logger.debug("OTLP FileSink 写入 %d 条事件", written)
 

@@ -66,6 +66,12 @@ async def main():
     print(json.dumps(result, ensure_ascii=False))
 
 if len(sys.argv) == 2 and sys.argv[1] == '--environment':
-    print(json.dumps({'nativeVersion': __version__, 'configDirectory': str(get_platform().config_dir.resolve())}))
+    from chrys.foundation.config.settings import resolve_sessions_dir
+    config_dir = get_platform().config_dir.resolve()
+    try:
+        session_root = str(resolve_sessions_dir(config_dir, create=False).resolve())
+    except Exception:
+        session_root = str(Path(config_dir) / 'sessions')
+    print(json.dumps({'nativeVersion': __version__, 'configDirectory': str(config_dir), 'sessionRoot': session_root, 'python': sys.executable, 'prefix': sys.prefix}))
 else:
     asyncio.run(main())

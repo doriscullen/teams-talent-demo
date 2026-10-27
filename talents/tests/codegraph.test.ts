@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { graphView, type GraphOptions } from '../src/codegraph-model.ts';
-import { codegraphSnapshot, withCodegraph } from '../server/codegraph.ts';
+import { codegraphSnapshot, withCodegraph, withoutCodegraph } from '../server/codegraph.ts';
 import { seedState } from '../server/seed.ts';
 
 const graph = codegraphSnapshot();
@@ -65,4 +65,14 @@ test('saved simulated statistics cannot replace the authoritative index metadata
   assert.deepEqual(artifact.stats?.map(([, value]) => Number(value.replaceAll(',', ''))), [graph.metadata.files, graph.metadata.nodes, graph.metadata.edges]);
   assert.equal(artifact.published?.basis?.commit, graph.metadata.revision);
   assert.deepEqual(state, original);
+});
+
+test('saving the shown state back does not store the snapshot values', () => {
+  const stored = seedState(), shown = withCodegraph(stored);
+  assert.notDeepEqual(shown, stored);
+  assert.deepEqual(withoutCodegraph(structuredClone(shown), stored), stored);
+  // A real change to the artifact is kept.
+  const changed = structuredClone(shown), a = changed.artifacts.find(a => a.id === 'a-cg-java')!;
+  a.published!.version += 1; a.published!.note = '远端索引已就绪';
+  assert.equal(withoutCodegraph(changed, stored).artifacts.find(a => a.id === 'a-cg-java')!.published!.note, '远端索引已就绪');
 });

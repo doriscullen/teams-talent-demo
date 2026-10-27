@@ -39,11 +39,11 @@ test('project creation and editing enforce Owner access, required fields and exa
   assert.equal(JSON.stringify(created), saved);
 });
 
-test('existing state is not rewritten on startup; created metadata persists and corrupt records fail explicitly', async () => {
+test('existing state is preserved in migration backup; created metadata persists and corrupt records fail explicitly', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teams-projects-')), path = join(dir, 'state.json');
   try {
     const original = JSON.stringify(initialState()); await writeFile(path, original);
-    const store = new Store(path); await store.init(); assert.equal(await readFile(path, 'utf8'), original);
+    const store = new Store(path); await store.init(); assert.equal(await readFile(path + '.pre-unified-delivery.json', 'utf8'), original); const preserved=structuredClone(store.state); delete preserved.workspace.deliveryRequirements; assert.deepEqual(preserved,JSON.parse(original));
     const project = draft(); await store.update(0, 'project.create', 'owner', project);
     const reloaded = new Store(path); await reloaded.init(); assert.deepEqual(reloaded.state, store.state);
     assert.equal(reloaded.state.workspace.projects?.[0].id, project.id);

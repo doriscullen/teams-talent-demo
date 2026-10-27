@@ -21,9 +21,19 @@ export interface NativeStatus {
   terminals?: Array<{ id: string; name: string }>;
   selectedTerminal?: string;
   terminalError?: string;
-  icode: { installed: boolean; path: string; version: string | null; workspace: string; sessionId: string; sessionAvailable: boolean; active: { pid: number; application: string | null; tty: string } | null };
-  opencode: { installed: boolean; path: string | null; version: string | null; unsupportedReason?: string };
+  icode: { installed: boolean; path: string; version: string | null; workspace: string; sessionId: string; sessionAvailable: boolean; active: { pid: number; application: string | null; tty: string } | null; source?: 'override' | 'official' | 'bundled' | 'missing'; notes?: string[] };
+  opencode: { installed: boolean; path: string | null; version: string | null; unsupportedReason?: string; notes?: string[] };
   verification: { status: string; at: string; messageCount: number; note: string } | null;
+}
+export interface EngineLocation {
+  state: 'ready' | 'none' | 'failed';
+  entry?: string;
+  version?: string;
+  environment?: Record<string, string>;
+  config?: string;
+  sessionRoot?: string;
+  reason?: string;
+  notes?: string[];
 }
 const tokens = new Map<string, string>();
 async function tracedJson<T>(service: 'teams', path: string, init?: RequestInit): Promise<T> {
@@ -45,6 +55,7 @@ export async function bootstrap() {
 }
 export const getState = () => tracedJson<DemoState>('teams', '/api/state');
 export const getTools = () => tracedJson<NativeStatus>('teams', '/api/tools');
+export const getEngineLocation = () => tracedJson<{ engine: EngineLocation }>('teams', '/api/engine/locate');
 export const act = (state: DemoState, role: Role, action: Action, reason?: string, assigneeId?: string) => tracedJson<DemoState>('teams', '/api/action', { method: 'POST', body: JSON.stringify({ revision: state.revision, action, reason, assigneeId, ...currentSystemContext(), role }) });
 export const updateWorkspace = (state: DemoState, role: Role, kind: WorkspaceAction, payload: Record<string,unknown>) => tracedJson<DemoState>('teams', '/api/workspace', { method: 'POST', body: JSON.stringify({ revision:state.revision, kind, payload, ...currentSystemContext(), role }) });
 export const reset = (state: DemoState, role: Role) => tracedJson<DemoState>('teams', '/api/reset', { method: 'POST', body: JSON.stringify({ revision: state.revision, role }) });
@@ -63,6 +74,10 @@ export const applySkillApplication = (role: Role, input: import('./skill-applica
 
 export const getResourceContent = (role: Role, scope: {resourceId:string;version:string;sha256:string}) => tracedJson<{version:string;sha256:string;contentSha256:string;content:string}>('teams', '/api/resource-content?' + new URLSearchParams({ role, ...scope }));
 
-export const triggerTaskAutomation = (role: Role, scope: import('./task-automation.js').TaskScope, step: 'knowledge' | 'collection', retry = false) => tracedJson<DemoState>('teams', '/api/task-automation', { method: 'POST', body: JSON.stringify({ role, ...scope, step, retry }) });
+export const triggerTaskAutomation = (role: Role, scope: import('./task-automation.js').TaskScope, step: 'knowledge' | 'collection' | 'preparation' | 'node-knowledge', retry = false, nodeId?: 'prepare' | 'develop' | 'verify') => tracedJson<DemoState>('teams', '/api/task-automation', { method: 'POST', body: JSON.stringify({ role, ...scope, step, retry, ...(nodeId ? { nodeId } : {}) }) });
 
 export const deliveryRequirementAction=(state:DemoState,role:Role,input:Record<string,unknown>)=>tracedJson<DemoState>('teams','/api/delivery-requirements',{method:'POST',body:JSON.stringify({revision:state.revision,role,...input})});
+
+export const getTaskSessionStream = (role: Role, query: import('./task-session-stream.js').TaskSessionStreamQuery) => tracedJson<import('./task-session-stream.js').TaskSessionStreamResponse>('teams', '/api/task-session-stream?' + new URLSearchParams({ role, ...query }));
+
+export const getTaskNodeInputs=(role:Role,scope:{projectId:string;taskId:string;nodeId:import('./delivery-requirements.js').RequirementNode})=>tracedJson<import('./talent-node-inputs.js').TalentNodeInputs>('teams','/api/task-node-inputs?'+new URLSearchParams({role,...scope}));

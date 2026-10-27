@@ -14,7 +14,7 @@
 
 ## 服务与数据
 
-React/antd 前端加 Node 服务。Teams 持有交付状态，并把成员、项目、代码仓、文档和共享会话导出到共享数据目录；项目知识读取 Talents 写入同一目录的产物（远端索引等；文件类知识改为由 Talents 以 PR 提交到代码仓）。Talents 入口只对 Owner 展示。Talents 是仓库根目录下的独立项目。用户确认独立需求的 iCode 作业后，会在所选终端运行本机 iCode，并向当前配置的模型下发任务；普通页面访问不会启动模型。检查记录区分实际执行与预置结果。
+React/antd 前端加 Node 服务。Teams 持有交付状态，并把成员、项目、代码仓、文档和共享会话导出到共享目录；项目知识读取独立 Talents 写入同一目录的产物（远端索引等；文件类知识改为由 Talents 以 PR 提交到代码仓）。Talents 入口只对 Owner 展示。用户确认 iCode 作业后，在所选终端打开可交互的 TUI。开发者输入指令时，原生 Hook 带入当前任务与节点上下文入口；后续操作由开发者交互控制。检查记录区分实际执行与预置结果。
 
 白金卡返现使用整数分计算；消费 120 元额外返现 0.60 元，欠款由 2550.75 元变为 2670.15 元。重复处理不会新增记录。未导入旧餐饮的报名、类别、门槛或封顶规则。生产细则仍需业务确认。
 
@@ -22,4 +22,6 @@ React/antd 前端加 Node 服务。Teams 持有交付状态，并把成员、项
 
 见 [快速启动](docs/quick-start.md)、[页面地图](docs/page-map.md) 和 [设计说明](docs/demo-design.md)。
 
-Teams CLI/Skill 保留项目、任务、节点和 run/session 关联；回传成果不代替 Owner 验收。详细契约见 [协作 Skill](skills/teams-demo-collaboration/SKILL.md)。
+Credit Card 项目（内部标识 `carddemo`）的 MKT-001 与新增交付需求共用同一四节点记录和 CLI 状态机制。节点下按输入、结果、执行过程展示，结果包含交付物与完成标准；上游产物引用和代码版本由页面及 CLI 共用，任务资料常驻；旧开发/检查演练按钮已停用。Teams CLI/Skill 保留项目、任务、节点和 run/session 关联；回传成果不代替 Owner 验收。详细契约见 [协作 Skill](skills/teams-demo-collaboration/SKILL.md)。
+
+Teams 按项目、任务和节点筛选 Talents 已发布知识与登记 Skill，页面与 CLI 读取同一结果；Skill 正文、版本和散列来自真实登记包。筛选目前使用场景预置，不调用模型。未配置范围显示空项，已采用节点保留固定版本，旧任务只提取相关历史输入，不补写采用记录。项目内任务分为“我的任务”和“其他任务”，双方均可浏览；仅交付人可启动 iCode、采用输入和回传进度，Owner 可承担自己的任务并保留人工验收权限。

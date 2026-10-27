@@ -1,0 +1,63 @@
+/** Real HTTP scheduler/timer integration; native execution is explicitly disabled. */
+import assert from 'node:assert/strict';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer } from 'node:net';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { DemoState } from '../src/domain.js';
+import { taskAutomation } from '../src/task-automation.js';
+
+const directory=await mkdtemp(join(tmpdir(),'teams-preparation-http-'));
+const socket=createServer();socket.listen(0,'127.0.0.1');await once(socket,'listening');const port=(socket.address() as {port:number}).port;await new Promise<void>((resolve,reject)=>socket.close(error=>error?reject(error):resolve()));
+const origin='http://127.0.0.1:'+port, stateDirectory=join(directory,'state');
+const env={...process.env,DEMO_PORT:String(port),DEMO_STATE_DIR:stateDirectory,DEMO_SHARED_DIR:join(directory,'shared'),DEMO_SHARED_SEED_DIR:join(directory,'empty-seed'),DEMO_NATIVE_DISABLED:'1'};
+let child:ChildProcess,logs='';
+const get=async(path:string)=>{const response=await fetch(origin+path);assert.equal(response.status,200,await response.clone().text());return response.json();};
+const state=async():Promise<DemoState>=>get('/api/state');
+const wait=async(check:()=>Promise<boolean>,timeout=35000)=>{const deadline=Date.now()+timeout;while(Date.now()<deadline){if(await check())return;await new Promise(resolve=>setTimeout(resolve,80));}throw new Error('Expected HTTP state not reached: '+logs);};
+const start=async()=>{child=spawn(process.execPath,['--import','tsx','server/index.ts'],{env,stdio:['ignore','pipe','pipe']});child.stdout!.on('data',value=>logs+=value);child.stderr!.on('data',value=>logs+=value);await wait(async()=>{try{return(await fetch(origin+'/api/health')).ok;}catch{return false;}},10000);};
+const stop=async()=>{if(child?.exitCode===null){child.kill('SIGTERM');await once(child,'exit');}};
+const post=async(path:string,body:object,expected=200)=>{const {token}=await get('/api/session'),revision=(await state()).revision;const response=await fetch(origin+path,{method:'POST',headers:{origin,'content-type':'application/json','x-demo-token':token},body:JSON.stringify({role:'owner',revision,...body})});const value=await response.json();assert.equal(response.status,expected,JSON.stringify(value));return value;};
+try{
+ await start();const original=await state();
+ const queued={projectId:'carddemo',id:'REQ-'+randomUUID(),title:'库存说明',description:'展示库存数量；计量单位与刷新频率待确认。'};
+ await post('/api/delivery-requirements',{action:'create',input:queued});
+ const queuedScope={projectId:queued.projectId,taskId:queued.id};
+ assert.equal(taskAutomation(await state(),queuedScope)!.preparation!.status,'queued');
+ await post('/api/task-automation',{...queuedScope,step:'preparation',retry:true},409);
+ const input={projectId:'teams',id:'REQ-'+randomUUID(),title:'工作目录说明',description:'说明用户选择的工作目录；路径校验规则待确认。',assigneeId:'member'};
+ const scope={projectId:input.projectId,taskId:input.id};
+ await post('/api/delivery-requirements',{action:'create',input});
+ await wait(async()=>taskAutomation(await state(),scope)?.preparation?.status==='importing');
+ const importing=taskAutomation(await state(),scope)!,id=importing.preparation!.id,startedAt=importing.preparation!.startedAt!;
+ const query=new URLSearchParams({...scope,nodeId:'prepare',role:'member'});
+ const hidden=await get('/api/task-node-inputs?'+query),context=await get('/api/collaboration/context?'+query);
+ assert.equal(hidden.requirement.description,input.description);assert.deepEqual(hidden.skills,[]);assert.deepEqual(hidden.knowledge.assets,[]);assert.deepEqual(context.nodeInputs,hidden);
+ await post('/api/collaboration',{role:'member',kind:'inputs.adopt',operationId:randomUUID(),input:{...scope,nodeId:'prepare',runId:randomUUID(),sessionId:randomUUID(),expectedRevision:context.revision,basisDigest:context.basisDigest,readReferences:[]}},409);
+ const retry=await post('/api/delivery-requirements',{action:'create',revision:0,input});assert.equal(taskAutomation(retry,scope)!.preparation!.id,id);
+ // Restart in the persisted import delay, without visiting the page or fetching node inputs again.
+ await stop();await start();
+ assert.equal(taskAutomation(await state(),scope)!.preparation!.startedAt,startedAt);
+ await wait(async()=>['waiting-directory','failed'].includes(taskAutomation(await state(),scope)!.preparation!.status));
+ const after=await state(),completed=taskAutomation(after,scope)!;
+ assert.equal(completed.knowledge!.status,'ready');
+ assert.ok(Date.parse(completed.knowledge!.finishedAt!)-Date.parse(startedAt)>=20000,'actual persisted import delay must be at least 20 seconds');
+ assert.equal(completed.preparation!.id,id);assert.equal(completed.preparation!.status,'waiting-directory');assert.match(completed.preparation!.error!,/目录/);
+ assert.equal(completed.preparation!.session,undefined);assert.equal(completed.preparation!.attempts,1);
+ const loaded=await get('/api/task-node-inputs?'+query),loadedContext=await get('/api/collaboration/context?'+query);
+ const imported=completed.knowledge!.nodeInputs;assert.ok(imported);assert.deepEqual(loadedContext.nodeInputs,loaded);assert.deepEqual(loaded,imported);
+ assert.ok(loaded.knowledge.assets.length>0);assert.ok(loaded.skills.length>0);assert.ok(loaded.skills.every((skill:any)=>/^[a-f0-9]{64}$/.test(skill.sha256)&&skill.content));assert.doesNotMatch(JSON.stringify(loaded),/白金卡|额外0.5/);
+ assert.equal(after.workspace.deliveryRequirements!.find(task=>task.id===input.id)!.stage,'preparing');assert.equal(after.workspace.deliveryRequirements!.find(task=>task.id===input.id)!.preparedAt,undefined);assert.equal(after.workspace.collaboration,undefined);
+ assert.deepEqual(after.workspace.deliveryRequirements!.find(task=>task.id==='DEMO-MKT-001'),original.workspace.deliveryRequirements!.find(task=>task.id==='DEMO-MKT-001'));
+ assert.deepEqual(after.workspace.team,original.workspace.team);assert.equal(after.stage,original.stage);assert.equal(taskAutomation(after,queuedScope)!.preparation!.status,'queued');
+ const importBytes=JSON.stringify(completed.knowledge);await post('/api/task-automation',{...scope,role:'member',step:'preparation',retry:true});
+ await wait(async()=>taskAutomation(await state(),scope)!.preparation!.status==='waiting-directory');
+ assert.equal(JSON.stringify(taskAutomation(await state(),scope)!.knowledge),importBytes);
+ const final=await state(),bytes=await readFile(join(stateDirectory,'state.json'));await stop();await start();await new Promise(resolve=>setTimeout(resolve,250));assert.deepEqual(await state(),final);assert.deepEqual(await readFile(join(stateDirectory,'state.json')),bytes);
+ assert.ok(!(await readdir(stateDirectory)).includes('work-contexts'),'missing directory must not create native work artifacts');
+ await mkdir('test-results/task-preparation',{recursive:true});await writeFile('test-results/task-preparation/http-result.json',JSON.stringify({passed:true,importElapsedMs:Date.parse(completed.knowledge!.finishedAt!)-Date.parse(startedAt),preparationId:id,knowledgeCount:loaded.knowledge.assets.length,skillCount:loaded.skills.length,nativeStatus:completed.preparation!.status,realModelStarted:false,restartPreservedState:true},null,2));
+ console.log('PASS automatic create/assign preparation, actual 20-second import, restart resumption, scoped same UI/CLI inputs, no adoption, directory retry and exact settled restart');
+}finally{await stop();await rm(directory,{recursive:true,force:true});}

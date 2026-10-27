@@ -9,7 +9,7 @@ import { HttpError } from './model.ts';
 import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.ts';
 import { KnowledgeExporter } from './export.ts';
 import { readContent } from './content.ts';
-import { codegraphSnapshot, withCodegraph } from './codegraph.ts';
+import { codegraphSnapshot, withCodegraph, withoutCodegraph } from './codegraph.ts';
 import { defaultTarget, projectRepositories, submitPullRequest } from './pull-requests.ts';
 
 const store = new Store(); await store.init();
@@ -84,7 +84,7 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
       if (method === 'PUT' && path === '/api/state') {
         const body = await bodyJson(request);
         if (!Number.isInteger(body.revision)) throw new HttpError('缺少 revision', 400);
-        const state = await store.mutate(body.revision, previous => ownedState(body.state, previous));
+        const state = await store.mutate(body.revision, previous => withoutCodegraph(ownedState(body.state, previous), previous));
         await exportKnowledge();
         json(200, { revision: state.revision }); return;
       }

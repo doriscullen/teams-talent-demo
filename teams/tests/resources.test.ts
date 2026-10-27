@@ -71,7 +71,10 @@ test('generated Python cache is excluded while source attachments and invalid fi
   const source=join(dir,'source'),id='audit-evidence';await mkdir(source);await cp(join(workspace,'.agents','skills',id),join(source,id),{recursive:true});
   const expected=await loadSourceSkillPackage(id,source);await mkdir(join(source,id,'__pycache__'));await writeFile(join(source,id,'__pycache__','local.pyc'),'cache');await writeFile(join(source,id,'scripts','local.pyc'),'cache');
   assert.equal((await loadSourceSkillPackage(id,source)).sha256,expected.sha256);
-  await symlink(join(source,id,'SKILL.md'),join(source,id,'linked.md'));await assert.rejects(loadSourceSkillPackage(id,source),/符号链接/);
+  const link = process.platform === 'win32' ? join(source, id, 'linked-dir') : join(source, id, 'linked.md');
+  const target = process.platform === 'win32' ? join(source, id) : join(source, id, 'SKILL.md');
+  await symlink(target, link, process.platform === 'win32' ? 'junction' : 'file');
+  await assert.rejects(loadSourceSkillPackage(id, source), /符号链接/);
 });
 
 test('CLI context retains the frozen package after a new publication and explicitly rejects unavailable legacy versions',async t=>{

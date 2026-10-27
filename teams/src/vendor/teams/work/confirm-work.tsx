@@ -6,9 +6,10 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Button } from 'antd';
 import type { ProjectWorkReceipt } from '../../../project-work.js';
-export function ConfirmWork({ title, instance, roleLabel, modelLabel, disabled, children, startWork, saved, busyChanged }: {
+export function ConfirmWork({ title, instance, roleLabel, modelLabel, disabled, children, startWork, saved, busyChanged, confirmLabel = '开始工作', pendingLabel = '正在启动…' }: {
   title: string; instance: string; roleLabel?: string; modelLabel?: string; disabled: boolean; children?: ReactNode;
   startWork(requestId: string): Promise<ProjectWorkReceipt>; saved(receipt: ProjectWorkReceipt): void; busyChanged(busy: boolean): void;
+  confirmLabel?: string; pendingLabel?: string;
 }) {
   const [requestId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false), [attempted, setAttempted] = useState(false), [message, setMessage] = useState('');
@@ -21,5 +22,5 @@ export function ConfirmWork({ title, instance, roleLabel, modelLabel, disabled, 
     catch (cause) { setMessage(`启动结果待核对：${cause instanceof Error ? cause.message : String(cause)}。重试会保留同一启动请求。`); }
     finally { pending.current = false; setBusy(false); busyChanged(false); }
   };
-  return <div className="page-stack"><p>将开始「{title}」工作，并带入当前业务范围和操作指引。</p><p className="muted">使用 {instance}，以及项目当前工作目录。角色：{roleLabel ?? '未配置'} · 模型：{modelLabel ?? '未配置'}</p><fieldset disabled={attempted} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>{children}</fieldset><Button type="primary" aria-label={attempted ? '重试原启动请求' : '开始工作'} disabled={disabled || busy} loading={busy} onClick={() => void start()}>{busy ? '正在启动…' : attempted ? '重试原启动请求' : '开始工作'}</Button>{message && <p role="alert">{message}</p>}</div>;
+  return <div className="page-stack"><p>将开始「{title}」工作，并带入当前业务范围和操作指引。</p><p className="muted">使用 {instance}，以及项目当前工作目录。角色：{roleLabel ?? '未配置'} · 模型：{modelLabel ?? '未配置'}</p><fieldset disabled={attempted} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>{children}</fieldset><Button type="primary" aria-label={attempted ? '重试原启动请求' : confirmLabel} disabled={disabled || busy} loading={busy} onClick={() => void start()}>{busy ? pendingLabel : attempted ? '重试原启动请求' : confirmLabel}</Button>{message && <p role="alert">{message}</p>}</div>;
 }

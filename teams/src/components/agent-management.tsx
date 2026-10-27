@@ -105,6 +105,7 @@ function OpenCodeDetails({ status }: { status: NativeStatus }) {
       { key: 'version', label: '版本', children: status.opencode.version ?? '未取得' },
       { key: 'entry', label: '程序入口', children: status.opencode.path ?? '未配置' },
     ]} />
+    {!!status.opencode.notes?.length && <Alert type="warning" title="探测说明" description={status.opencode.notes.join('；')} />}
     <Button type="primary" disabled={!status.opencode.installed} onClick={() => void run(async () => {
       const receipt = await native(role, 'launch', { tool: 'opencode', restore: false, requestId: crypto.randomUUID() });
       showText('OpenCode 启动回执', JSON.stringify(receipt, null, 2));
@@ -158,11 +159,12 @@ export function AgentManagement({ nativeControls }: { nativeControls: ReactNode 
         return {
           async loadInstances(): Promise<AgentUiInstance[]> {
             const current = await status(), found = current[tool], port = configurationPort(tool, latest.current);
+            const discovered = 'source' in found ? found.source : undefined;
             return [{
               id: tool, name: names[tool], kind: '本机命令行工具', path: found.path ?? undefined, version: found.version ?? undefined,
               state: found.installed ? '本机已发现' : '本机未安装',
               identity: `${found.version ?? '版本未取得'} · 当前设备 / 当前系统用户 · 配置只读`,
-              facts: [{ label: '数据来源', value: '本机探测 /api/tools；配置只读' }, { label: '程序路径', value: found.path ?? '未配置' }, { label: '版本', value: found.version ?? '未取得' }, { label: '维护能力', value: '尚未连接安装、升级和配置写入服务' }],
+              facts: [{ label: '数据来源', value: '本机探测 /api/tools；配置只读' }, ...(discovered ? [{ label: '发现方式', value: discovered === 'official' ? '官方安装位置自动发现' : discovered === 'override' ? 'DEMO_ICODE_BINARY 显式配置' : discovered === 'missing' ? '未发现可用安装' : '仓库内开发包' }] : []), { label: '程序路径', value: found.path ?? '未配置' }, { label: '版本', value: found.version ?? '未取得' }, { label: '维护能力', value: '尚未连接安装、升级和配置写入服务' }],
               categories: [
                 { category: 'agent', label: 'Agent', description: tool === 'icode' ? `项目采用 Code Agent ${latest.current.state.adoptedAgent}` : 'Agent / 角色 · OpenCode 配置' },
                 { category: 'model', label: 'Model', description: '服务商与模型由原生工具管理 · 查看接入说明' },

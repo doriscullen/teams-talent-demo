@@ -20,7 +20,7 @@ export function updateGenericTask(state: DemoState, role: Role, action: GenericT
   need(projectId !== 'teams' && (projectId === 'carddemo' || state.workspace.projects?.some(project => project.id === projectId)), '该项目不支持修改本地通用任务');
   const tasks = state.workspace.genericTasks ?? [];
   const id = value(input, 'id', 100, true);
-  const assignee = () => { const id = input.assigneeId === null || input.assigneeId === '' ? null : value(input, 'assigneeId', 100, true); need(id === null || projectMembers(state, projectId).some(member => member.id === id && member.status === 'active' && member.role === 'member'), '请选择当前团队的有效成员'); return id; };
+  const assignee = () => { const id = input.assigneeId === null || input.assigneeId === '' ? null : value(input, 'assigneeId', 100, true); need(id === null || projectMembers(state, projectId).some(member => member.id === id && member.status === 'active'), '请选择当前团队的有效成员'); return id; };
   if (action === 'task.create') {
     need(role === 'owner', '仅 Owner 可以创建通用任务'); need(taskIdPattern.test(id) && !tasks.some(task => task.id === id), '任务标识无效或已存在');
     const due = input.due === '' || input.due === null ? null : value(input, 'due', 10, true);
@@ -30,7 +30,7 @@ export function updateGenericTask(state: DemoState, role: Role, action: GenericT
   }
   const task = tasks.find(task => task.id === id && task.projectId === projectId); need(task, '通用任务不存在');
   if (action === 'task.assign') { need(role === 'owner', '仅 Owner 可以分配通用任务'); need(task.status === 'pending', '任务已开始，不能更改负责人'); task.assigneeId = assignee(); task.updatedAt = at; return '分配通用任务'; }
-  need(role === 'member' && task.assigneeId === 'member' && projectMembers(state, projectId).some(member => member.id === 'member' && member.status === 'active' && member.role === 'member'), '仅被分配的成员可以处理此任务');
+  need(task.assigneeId === role && projectMembers(state, projectId).some(member => member.id === role && member.status === 'active'), '仅被分配的成员可以处理此任务');
   if (action === 'task.start') { need(task.status === 'pending', '此任务不能重复开始'); task.status = 'active'; task.updatedAt = at; return '开始通用任务'; }
   need(task.status === 'active', '请先开始处理此任务'); task.result = value(input, 'result', 3000, true); task.status = 'completed'; task.updatedAt = at; return '完成通用任务';
 }

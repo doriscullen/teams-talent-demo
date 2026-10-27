@@ -3,6 +3,47 @@
   "exportedAt": "2026-10-27T13:47:28.270Z",
   "artifacts": [
     {
+      "id": "a-platinum-cashback-page",
+      "projectId": "carddemo",
+      "name": "白金卡消费返现权益说明页知识",
+      "description": "权益展示边界、待确认清单、已核实静态 Web 模块与待执行验收用例。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 1,
+      "publishedAt": "2026-10-27 21:00",
+      "note": "登记权益说明资料与源码核验依据；不代表需求已采用、开发或验收。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "platinum-cashback-page/权益展示规则.md",
+          "title": "权益展示规则",
+          "type": "markdown"
+        },
+        {
+          "path": "platinum-cashback-page/待确认清单.md",
+          "title": "待确认清单",
+          "type": "markdown"
+        },
+        {
+          "path": "platinum-cashback-page/现有模块与UI参考.md",
+          "title": "现有模块与UI参考",
+          "type": "markdown"
+        },
+        {
+          "path": "platinum-cashback-page/验收用例.md",
+          "title": "验收用例",
+          "type": "markdown"
+        },
+        {
+          "path": "platinum-cashback-page/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
       "id": "a-cg-java",
       "projectId": "carddemo",
       "name": "carddemo-java-1025 CodeGraph",

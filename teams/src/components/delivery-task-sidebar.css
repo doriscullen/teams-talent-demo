@@ -1,0 +1,19 @@
+.project-delivery-sidebar .project-selected-task{cursor:pointer;display:grid;grid-template-rows:14px minmax(0,1fr) 20px;align-items:start;height:104px;min-width:0;gap:6px;padding:10px 11px;overflow:hidden}
+.project-delivery-sidebar .project-selected-task+.project-selected-task{margin-top:8px}
+.project-delivery-sidebar .project-selected-task>small{display:block;min-width:0;max-width:100%;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.project-delivery-sidebar .project-selected-task>strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.4;font-size:13px;overflow-wrap:anywhere}
+.project-delivery-sidebar .delivery-task-meta{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%;font-size:11px;color:var(--ui-color-muted)}
+.project-delivery-sidebar .delivery-task-meta>.ant-tag{flex:none;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:18px}
+.project-delivery-sidebar .delivery-task-meta>span:last-child{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.project-delivery-sidebar .project-selected-task:not([aria-current="page"]){background:var(--ui-color-workspace);border-color:var(--ui-color-border)}
+.project-delivery-sidebar .project-selected-task:hover,.project-delivery-sidebar .project-selected-task:focus-visible{border-color:var(--ui-color-primary)}
+.project-delivery-sidebar .project-selected-task:focus-visible{outline:2px solid var(--ui-color-ring);outline-offset:2px}
+.project-delivery-sidebar>.ant-btn{margin-top:12px;padding-inline:0}
+
+.project-delivery-sidebar .delivery-task-meta>.ant-tag-purple{color:var(--ui-color-primary);background:var(--ui-color-primary-faint);border-color:var(--ui-color-ring)}
+.project-delivery-sidebar .delivery-task-meta>.ant-tag-green{color:var(--ui-color-success);background:var(--ui-color-success-soft)}
+
+.project-delivery-sidebar nav>section+section{margin-top:18px}
+.project-delivery-sidebar nav h3{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 8px;font-size:12px;font-weight:600;color:var(--ui-color-muted)}
+.project-delivery-sidebar nav h3>.ant-tag{margin-inline-end:0;font-weight:400}
+.project-delivery-sidebar .delivery-task-group-empty{margin:8px 0;font-size:12px;color:var(--ui-color-muted)}

@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { initialState, type DemoState } from '../src/domain.js';
 import { updateWorkspace } from '../src/workspace.js';
 import { createSourcePluginCatalog } from '../src/source-plugins.js';
-import { filterIssues, filterRequirements, projectOverview } from '../src/project-overview.js';
+import { filterIssues, filterRequirements, projectOverview, teamWorkIndex } from '../src/project-overview.js';
+import { createDeliveryRequirement } from '../src/delivery-requirements.js';
 import type { CollaborationEvent } from '../src/collaboration.js';
 const data = { ...JSON.parse(await readFile('fixtures/presentation.json', 'utf8')), teamsProject: JSON.parse(await readFile('fixtures/teams-project.json', 'utf8')) };
 const catalog = createSourcePluginCatalog(data);
@@ -117,4 +118,17 @@ test('an issue cannot block an already delivered requirement even if its source 
   assert.equal(mainIssue.closed, false); assert.equal(mainIssue.blocksDelivery, false);
   assert.equal(result.counts.open, 5); assert.equal(result.counts.blocking, 2);
   assert.equal(result.requirements.find(item => item.taskId === 'DEMO-MKT-001')!.phase, '已交付');
+});
+
+test('team work index combines main, imported and independent tasks with their own sessions', () => {
+  const state = initialState(), at = '2026-10-26T08:00:00.000Z';
+  const task = createDeliveryRequirement(state, 'owner', { projectId: 'carddemo', id: 'MKT-INDEX-001', title: '独立索引任务', description: '验证团队作业索引', assigneeId: 'member', skillIds: ['dev-code-reviewer'] }, at);
+  state.workspace.taskAutomation = [{ projectId: 'carddemo', taskId: task.id, sessions: [{ projectId: 'carddemo', taskId: task.id, tool: 'icode', sessionId: 'session-index', nodeId: 'develop', source: 'manual', at }] }];
+  const entries = teamWorkIndex(state, data), independent = entries.find(entry => entry.scope.taskId === task.id);
+  assert.ok(entries.some(entry => entry.scope.taskId === 'DEMO-MKT-001'));
+  assert.ok(entries.some(entry => entry.projectId === 'teams' && entry.scope.taskId === 'T104'));
+  assert.equal(independent?.item.source.title, '独立索引任务');
+  assert.equal(independent?.sessions.length, 1);
+  assert.equal(independent?.sessions[0].sessionId, 'session-index');
+  assert.equal(independent?.automation, state.workspace.taskAutomation[0]);
 });

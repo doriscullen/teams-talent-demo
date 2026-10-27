@@ -1,3 +1,5 @@
+import { approvedRequirementSchedule } from './requirement-schedule.js';
+import { matchesPlatinumCashbackPage } from '../../shared/platinum-cashback-page.js';
 import type { Presentation } from './api.js';
 import { externalPlatforms } from './external-platforms.js';
 
@@ -26,11 +28,13 @@ export interface SourcePluginAsset {
   readonly sourceProjectName: string;
   readonly origin: 'plugin-mock' | 'teams-task';
   readonly version?: string;
+  readonly createdAt?: string;
   readonly updatedAt?: string;
   readonly references: readonly SourceAssetReference[];
   /** Stable asset IDs in the requirements plugin, within the same source project. */
   readonly relatedRequirementIds: readonly string[];
   readonly requirement?: { category: 'requirement' | 'research' | 'issue-input'; owner: string; plannedEnd?: string; taskId?: string; delivery?: { phase: '准备' | '开发' | '验证' | '待验收' | '已交付'; summary: string } };
+  readonly testCase?: { readonly given:string; readonly steps:string; readonly expected:string };
   readonly issue?: { owner: string; severity: string; status: string; closed: boolean | null; confirmed: boolean; blocksDelivery: boolean; progress: string };
 }
 
@@ -65,19 +69,19 @@ const localFile = (collection: SourceAssetReference['collection'], path: string,
 const cardDesignReference = () => localFile('sources', marketingDesign, '阅读已有营销能力设计');
 const teamDocumentReference = (path: string, label: string) => localFile('teams-documents', path, label);
 
-type AssetInput = Pick<SourcePluginAsset, 'sourceRecordId' | 'kind' | 'title' | 'summary' | 'detail'> & Partial<Pick<SourcePluginAsset, 'version' | 'updatedAt' | 'references' | 'relatedRequirementIds' | 'requirement' | 'issue'>>;
+type AssetInput = Pick<SourcePluginAsset, 'sourceRecordId' | 'kind' | 'title' | 'summary' | 'detail'> & Partial<Pick<SourcePluginAsset, 'version' | 'createdAt' | 'updatedAt' | 'references' | 'relatedRequirementIds' | 'requirement' | 'issue' | 'testCase'>>;
 const cardAdditionalRequirements: readonly AssetInput[] = [
   { sourceRecordId: 'MKT-002', kind: 'requirement', title: '返现明细查询', summary: '按交易查看已有返现的金额、处理状态与来源，支持分页和筛选。',
-    requirement: { category: 'requirement', owner: '陈晨', delivery: { phase: '开发', summary: '明细查询与分页开发中，正在处理重复记录问题。' } },
+    requirement: { category: 'requirement', plannedEnd: approvedRequirementSchedule['MKT-002'].due, owner: '陈晨', delivery: { phase: '开发', summary: '明细查询与分页开发中，正在处理重复记录问题。' } },
     detail: '范围：展示已有返现记录，按交易与处理状态查询。\n验收关注：明细与交易可对应，分页无重复和遗漏。\n本需求不调整返现资格、比例或结算规则。' },
   { sourceRecordId: 'MKT-003', kind: 'requirement', title: '账单返现汇总', summary: '按账单周期展示已有返现记录的汇总，并支持下钻明细。',
-    requirement: { category: 'requirement', owner: '苏晴', delivery: { phase: '验证', summary: '正在核对汇总与明细的一致性，合计差异待修复。' } },
+    requirement: { category: 'requirement', plannedEnd: approvedRequirementSchedule['MKT-003'].due, owner: '苏晴', delivery: { phase: '验证', summary: '正在核对汇总与明细的一致性，合计差异待修复。' } },
     detail: '范围：按账单周期聚合已有返现记录。\n验收关注：汇总可下钻，合计与所含明细一致。\n统计使用既有入账记录，不新增入账或退款规则。' },
   { sourceRecordId: 'MKT-004', kind: 'requirement', title: '返现到账通知', summary: '展示返现到账消息，提供金额、到账时间和关联交易入口。',
-    requirement: { category: 'requirement', owner: '杨帆', delivery: { phase: '待验收', summary: '通知内容已提交确认，关联交易摘要问题待复测。' } },
+    requirement: { category: 'requirement', plannedEnd: approvedRequirementSchedule['MKT-004'].due, owner: '杨帆', delivery: { phase: '待验收', summary: '通知内容已提交确认，关联交易摘要问题待复测。' } },
     detail: '范围：基于已有到账记录展示通知与详情。\n验收关注：消息与到账记录对应，关联交易可定位。\n通知不产生返现入账，也不改变活动权益。' },
   { sourceRecordId: 'MKT-005', kind: 'requirement', title: '历史权益查询', summary: '查询已结束权益的适用期间与原始条款，保留权益版本。',
-    requirement: { category: 'requirement', owner: '赵宁', delivery: { phase: '已交付', summary: '来源记录已交付；日期排序问题已关闭，筛选交互问题待处理。' } },
+    requirement: { category: 'requirement', plannedEnd: approvedRequirementSchedule['MKT-005'].due, owner: '赵宁', delivery: { phase: '已交付', summary: '来源记录已交付；日期排序问题已关闭，筛选交互问题待处理。' } },
     detail: '范围：查看历史权益及其当时有效的条款版本。\n验收关注：历史期间与版本对应，不以当前规则覆盖旧条款。\n历史权益不作为 MKT-001 新需求的业务约束。' },
 ];
 const cardAdditionalIssues: readonly AssetInput[] = [
@@ -108,7 +112,7 @@ function asset(data: SourcePluginData, pluginId: SourcePluginId, projectId: Sour
     ...value,
     id: sourceAssetId(pluginId, projectId, value.sourceRecordId), pluginId,
     sourceProjectId: projectId,
-    sourceProjectName: projectId === 'teams' ? data.teamsProject.project.name : '信用卡营销交付',
+    sourceProjectName: projectId === 'teams' ? data.teamsProject.project.name : 'Credit Card',
     origin: 'plugin-mock' as const,
     detail: `来源记录 · ${value.sourceRecordId}\n\n${value.detail}`,
     references: Object.freeze((value.references ?? []).map(reference => Object.freeze({ ...reference }))),
@@ -240,12 +244,13 @@ function testAssets(data: SourcePluginData): readonly SourcePluginAsset[] {
     ...data.blueprint.acceptance_criteria.filter(criterion => criterion.id in titles).map(criterion => asset(data, 'test-assets', 'carddemo', {
       sourceRecordId: `CARD-TC-${criterion.id.slice(3)}`, kind: 'test-case', title: titles[criterion.id],
       summary: criterion.given, version: '用例 v1',
+      testCase:{given:criterion.given,steps:'按已确认的 PRD 范围核对；未决政策不设虚构预期。',expected:criterion.expected},
       detail: `用例依据：验收标准 ${criterion.id}。\n前置条件 / 输入：${criterion.given}\n操作：按已确认的需求范围核对；具体执行步骤待业务细则明确后补充。\n预期结果：${criterion.expected}\n\n本记录是测试用例定义，不包含测试运行、测试报告或验收结论。`,
       references: [cardDesignReference()], relatedRequirementIds: [cardRequirement],
     })),
     ...definitions.map(definition => asset(data, 'test-assets', 'teams', {
       sourceRecordId: definition.id, kind: 'test-case', title: definition.title, summary: definition.given,
-      version: '用例 v1',
+      version: '用例 v1', testCase:{given:definition.given,steps:definition.steps,expected:definition.expected},
       detail: `前置条件：${definition.given}\n操作步骤：${definition.steps}\n预期结果：${definition.expected}\n\n此为测试用例定义，未执行测试。`,
       relatedRequirementIds: [teamRequirement(definition.requirement)],
     })),
@@ -287,4 +292,19 @@ export function createSourcePluginCatalog(data: SourcePluginData): SourcePluginC
       return undefined;
     },
   });
+}
+
+/** Explicit project/task mapping; source candidates never become tests for unrelated tasks. */
+export function taskTestCases(data:SourcePluginData,task:{projectId:string;id:string;title:string}):readonly SourcePluginAsset[]{
+ if(matchesPlatinumCashbackPage(task.projectId,task)){
+  const cases=[
+   {id:'PLATINUM-PAGE-TC-01',title:'白金卡与非白金卡入口隔离',given:'PRD 已确认可核验的客户资格字段；缺字段时记录阻塞。',steps:'分别以明确白金卡和非白金卡资格打开卡片详情。',expected:'仅白金卡展示消费返现权益入口；非白金卡不展示。'},
+   {id:'PLATINUM-PAGE-TC-02',title:'权益说明与未决政策边界',given:'通过白金卡入口进入说明页。',steps:'核对适用客户、未来 3 个月、额外 0.5% 及未决事项。',expected:'已确认与待确认分开；日期起算、消费范围、上限、舍入、到账、退款不补造确定规则。'},
+   {id:'PLATINUM-PAGE-TC-03',title:'未知资格与数据异常',given:'资格信息缺失、未知或请求失败。',steps:'查看入口与说明的异常反馈。',expected:'不把未知资格当成白金卡；采用 PRD 确认的异常提示，不伪称已取得资格。'},
+   {id:'PLATINUM-PAGE-TC-04',title:'只读展示不触发资金操作',given:'当前需求范围只包含入口和说明页。',steps:'检查页面操作及相关调用，核对上游代码版本。',expected:'不新增实际返现计算、记账、入账或资金写操作；相关检查记录实际工具与结果。'},
+  ];
+  return cases.map(item=>asset(data,'test-assets','carddemo',{sourceRecordId:item.id,kind:'test-case',title:item.title,summary:item.given,version:'platinum-page-cases-v1',testCase:{given:item.given,steps:item.steps,expected:item.expected},detail:`用例 ID：${item.id}\n前置条件：${item.given}\n操作步骤：${item.steps}\n预期结果：${item.expected}\n\n企业测试资产插件的场景用例定义，未执行测试；按项目及精确需求标题匹配，采用前核对当前 PRD。`,relatedRequirementIds:[]}));
+ }
+ const requirementId=sourceAssetId('requirements',task.projectId,task.projectId==='teams'&&/^T\d+$/.test(task.id)?'REQ-'+task.id:task.id);
+ return testAssets(data).filter(item=>item.sourceProjectId===task.projectId&&item.relatedRequirementIds.includes(requirementId));
 }

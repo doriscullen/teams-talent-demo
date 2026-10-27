@@ -72,11 +72,11 @@ test('project association is explicit and preserves assignment identity; new pro
   validateTeams(state);
 });
 
-test('legacy state loads byte-identically, extra teams persist, and malformed references fail without rewriting', async () => {
+test('legacy state is backed up byte-identically, extra teams persist, and malformed references fail without rewriting', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'team-state-'));
   try {
     const path = join(dir, 'state.json'), old = JSON.stringify(initialState()); await writeFile(path, old);
-    const store = new Store(path); await store.init(); assert.equal(await readFile(path, 'utf8'), old);
+    const store = new Store(path); await store.init(); assert.equal(await readFile(path + '.pre-unified-delivery.json', 'utf8'), old); const preserved=structuredClone(store.state); delete preserved.workspace.deliveryRequirements; assert.deepEqual(preserved,JSON.parse(old));
     const input = group(); await store.update(store.state.revision, 'team.create', 'owner', input);
     await assert.rejects(store.update(0, 'team.create', 'owner', group()), /刷新后重试/);
     const reload = new Store(path); await reload.init(); assert.deepEqual(reload.state, store.state); validateTeams(reload.state);
