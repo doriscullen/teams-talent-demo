@@ -12,7 +12,7 @@ export function SubmissionLink({ submission }: { submission: Submission }) {
 }
 
 /** The steps server/pull-requests.ts reports, in order. */
-const STEPS = ['读取目标分支', '核对文件', '生成提交', '创建分支', '创建 PR'];
+const STEPS = ['读取分支', '核对文件', '生成提交', '创建分支', '创建 PR'];
 
 export function SubmitDialog({ a, suggestion, onClose }: { a: Artifact; suggestion?: Suggestion; onClose(): void }) {
   const { submit, update, toast } = useTalents();
