@@ -98,10 +98,11 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(10))
-                .andExpect(jsonPath("$.total").value(2))
-                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.total").value(5))
+                .andExpect(jsonPath("$.items.length()").value(5))
                 .andExpect(jsonPath("$.items[0].userId").value("ADMIN001"))
-                .andExpect(jsonPath("$.items[1].userId").value("USER0001"))
+                .andExpect(jsonPath("$.items[1].userId").value("ADMIN002"))
+                .andExpect(jsonPath("$.items[4].userId").value("USER0002"))
                 .andExpect(jsonPath("$.items[0].passwordHash").doesNotExist());
     }
 
@@ -122,7 +123,7 @@ class UserControllerTest {
     @Test
     void createsUserAndReturns201() throws Exception {
         String body = """
-                {"userId": "user0002", "firstName": "Ada", "lastName": "Lovelace",
+                {"userId": "user0009", "firstName": "Ada", "lastName": "Lovelace",
                  "password": "pass1234", "userType": "U"}
                 """;
 
@@ -130,11 +131,11 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.userId").value("USER0002"))
+                .andExpect(jsonPath("$.userId").value("USER0009"))
                 .andExpect(jsonPath("$.userType").value("U"))
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
 
-        mockMvc.perform(get("/api/v1/users")).andExpect(jsonPath("$.total").value(3));
+        mockMvc.perform(get("/api/v1/users")).andExpect(jsonPath("$.total").value(6));
     }
 
     @Test
@@ -190,6 +191,13 @@ class UserControllerTest {
 
     @Test
     void refusesDeletingLastAdminWith409() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/{userId}", "ADMIN002")
+                        .header("X-User-Id", "ADMIN001"))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/v1/users/{userId}", "ADMIN003")
+                        .header("X-User-Id", "ADMIN001"))
+                .andExpect(status().isNoContent());
+
         mockMvc.perform(delete("/api/v1/users/{userId}", "ADMIN001")
                         .header("X-User-Id", "USER0001"))
                 .andExpect(status().isConflict())

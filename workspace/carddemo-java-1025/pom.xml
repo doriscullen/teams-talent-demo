@@ -26,6 +26,8 @@
         <module>services/transaction-service</module>
         <module>services/authorization-service</module>
         <module>services/marketing-service</module>
+        <module>services/installment-service</module>
+        <module>services/ledger-service</module>
         <module>services/web-ui</module>
     </modules>
 

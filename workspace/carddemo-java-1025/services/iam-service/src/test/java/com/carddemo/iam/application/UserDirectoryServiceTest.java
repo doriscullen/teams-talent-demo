@@ -36,10 +36,10 @@ class UserDirectoryServiceTest {
         PageResult<User> page = userDirectoryService.list(0, 10);
 
         assertThat(page.items()).extracting(User::getUserId)
-                .containsExactly("ADMIN001", "USER0001");
+                .containsExactly("ADMIN001", "ADMIN002", "ADMIN003", "USER0001", "USER0002");
         assertThat(page.page()).isZero();
         assertThat(page.size()).isEqualTo(10);
-        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.total()).isEqualTo(5);
     }
 
     @Test
@@ -51,14 +51,14 @@ class UserDirectoryServiceTest {
 
     @Test
     void createsUserWithUppercasedIdAndHashedPassword() {
-        User created = userDirectoryService.create(" user0002 ",
+        User created = userDirectoryService.create(" user0009 ",
                 new UserDetails("Ada", "Lovelace", "U"), "pass1234");
 
-        assertThat(created.getUserId()).isEqualTo("USER0002");
+        assertThat(created.getUserId()).isEqualTo("USER0009");
         assertThat(created.getUserType()).isEqualTo("U");
         assertThat(created.getPasswordHash()).startsWith("pbkdf2$210000$");
         assertThat(passwordHasher.verify("pass1234", created.getPasswordHash())).isTrue();
-        assertThat(userDirectoryService.list(0, 10).total()).isEqualTo(3);
+        assertThat(userDirectoryService.list(0, 10).total()).isEqualTo(6);
     }
 
     @Test
@@ -96,6 +96,9 @@ class UserDirectoryServiceTest {
 
     @Test
     void refusesToDeleteLastAdministrator() {
+        userDirectoryService.delete("ADMIN002", "ADMIN001");
+        userDirectoryService.delete("ADMIN003", "ADMIN001");
+
         assertThatThrownBy(() -> userDirectoryService.delete("ADMIN001", "USER0001"))
                 .isInstanceOf(BusinessRuleException.class)
                 .extracting("code").isEqualTo("LAST_ADMIN");
@@ -103,6 +106,9 @@ class UserDirectoryServiceTest {
 
     @Test
     void refusesToDemoteLastAdministrator() {
+        userDirectoryService.update("ADMIN002", new UserDetails("Staff", "Assistant", "U"), null);
+        userDirectoryService.update("ADMIN003", new UserDetails("Risk", "ReadOnly", "U"), null);
+
         assertThatThrownBy(() -> userDirectoryService.update("ADMIN001",
                 new UserDetails("System", "Administrator", "U"), null))
                 .isInstanceOf(BusinessRuleException.class)

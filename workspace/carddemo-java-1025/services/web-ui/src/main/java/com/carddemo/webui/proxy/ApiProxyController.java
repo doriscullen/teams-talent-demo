@@ -44,7 +44,8 @@ public class ApiProxyController {
             @Value("${proxy.account-service-url}") String accountServiceUrl,
             @Value("${proxy.transaction-service-url}") String transactionServiceUrl,
             @Value("${proxy.authorization-service-url}") String authorizationServiceUrl,
-            @Value("${proxy.marketing-service-url}") String marketingServiceUrl) {
+            @Value("${proxy.marketing-service-url}") String marketingServiceUrl,
+            @Value("${proxy.installment-service-url}") String installmentServiceUrl) {
         routes.put("/api/v1/auth", iamServiceUrl);
         routes.put("/api/v1/users", iamServiceUrl);
         routes.put("/api/v1/customers", customerServiceUrl);
@@ -65,6 +66,8 @@ public class ApiProxyController {
         routes.put("/api/v1/reward-evaluations", marketingServiceUrl);
         routes.put("/api/v1/rewards", marketingServiceUrl);
         routes.put("/api/v1/marketing", marketingServiceUrl);
+        routes.put("/api/v1/installments", installmentServiceUrl);
+        routes.put("/api/v1/admin/installments", installmentServiceUrl);
 
         this.restClient = RestClient.builder()
                 .requestFactory(requestFactory())
