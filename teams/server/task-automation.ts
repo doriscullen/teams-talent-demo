@@ -1,7 +1,11 @@
 import { exportTaskSessions } from './talent-intake.js';
 import { nativeTaskSessionDocuments } from './task-session-documents.js';
 import { createHash } from 'node:crypto';
-import { runtimeDir } from './config.js';
+import { runtimeDir,root } from './config.js';
+import {resolve} from 'node:path';
+import {taskWorktreeBinding} from './task-work-directory.js';
+import {readCarddemoWorkspace} from '../../scripts/lib/carddemo-workspace.mjs';
+import type {DeliveryRequirement} from '../src/delivery-requirements.js';
 import { deliveryRequirement,requireDeliveryMember } from '../src/delivery-requirements.js';
 import type { TalentTaskSessionReceipt } from '../src/talent-contract.js';
 import { requireCurrentTaskMember } from '../src/task-assignment.js';
@@ -10,6 +14,15 @@ import { DomainError, type DemoState, type Role } from '../src/domain.js';
 import { finishTaskCollection, collectTaskSessions, mainTask, mutableTaskAutomation, requireWritableTask, taskAutomation, type TaskScope, type ImportedTaskInputs, type CollectedSession } from '../src/task-automation.js';
 import { collaborationContext } from './collaboration-service.js';
 import type { Store } from './store.js';
+
+/** Current worktree bindings add a native source without rewriting a task's historical workDirectory. */
+export async function taskReportSessionDocuments(runtime:string,scope:TaskScope,task:DeliveryRequirement|undefined,sessions:CollectedSession[],capture:{id:string;acceptedAt:string},workspaceRepo=resolve(root,'..'),preparedDirectory?:string){
+ if(!task)return undefined;
+ const binding=await taskWorktreeBinding(runtime,task,workspaceRepo);
+ if(task.workDirectory||task.id==='DEMO-MKT-001'||binding||preparedDirectory)return nativeTaskSessionDocuments(runtime,scope,sessions,capture);
+ if(task.projectId==='carddemo'&&await readCarddemoWorkspace(workspaceRepo))throw new Error('本任务缺少已验证的工作区或原生准备目录，未上报会话正文');
+ return undefined;
+}
 
 type Dependencies = { inputs(state: DemoState, scope: TaskScope): Promise<ImportedTaskInputs>; collect(state: DemoState, scope: TaskScope): Promise<CollectedSession[]>; report?(state:DemoState,scope:TaskScope):Promise<TalentTaskSessionReceipt> };
 export class TaskAutomationService {
@@ -32,7 +45,7 @@ export class TaskAutomationService {
       const acceptedAt=task?.acceptedAt??[...state.audit].reverse().find(item=>item.action==='通过功能验收')?.at;
       if(!acceptedAt)throw new Error('缺少验收时间，未发送会话');
       const inputDigest=task?.inputDigest??createHash('sha256').update(JSON.stringify(state.context)).digest('hex');
-      const sessionDocuments=task&&(task.workDirectory||task.id==='DEMO-MKT-001')?await nativeTaskSessionDocuments(runtimeDir,scope,record.sessions,{id:record.id,acceptedAt}):undefined;
+      const sessionDocuments=await taskReportSessionDocuments(runtimeDir,scope,task,record.sessions,{id:record.id,acceptedAt},resolve(root,'..'),taskAutomation(state,scope)?.preparation?.session?.directory);
       return exportTaskSessions(state,{...scope,deliveryId:record.id,idempotencyKey:record.id,acceptedAt,inputDigest,sessions:record.sessions,...(sessionDocuments?{sessionDocuments}:{})});
     },
   }, private changed: () => Promise<unknown> = async () => {}) {}

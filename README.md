@@ -33,6 +33,12 @@ Python 不是 `python3`（Windows 为 `python`）时，用 `DEMO_TRACE_PYTHON` �
 
 服务仅监听本机。Teams 的配置见 [快速启动](teams/docs/quick-start.md)，Talents 见 [talents/README.md](talents/README.md)。
 
+## CardDemo 开发初始化
+
+实际业务开发前，核对 **JDK 21、Maven 3.9+、Node.js 24、Git 和 Teams 实际使用的 iCode**。平台继续在 `main` 运行；使用 `npm run carddemo:workspace -- …` 为 CardDemo 建立 `develop` 和需求 worktree，先预览再执行，需求 PR 提交到 `develop`。旧目录未提交代码和已有会话保留，新工作区只取明确的 Git 基线。
+
+初始化命令、macOS/Windows 工具核对、CLI/TUI 使用及真实测试要求见 [CardDemo 初始化与交付检查](teams/docs/carddemo-development.md)。Java 单元与服务内接口测试使用 H2；Docker/PostgreSQL 用于独立跨服务验证。当前未接通的静态分析、安全扫描须明确登记，预置结果不能替代真实单测。
+
 ## 数据怎么流动
 
 ```
@@ -62,7 +68,7 @@ Talents ── shared/data/talents/knowledge.json + files/ ──▶ Teams
 
 ## 开发边界
 
-此仓库以隔离状态和预置数据验证交互，不连接银行支付系统，不自动调用外部模型。界面结果不能替代生产运行、模型实验或安全扫描证据。活动日期、金额舍入等测试假设见 [设计说明](teams/docs/demo-design.md)。仓内 Java/业务 Skill 快照（`workspace/`）为来源资料，不代表白金卡规则已经部署到 Java 服务。
+此仓库以隔离状态和预置数据验证交互，不连接银行支付系统。原生 iCode 准备与执行会调用本机已配置的模型，须按任务入口确认或显式 CLI 指令发起；初始化预览不启动模型。界面结果不能替代生产运行、模型实验或安全扫描证据。活动日期、金额舍入等测试假设见 [设计说明](teams/docs/demo-design.md)。仓内 Java/业务 Skill 快照（`workspace/`）为来源资料，不代表白金卡规则已经部署到 Java 服务。
 
 从旧的 `demo/` 目录迁移到当前结构，见 [MIGRATION.md](MIGRATION.md)。
 

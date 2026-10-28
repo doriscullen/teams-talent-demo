@@ -40,7 +40,7 @@ test('prepared work remains task/assignee bound, idempotent and resumes only the
   await writeFile(join(output,'manifest.json'),JSON.stringify({version:1,runId:input.runId,scope:input.scope}));return (await verifiedPreparation(input))!;
  };
  try{
-  const service=new ProjectWorkService(()=>state,fixtures,dir,transport,prepare),before=JSON.stringify(state);
+  const service=new ProjectWorkService(()=>state,fixtures,dir,transport,prepare,dir),before=JSON.stringify(state);
   const [one,two]=await Promise.all([service.prepare('su',scope,preparation.id),service.prepare('su',scope,preparation.id)]);assert.deepEqual(one,two);assert.equal(calls.length,1);assert.equal(JSON.stringify(state),before);
   const exported=JSON.parse(await readFile(calls[0].contextPath,'utf8'));assert.equal(exported.view,'model');assert.equal(exported.agreement.background,task.description);assert.equal('talentInputs'in exported,false);assert.deepEqual(one.status==='ready'?one.readEvidence.map(item=>item.path).sort():[],calls[0].reads.map((item:any)=>item.path).sort());
   assert.match(await readFile(calls[0].taskFile,'utf8'),/只允许 read_file/);assert.match(await readFile(calls[0].taskFile,'utf8'),/不运行 shell、写文件、修改代码/);assert.match(await readFile(calls[0].taskFile,'utf8'),/inputs adopt/);
@@ -69,7 +69,7 @@ test('preparation uses the assignee project binding and Card default without rep
   const task=createDeliveryRequirement(state,'owner',{id:scope.taskId,projectId:scope.projectId,title:'项目目录范围',description:'只读初始化',assigneeId:'member'},at);queueTaskPreparation(state,scope,at);
   const preparation=state.workspace.taskAutomation!.find(record=>record.taskId===scope.taskId)!.preparation!;preparation.status='preparing-session';
   const transport:WorkTransport={defaults:async()=>({agent:'code',agentLabel:'Code',model:'model',modelLabel:'Model',terminal:{id:'ghostty',name:'Ghostty'}}),history:async()=>({available:false,directory:'',title:'',active:null}),focus:async()=>{throw new Error('not supported');},start:async()=>{throw new Error('must not launch');}};
-  const calls:PreparationInput[]=[],service=new ProjectWorkService(()=>state,fixtures,dir,transport,async input=>{calls.push(input);throw new Error('validated preparation transport reached');}),target={...scope,tab:'delivery',nodeId:'prepare'};
+  const calls:PreparationInput[]=[],service=new ProjectWorkService(()=>state,fixtures,dir,transport,async input=>{calls.push(input);throw new Error('validated preparation transport reached');},dir),target={...scope,tab:'delivery',nodeId:'prepare'};
   const defaultPlan=await service.plan('member',target);assert.equal(defaultPlan.directory.root,await realpath(codeRoot));assert.equal(defaultPlan.directory.valid,true);assert.equal(defaultPlan.directory.kind,'imported-snapshot');
   await service.bind('owner',target,ownerRepo);await service.bind('member',target,memberRepo);
   await assert.rejects(service.prepare('member',scope,preparation.id),/validated preparation transport reached/);assert.equal(calls.length,1);assert.equal(calls[0].directory,await realpath(memberRepo));

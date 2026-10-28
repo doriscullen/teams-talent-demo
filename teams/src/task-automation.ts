@@ -1,4 +1,4 @@
-import { deliveryRequirement, requireDeliveryMember } from './delivery-requirements.js';
+import { deliveryRequirement, requireDeliveryMember, type RequirementNodeState } from './delivery-requirements.js';
 import type { TalentTaskSessionReceipt } from './talent-contract.js';
 import type { TalentNodeInputs } from './talent-node-inputs.js';
 import type { NativePreparationReceipt } from './native-preparation.js';
@@ -35,7 +35,12 @@ export interface TaskPreparation {
   session?:PreparedTaskSession;
 }
 export interface SessionCollection extends AutomaticExecution { reporting?: { status: 'pending'|'uploading'|'reported'|'failed'; reason: string; receipt?:TalentTaskSessionReceipt }; status: 'queued' | 'running' | 'collected' | 'empty' | 'failed'; sessions: CollectedSession[] }
-export interface TaskAutomation extends TaskScope { sessions: TaskSessionLink[]; knowledge?: KnowledgeImport; nodeKnowledge?:Partial<Record<'develop'|'verify',KnowledgeImport>>; preparation?:TaskPreparation; collection?: SessionCollection }
+/** A superseded verification round remains evidence; only the current pointer is replaced. */
+export interface NodeKnowledgeHistory {
+ nodeId:'verify'; replacedAt:string; replacementId:string; knowledge?:KnowledgeImport;
+ adoptedInputs?:TalentNodeInputs; nodeState:RequirementNodeState; resultEventIds:string[]; adoptionIds:string[];
+}
+export interface TaskAutomation extends TaskScope { sessions: TaskSessionLink[]; knowledge?: KnowledgeImport; nodeKnowledge?:Partial<Record<'develop'|'verify',KnowledgeImport>>; preparation?:TaskPreparation; collection?: SessionCollection; nodeKnowledgeHistory?:NodeKnowledgeHistory[] }
 export const mainTask: TaskScope = { projectId: 'carddemo', taskId: 'DEMO-MKT-001' };
 export const sameTask = (a: TaskScope, b: TaskScope) => a.projectId === b.projectId && a.taskId === b.taskId;
 export const taskAutomation = (state: DemoState, scope: TaskScope) => state.workspace.taskAutomation?.find(item => sameTask(item, scope));
@@ -70,16 +75,32 @@ export function nodeKnowledgeBasis(state:DemoState,scope:TaskScope,node:'develop
 /** Only a newly confirmed upstream CLI result calls this. Historical states are never inferred as new work. */
 export function queueNextNodeKnowledge(state:DemoState,scope:TaskScope,completedNode:string,at:string){
  const node=completedNode==='prepare'?'develop':completedNode==='develop'?'verify':null;if(!node)return;
- const task=deliveryRequirement(state,scope.projectId,scope.taskId);if(!task||task.nodeInputSnapshots?.[node]||task.nodes[node].status!=='pending')return;
+ const task=deliveryRequirement(state,scope.projectId,scope.taskId);
+ if(!task||['awaiting-acceptance','accepted'].includes(task.stage))return;
+ // Only a completed new development submission opens a verification rework round.
+ // Reads, retries and startup do not invalidate an adopted historical basis.
+ const rework=node==='verify'&&task.stage==='verifying'&&task.nodes.develop.status==='complete';
+ if(!rework&&(task.nodeInputSnapshots?.[node]||task.nodes[node].status!=='pending'))return;
  const record=mutableTaskAutomation(state,scope),existing=record.nodeKnowledge?.[node];
  const upstream=nodeKnowledgeUpstream(state,scope,node),required=node==='develop'?['prd']:['prd','software-design','code-change'];
  if(required.some(kind=>!upstream.some(item=>item.artifact===kind)))return;
  const basisKey=nodeKnowledgeBasis(state,scope,node);
  if(existing?.basisKey===basisKey)return;
- // Only unadopted suggestions can be replaced. A new identity fences off any
- // in-flight import of the previous upstream version; adopted snapshots above
- // and the original collaboration result events remain unchanged.
- record.nodeKnowledge??={};record.nodeKnowledge[node]={id:existing?.status==='waiting-upstream'?existing.id:crypto.randomUUID(),nodeId:node,delayMs:20000,queuedAt:at,basisKey,upstream:structuredClone(upstream),status:'queued',attempts:0,startedAt:at,finishedAt:null};
+ const id=existing?.status==='waiting-upstream'?existing.id:crypto.randomUUID();
+ if(rework&&(task.nodeInputSnapshots?.verify||task.nodes.verify.status!=='pending')){
+  const matches=(item:{projectId:string;taskId?:string;nodeId?:string})=>sameTask({projectId:item.projectId,taskId:item.taskId??''},scope)&&item.nodeId==='verify';
+  (record.nodeKnowledgeHistory??=[]).push({nodeId:'verify',replacedAt:at,replacementId:id,
+   ...(existing?{knowledge:structuredClone(existing)}:{}),
+   ...(task.nodeInputSnapshots?.verify?{adoptedInputs:structuredClone(task.nodeInputSnapshots.verify)}:{}),
+   nodeState:structuredClone(task.nodes.verify),
+   resultEventIds:(state.workspace.collaboration?.events??[]).filter(item=>matches(item)&&item.phase==='result').map(item=>item.id),
+   adoptionIds:(state.workspace.collaboration?.adoptions??[]).filter(matches).map(item=>item.id)});
+  if(task.nodeInputSnapshots)delete task.nodeInputSnapshots.verify;
+  task.nodes.verify={status:'pending',updatedAt:at,summary:'新的开发成果已提交，等待获取本轮验证输入并重新采用'};
+  task.verificationCheckIds=[];
+ }
+ // A new identity fences off every in-flight import of the previous upstream.
+ record.nodeKnowledge??={};record.nodeKnowledge[node]={id,nodeId:node,delayMs:20000,queuedAt:at,basisKey,upstream:structuredClone(upstream),status:'queued',attempts:0,startedAt:at,finishedAt:null};
 }
 export function requireWritableTask(scope: TaskScope,state?:DemoState) {
   if (!sameTask(scope, mainTask) && !(state&&deliveryRequirement(state,scope.projectId,scope.taskId))) throw new DomainError('所选任务不支持写入自动步骤；导入项目记录保持只读', 403);
@@ -131,6 +152,12 @@ export function validateTaskAutomation(state: DemoState) {
     || record.sessions.some(link => !sameTask(link, record) || !['icode','opencode'].includes(link.tool) || !link.sessionId || !['develop','verify'].includes(link.nodeId) || link.source !== 'manual' || typeof link.at !== 'string')
     || record.knowledge && (!record.knowledge.id || !Number.isSafeInteger(record.knowledge.attempts) || !['waiting-upstream','queued','running','ready','waiting','failed'].includes(record.knowledge.status))
     || record.nodeKnowledge && (typeof record.nodeKnowledge!=='object'||Object.entries(record.nodeKnowledge).some(([node,job])=>!['develop','verify'].includes(node)||!job||job.nodeId!==node||!job.id||!Number.isSafeInteger(job.attempts)||!['waiting-upstream','queued','running','ready','failed'].includes(job.status)||job.delayMs!==20000||job.status==='ready'&&(!job.nodeInputs||job.nodeInputs.nodeId!==node)))
+    || record.nodeKnowledgeHistory && (!Array.isArray(record.nodeKnowledgeHistory)||record.nodeKnowledgeHistory.some(round=>
+      !round||round.nodeId!=='verify'||!round.replacementId||!Number.isFinite(Date.parse(round.replacedAt))
+      ||!round.nodeState||!['pending','running','blocked','complete','waiting-owner'].includes(round.nodeState.status)
+      ||!Array.isArray(round.resultEventIds)||round.resultEventIds.some(id=>typeof id!=='string')||!Array.isArray(round.adoptionIds)||round.adoptionIds.some(id=>typeof id!=='string')
+      ||round.knowledge&&(!round.knowledge.id||round.knowledge.nodeId!=='verify')
+      ||round.adoptedInputs&&(round.adoptedInputs.projectId!==record.projectId||round.adoptedInputs.taskId!==record.taskId||round.adoptedInputs.nodeId!=='verify'||!Array.isArray(round.adoptedInputs.skills)||!Array.isArray(round.adoptedInputs.knowledge?.assets))))
     || record.preparation && (!record.preparation.id || !record.preparation.basisKey || typeof record.preparation.assigneeId!=='string' || !['queued','importing','preparing-session','ready','waiting-directory','failed'].includes(record.preparation.status) || !Number.isSafeInteger(record.preparation.attempts) || !Array.isArray(record.preparation.progress) || record.preparation.status==='ready'&&!record.preparation.session)
     || record.collection && (!record.collection.id || !Number.isSafeInteger(record.collection.attempts) || !['queued','running','collected','empty','failed'].includes(record.collection.status) || !Array.isArray(record.collection.sessions))
   )) throw new Error('任务自动步骤记录无效；未自动覆盖');

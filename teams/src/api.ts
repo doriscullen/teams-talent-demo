@@ -79,3 +79,5 @@ export const deliveryRequirementAction=(state:DemoState,role:Role,input:Record<s
 export const getTaskSessionStream = (role: Role, query: import('./task-session-stream.js').TaskSessionStreamQuery) => tracedJson<import('./task-session-stream.js').TaskSessionStreamResponse>('teams', '/api/task-session-stream?' + new URLSearchParams({ role, ...query }));
 
 export const getTaskNodeInputs=(role:Role,scope:{projectId:string;taskId:string;nodeId:import('./delivery-requirements.js').RequirementNode})=>tracedJson<import('./talent-node-inputs.js').TalentNodeInputs>('teams','/api/task-node-inputs?'+new URLSearchParams({role,...scope}));
+
+export const getTaskArtifactContent=(role:Role,query:import('./task-artifact-content.js').TaskArtifactQuery)=>tracedJson<import('./task-artifact-content.js').TaskArtifactContent>('teams','/api/task-artifact-content?'+new URLSearchParams({role,...query}));

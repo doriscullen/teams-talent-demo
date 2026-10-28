@@ -1,9 +1,9 @@
 import { terminalPreferences } from './terminal-preferences.js';
 import { createTerminalLauncher, findExecutable, formatShellCommand, posixQuote } from './terminal-launcher.js';
 import { userSkillExamples } from '../src/project-skill-examples.js';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { access, readFile, mkdir, writeFile } from 'node:fs/promises';
+import { access, readFile, mkdir, writeFile, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -142,4 +142,25 @@ export async function startNativeWork(input: { directory: string; agent: string;
   const args = ['-C', input.directory, '--agent', input.agent, '--model', input.model, ...(input.sessionId ? ['--session', input.sessionId] : [])];
   const terminal = await terminalPreferences.selected(input.terminal);
   return terminalLauncher.launch({ executable: binary, directory: input.directory, args, instruction: input.instruction, terminal: terminal.id });
+}
+
+/** Explicit non-interactive work: no terminal and no implicit task advancement. */
+export async function startNativeCliWork(input: Omit<Parameters<typeof startNativeWork>[0], 'terminal'>) {
+  if(process.env.DEMO_NATIVE_DISABLED==='1')throw new Error('此验证实例未开放真实原生启动');
+  if(!input.task||!/^[0-9a-f-]{36}$/i.test(input.task.runId)||!input.task.preparedSession||input.sessionId!==input.task.preparedSession.sessionId)throw new Error('CLI 工作必须恢复当前任务已核验的准备会话');
+  const output=join(runtimeDir,'work-contexts',input.task.runId+'.native');
+  const trace=nativeTraceEnvironment(process.env,{...input.task.scope,runId:input.task.runId});
+  const traceRuntime=trace.enabled?await nativeTraceRuntime():undefined;
+  if(trace.enabled)await checkNativeTraceReceiver(trace.endpoint,expectedTraceReceiver());
+  await mkdir(output,{recursive:true});
+  const manifest=join(output,'manifest.json');
+  await atomicJson(manifest,{version:1,executionMode:'task-file',runId:input.task.runId,scope:input.task.scope,executable:binary,directory:input.directory,agent:input.agent,model:input.model,preparedSession:input.task.preparedSession,trace:{...traceLaunchSettings(trace),...expectedTraceReceiver(),runtime:traceRuntime},taskFile:input.task.path,taskSha256:createHash('sha256').update(await readFile(input.task.path)).digest('hex')});
+  const out=await open(join(output,'observer-output.log'),'wx',0o600);let err:Awaited<ReturnType<typeof open>>|undefined;
+  try {
+    err=await open(join(output,'observer-error.log'),'wx',0o600);
+    const child=spawn(process.execPath,[join(root,'scripts/native/run-project-task.mjs'),manifest],{cwd:input.directory,env:trace.env,detached:true,windowsHide:true,stdio:['ignore',out.fd,err.fd]});
+    await new Promise<void>((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
+    await atomicJson(join(output,'cli-launch.json'),{runId:input.task.runId,...input.task.scope,pid:child.pid,startedAt:new Date().toISOString()});child.unref();
+    return {status:'cli-requested',pid:child.pid};
+  } finally {await out.close();await err?.close();}
 }

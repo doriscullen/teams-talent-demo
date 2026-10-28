@@ -114,7 +114,9 @@ export function collaborationOperation(state: DemoState, operationId: string) {
   const receipt = state.workspace.collaboration?.operations.find(r => r.operationId === operationId);
   need(receipt, '操作回执不存在；保留原操作 ID 和载荷核对', 404); return { ok: true, receipt };
 }
-export async function collaborationWrite(store: Store, data: Presentation, body: Record<string, any>) {
+export async function collaborationWrite(store: Store, data: Presentation, body: Record<string, any>, options: { now?: () => number } = {}) {
+  const receivedAt = (options.now ?? Date.now)();
+  need(Number.isFinite(receivedAt), '服务器接收时点无效', 500);
   if (body.kind === 'session.report') throw new DomainError('会话随开发或验证进度关联；验收通过后自动归集，无需再次上报', 409);
   need(['inputs.adopt', 'progress.add', 'result.submit'].includes(body.kind), '不支持的协作写操作');
   need(body.role === 'member'||body.role==='owner', '请选择角色', 403);
@@ -132,7 +134,7 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
   const live=deliveryRequirement(store.state,scope.projectId,scope.taskId);
   if(live){requireDeliveryMember(store.state,live,body.role);const preparation=taskAutomation(store.state,scope as {projectId:string;taskId:string})?.preparation;if(preparation&&preparation.status!=='ready')throw new DomainError('当前需求的知识与会话准备尚未完成',409);const acquisition=taskNodeKnowledge(taskAutomation(store.state,scope as {projectId:string;taskId:string}),scope.nodeId as 'prepare'|'develop'|'verify');if(acquisition&&acquisition.status!=='ready'&&!live.nodeInputSnapshots?.[scope.nodeId as RequirementNode])throw new DomainError('当前节点知识尚未获取完成，请等待或重试后重新读取上下文',409);need(scope.nodeId==='prepare'||live.preparedAt,'请先在准备节点采用输入',409);need(!['awaiting-acceptance','accepted'].includes(live.stage),'需求已进入Owner验收',409);need(sessionId,'实际工作回传必须携带原生会话标识');}
   else throw new DomainError('所选任务未纳入本地交付；导入快照保持只读',403);
-  const at = new Date().toISOString(); let replayed = false;
+  const at = new Date(receivedAt).toISOString(); let replayed = false;
   const state = await store.transact(current => {
     const prior = current.workspace.collaboration?.operations.find(r => r.operationId === operationId);
     if (prior) { need(prior.requestDigest === requestDigest, '同一 operationId 的载荷不同', 409); replayed = true; return current; }
@@ -159,8 +161,12 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
       need(['started', 'progress', 'blocked', 'result'].includes(phase) && (body.kind === 'result.submit' || phase !== 'result'), 'phase 无效');
       const summary = string(p.summary, 'summary', 2000), blocker = phase === 'blocked' ? string(p.blocker, 'blocker', 2000) : null;
       need(Array.isArray(p.evidence) && p.evidence.length <= 30, 'evidence 必须为引用数组');
-      const evidence: CollaborationEvidence[] = p.evidence.map((e: any) => { need(e && ['reference', 'local-file'].includes(e.kind), '证据类型无效');const result:CollaborationEvidence={kind:e.kind,value:string(e.value,'证据引用',2000),description:string(e.description,'证据说明',1000)};if(e.artifact!==undefined){need(taskArtifactKinds.includes(e.artifact)&&!['owner-decision','delivery-manifest'].includes(e.artifact),'产物类型无效或属于Owner');need(['actual','preset'].includes(e.source),'产物必须明确actual/preset来源');need(e.source!=='preset'||['functional-test-report','code-review-report','static-analysis-report','agent-review-report','security-report','issues-retest'].includes(e.artifact),'仅检查报告可声明为预置');result.artifact=e.artifact;result.version=string(e.version,'产物版本',200);result.source=e.source;if(e.codeVersion!==undefined)result.codeVersion=string(e.codeVersion,'代码版本',200);}
-        if(e.execution!==undefined){need(e.artifact==='unit-test-result','执行声明只属于单元测试结果');const errors=unitTestExecutionShapeErrors(e.execution);need(!errors.length,errors.join('；'));result.execution=structuredClone(e.execution);}return result; });
+      const evidence: CollaborationEvidence[] = p.evidence.map((e: any, evidenceIndex: number) => { need(e && ['reference', 'local-file'].includes(e.kind), '证据类型无效');const result:CollaborationEvidence={kind:e.kind,value:string(e.value,'证据引用',2000),description:string(e.description,'证据说明',1000)};if(e.artifact!==undefined){need(taskArtifactKinds.includes(e.artifact)&&!['owner-decision','delivery-manifest'].includes(e.artifact),'产物类型无效或属于Owner');need(['actual','preset'].includes(e.source),'产物必须明确actual/preset来源');need(e.source!=='preset'||['functional-test-report','code-review-report','static-analysis-report','agent-review-report','security-report','issues-retest'].includes(e.artifact),'仅检查报告可声明为预置');result.artifact=e.artifact;result.version=string(e.version,'产物版本',200);result.source=e.source;if(e.codeVersion!==undefined)result.codeVersion=string(e.codeVersion,'代码版本',200);}
+        if(e.execution!==undefined){need(e.artifact==='unit-test-result','执行声明只属于单元测试结果');const errors=unitTestExecutionShapeErrors(e.execution);need(!errors.length,errors.join('；'));
+          // New actual declarations cannot describe work performed after this request arrived.
+          // Historical records and exact operation replays retain their original facts.
+          if(e.source==='actual')for(const [runIndex,run] of e.execution.runs.entries())if(run.executedAt!==undefined)need(Date.parse(run.executedAt)<=receivedAt,`evidence[${evidenceIndex}].execution.runs[${runIndex}].executedAt 不可晚于服务器接收时点 ${at}`);
+          result.execution=structuredClone(e.execution);}return result; });
       const completedCriteria=p.completedCriteria??[];need(Array.isArray(completedCriteria)&&new Set(completedCriteria).size===completedCriteria.length&&completedCriteria.every((id:unknown)=>typeof id==='string'&&taskNodeDefinitions[scope.nodeId as RequirementNode].completionCriteria.some(item=>item.id===id)),'完成标准只可引用本节点定义的ID');
       if (phase === 'result') need(evidence.length > 0, '成果报告需要至少一条可核对引用；本地文件只作为本机引用');
       eventId = randomUUID();

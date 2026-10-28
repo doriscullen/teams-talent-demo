@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, appendFile, rm, readFile, symlink, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, rm, readFile, symlink, realpath, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
@@ -9,6 +9,7 @@ import { createDeliveryRequirement } from '../src/delivery-requirements.js';
 import { createTaskSessionStream } from '../server/task-session-stream.js';
 import type { TaskSessionTurn, TaskSessionStreamQuery } from '../src/task-session-stream.js';
 import { nativeSessionMigrationFile } from '../server/native-session-location.js';
+import { MAX_NATIVE_SESSION_BYTES, MAX_NATIVE_TRAJECTORY_BYTES } from '../server/session-capacity.js';
 const at = (seconds: number) => new Date(Date.UTC(2026, 9, 27, 0, 0, seconds)).toISOString();
 const message = (role: string, id: string, seconds: number, text: string): any => ({ role, message_id: id, contents: [{ type: 'text', text }], additional_properties: { _chrys_created_at: at(seconds), _chrys_analytics_item_id: id } });
 async function fixture() {
@@ -127,5 +128,25 @@ test('an explicit hashed relocation preserves native evidence and rejects foreig
   await writeFile(manifestPath,Buffer.concat([manifestBytes,Buffer.from(' ')]));await assert.rejects(observe(f.state,'owner',f.query),/迁移凭据/);
   await writeFile(manifestPath,manifestBytes);await save({...entry,sessionRoot:join(f.runtime,'foreign','session-root')});await assert.rejects(observe(f.state,'owner',f.query),/迁移凭据/);
   await writeFile(join(f.runtime,nativeSessionMigrationFile),'{broken');await assert.rejects(observe(f.state,'owner',f.query),/迁移凭据/);
+ }finally{await f.cleanup();}
+});
+
+test('large session and trajectory preserve paged visible turns; either over-limit candidate fails explicitly', async () => {
+ const f=await fixture();try{
+  const observe=createTaskSessionStream(f.runtime,{isAlive:()=>true});
+  for(let i=2;i<=141;i++){f.document.state.messages.push(message('user','large-user-'+i,i*2,'当前轮次 '+i));await appendFile(f.trajectory,JSON.stringify(f.event('large-turn-'+i,'turn.started',i*2,{turn_number:i,opening_item_id:'large-user-'+i},'large-turn-'+i))+'\n');}
+  const content=JSON.stringify({...f.document,meta:{...f.document.meta,updated_at:at(400)},state:{...f.document.state,compressed_msgs:'x'.repeat(9*1024*1024)}});
+  const primary=join(f.sessionDir,'session.json'),recovery=join(f.sessionDir,'session.recovery.json');
+  await writeFile(primary,content);await writeFile(recovery,content);
+  await appendFile(f.trajectory,JSON.stringify(f.event('large-tool','tool.operation.finished',300,{tool_output:'z'.repeat(17*1024*1024)}))+'\n');
+  const digest=(value:Buffer|string)=>createHash('sha256').update(value).digest('hex'),before=digest(await readFile(primary)),trajectoryBefore=digest(await readFile(f.trajectory));
+  const first=await observe(f.state,'owner',f.query);assert.equal(first.turns.length,120);assert.equal(first.hasMore,true);assert.ok(Buffer.byteLength(JSON.stringify(first))<128*1024);
+  const second=await observe(f.state,'owner',{...f.query,cursor:first.cursor!});assert.equal(second.turns.length,21);assert.equal(second.hasMore,false);assert.equal((await observe(f.state,'owner',{...f.query,cursor:second.cursor!})).turns.length,0);
+  assert.equal(digest(await readFile(primary)),before);assert.equal(digest(await readFile(f.trajectory)),trajectoryBefore);
+  // Recovery must not be silently skipped in favour of the valid primary.
+  const oversized=await open(recovery,'r+');try{await oversized.truncate(MAX_NATIVE_SESSION_BYTES+1);}finally{await oversized.close();}
+  await assert.rejects(observe(f.state,'owner',f.query),{status:413,message:/32 MiB/});await rm(recovery);
+  const trajectory=await open(f.trajectory,'r+');try{await trajectory.truncate(MAX_NATIVE_TRAJECTORY_BYTES+1);}finally{await trajectory.close();}
+  await assert.rejects(observe(f.state,'owner',f.query),{status:413,message:/64 MiB/});assert.equal(digest(await readFile(primary)),before);
  }finally{await f.cleanup();}
 });

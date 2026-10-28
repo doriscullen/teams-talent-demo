@@ -8,6 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { nativeTraceEnvironment, checkNativeTraceReceiver, traceLaunchEnvironment } from './tui-trace.mjs';
 import { interactiveEnvironment } from './interactive-environment.mjs';
+import { loopbackProxyEnvironment } from './native-environment.mjs';
 import { nativeProcessActive } from './session-liveness.mjs';
 async function atomic(path, value) { const temp = path + '.' + randomUUID() + '.tmp'; await writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 }); await rename(temp, path); }
 export async function copyPreparedSession(manifest, output) {
@@ -19,8 +20,8 @@ export async function copyPreparedSession(manifest, output) {
   const optional = async name => { try { return JSON.parse(await readFile(join(source,name),'utf8')); } catch(error) { if(error.code==='ENOENT')return null;throw error; } };
   const result = await optional('result.json'), processRecord = await optional('process.json');
   if (owner.runId !== prepared.sourceRunId || owner.sessionId !== prepared.sessionId || owner.projectId !== manifest.scope.projectId || owner.taskId !== manifest.scope.taskId || owner.sessionRoot !== join(source, 'session-root')) throw new Error('准备会话范围或结束回执不匹配');
-  if (owner.executionMode === 'interactive') {
-    if (result && (result.executionMode !== 'interactive' || result.runId !== prepared.sourceRunId || result.sessionId !== prepared.sessionId || !['completed','failed'].includes(result.status))) throw new Error('会话退出回执身份不匹配');
+  if (['interactive','task-file'].includes(owner.executionMode)) {
+    if (result && (result.executionMode !== owner.executionMode || result.runId !== prepared.sourceRunId || result.sessionId !== prepared.sessionId || !['completed','failed'].includes(result.status))) throw new Error('会话退出回执身份不匹配');
     if (await nativeProcessActive(owner, processRecord)) throw new Error('原会话仍在运行，请回到原终端；未重复启动');
   } else if (!result || result.runId !== prepared.sourceRunId || result.status !== 'completed' || result.sessionId !== prepared.sessionId) throw new Error('准备会话范围或结束回执不匹配');
   const shortId = prepared.sessionId.replaceAll('-', '').slice(0, 12), sourceDirectory = join(source, 'session-root', 'sessions', shortId);
@@ -64,7 +65,7 @@ export async function runProjectTui(manifestPath) {
   const sessionRoot = join(output, 'session-root');
   if(manifest.preparedSession)await copyPreparedSession(manifest,output);else await mkdir(sessionRoot);
   const args = ['-C', directory, '--agent', manifest.agent, '--model', manifest.model, ...(manifest.preparedSession ? ['--session', manifest.preparedSession.sessionId] : [])];
-  const child = spawn(manifest.executable, args, { cwd: directory, env: { ...interactiveEnvironment(trace.env), CHRYS_SESSION_ROOT_DIR: sessionRoot, TEAMS_TUI_MANIFEST: manifestPath }, stdio: 'inherit' });
+  const child = spawn(manifest.executable, args, { cwd: directory, env: { ...loopbackProxyEnvironment(interactiveEnvironment(trace.env)), CHRYS_SESSION_ROOT_DIR: sessionRoot, TEAMS_TUI_MANIFEST: manifestPath }, stdio: 'inherit' });
   const result = new Promise(resolve => { child.once('error', error => resolve({ code: null, error: error.message })); child.once('close', (code, signal) => resolve({ code, signal })); });
   await atomic(join(output, 'process.json'), { runId: manifest.runId, executable: manifest.executable, args, directory, pid: child.pid ?? null, startedAt, sessionRoot, executionMode: 'interactive', tty: { stdin: true, stdout: true, stderr: true }, trace: { endpoint: trace.endpoint, enabled: trace.enabled, sensitiveData: trace.sensitiveData } });
   let done = false, session, observerError;

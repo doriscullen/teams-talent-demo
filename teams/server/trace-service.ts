@@ -73,9 +73,15 @@ export async function startTraceService() {
 }
 
 /** 停止由本进程拉起的 trace_server（复用外部实例时不做处理）。 */
-export function stopTraceService() {
-  if (child && child.exitCode === null) child.kill('SIGTERM');
-  child = null;
+export async function stopTraceService() {
+  const current=child;
+  if (!current || current.exitCode !== null) return;
+  await new Promise<void>((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('Trace 子进程尚未退出，未确认停服完成')),5000);
+    current.once('exit',()=>{clearTimeout(timer);if(child===current)child=null;resolve();});
+    current.once('error',error=>{clearTimeout(timer);reject(error);});
+    current.kill('SIGTERM');
+  });
 }
 
 /** 把 /trace-api/* 转发到 trace_server 的 /api/v1/*（同源，避免 iframe 跨域）。 */
