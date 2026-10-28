@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TeamsSnapshot } from '../../shared/contracts.ts';
 import snapshotJson from './fixtures/teams-snapshot.json' with { type: 'json' };
-import { clientState, readTeamsData, teamsModel } from '../server/teams-data.ts';
+import { clientState, readSkill, readTeamsData, teamsModel } from '../server/teams-data.ts';
+import seedSnapshotJson from '../../shared/seed/teams/snapshot.json' with { type: 'json' };
 import { seedState, DOCSET_ID, REPO_ID, STD_ID } from '../server/seed.ts';
 
 const snapshot = snapshotJson as TeamsSnapshot;
@@ -18,7 +19,8 @@ test('hides the read-only imported Teams project and keeps user-created ones', (
 
 test('a user-created project has no local repository or documents, so it shows empty', () => {
   const model = teamsModel(snapshot);
-  assert.deepEqual(model.projects.find(p => p.id === 'project-1a2b3c')!.sourceIds, []);
+  assert.ok(model.projects.some(p => p.id === 'project-1a2b3c'));
+  assert.deepEqual(model.sources.filter(s => s.projectId === 'project-1a2b3c'), []);
 });
 
 test('maps the project documents into one document set named after the project', () => {
@@ -36,7 +38,7 @@ test('maps the project documents into one document set named after the project',
   const repo = model.sources.find(s => s.type === 'repo')!;
   assert.equal(repo.id, REPO_ID);
   assert.equal(repo.name, 'carddemo-java-1025');
-  assert.deepEqual(model.projects[0].sourceIds, [REPO_ID, DOCSET_ID]);
+  assert.deepEqual(model.sources.filter(s => s.projectId === 'carddemo').map(s => s.id), [REPO_ID, DOCSET_ID]);
 });
 
 test('the Teams owner is the admin entry and member "member" is the developer entry', () => {
@@ -60,14 +62,14 @@ test('shared sessions come from Teams, keyed by member', () => {
   assert.ok(s.messages > s.turns && s.tokens > 0);
 });
 
-test('client state merges Talents metadata and the local document source into Teams projects', () => {
+test('client state merges Talents metadata into Teams sources and adds the team-level local document source', () => {
   const state = clientState(seedState(), snapshot);
   const repo = state.sources.find(s => s.id === REPO_ID)!;
   assert.equal(repo.commit!.sha, '4e1b7c2');
   assert.equal(repo.prs, 66);
   const set = state.sources.find(s => s.id === DOCSET_ID)!;
   assert.deepEqual(set.versions!.map(v => v.at), ['2026-10-27 09:05', '2026-10-26 10:00']);
-  assert.deepEqual(state.projects.find(p => p.id === 'carddemo')!.sourceIds, [REPO_ID, DOCSET_ID, STD_ID]);
+  assert.equal(state.sources.find(s => s.id === STD_ID)!.projectId, null);
   assert.ok(state.sources.some(s => s.id === 's-sessions'));
   assert.ok(!('localSources' in state) && !('sourceMeta' in state));
 });
@@ -84,4 +86,17 @@ test('reads the shared snapshot, then the seed copy, then an empty team', async 
   const read = await readTeamsData({ shared, seed });
   assert.equal(read.from, 'shared');
   assert.equal(read.snapshot.team.name, '新团队');
+});
+
+test('project skills come from Teams, and their SKILL.md is read from the repository', async () => {
+  const seed = seedSnapshotJson as TeamsSnapshot;
+  const skills = teamsModel(seed).projects.find(p => p.id === 'carddemo')!.skills;
+  assert.equal(skills.length, 13);
+  const adr = skills.find(s => s.id === 'arch-adr-writing')!;
+  assert.equal(adr.path, 'workspace/.agents/skills/arch-adr-writing/SKILL.md');
+  const read = await readSkill(seed, 'carddemo', 'arch-adr-writing');
+  assert.match(read.content, /\| version \| 1\.0\.0 \|/);
+  await assert.rejects(readSkill(seed, 'carddemo', 'unknown'), (e: any) => e.status === 404);
+  // An older snapshot without skills gives projects none.
+  assert.deepEqual(teamsModel(snapshot).projects[0].skills, []);
 });

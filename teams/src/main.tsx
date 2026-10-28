@@ -59,7 +59,7 @@ function App() {
   useEffect(() => { localStorage.setItem('teams-sidebar-collapsed', String(sidebarCollapsed)); }, [sidebarCollapsed]);
   const resizeSidebar = (value: number) => { setWidth(value); localStorage.setItem('teams-sidebar-width', String(value)); };
   useEffect(() => { localStorage.setItem('carddemo-role', role); const url = new URL(location.href); url.searchParams.set('demo-role', role); history.replaceState(null, '', url); }, [role]);
-  useEffect(() => { document.title = 'iCode Teams · ' + (titles[current.path] ?? '项目'); if (current.path === 'talent') location.href = talentLink('knowledge'); }, [current.path]);
+  useEffect(() => { document.title = 'iCode Teams · ' + (titles[current.path] ?? '项目'); if (current.path === 'talent' && role === 'owner') location.href = talentLink('knowledge'); }, [current.path]);
   useEffect(() => {
     if (current.path !== 'trace-monitor') return;
     const params = new URLSearchParams(current.params); params.set('tab', 'sessions'); params.set('view', 'traces');
@@ -129,14 +129,14 @@ function App() {
   </div>;
   else content = <Alert type="warning" title="页面不存在" action={<Button href="#/home">返回工作台</Button>} />;
   return <ConfigProvider locale={zhCN} theme={teamsTheme(mode)}><Context.Provider value={{ state, data, role, busy, perform, update, run, showText, showEvidence, navigate, receiveState }}>
-    <div onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a');if(link?.getAttribute('href')==='#/talent'){event.preventDefault();location.href=talentLink('knowledge');}}} className="framework-root" style={{ '--ui-shell-sidebar': width + 'px' } as React.CSSProperties}>
+    <div onClickCapture={event=>{const link=(event.target as HTMLElement).closest('a');if(role === 'owner' && link?.getAttribute('href')==='#/talent'){event.preventDefault();location.href=talentLink('knowledge');}}} className="framework-root" style={{ '--ui-shell-sidebar': width + 'px' } as React.CSSProperties}>
 
       <div className={'framework-shell' + (sidebarCollapsed ? ' teams-navigation-collapsed' : '')}>{
         <FrameworkSidebar pages={teamsPages(role)} navigation={{ projects: <div role="group" aria-label="项目列表">{[{id:'carddemo',name:state.workspace.project.name},{id:'teams',name:data.teamsProject.project.name},...(state.workspace.projects??[])].map(project=><a key={project.id} className={'child'+(projectSelected&&projectId===project.id?' active':'')} href={'#/projects?project='+project.id+'&tab=content'} title={project.name} aria-current={projectSelected&&projectId===project.id?'page':undefined}>{project.name}</a>)}</div> }} selected={selected} context={{ teamId: importedProject ? 'teams' : 'carddemo', projectId: projectSelected ? projectId : undefined }} collapsed={sidebarCollapsed} width={width} onResize={resizeSidebar} online={true} themeMode={mode} onToggleTheme={() => setMode(mode === 'dark' ? 'light' : 'dark')} account={{ nickname: role === 'owner' ? '林悦 · Owner' : '陈晨 · 成员', color: role === 'owner' ? 'var(--ui-color-avatar-5)' : 'var(--ui-color-avatar-2)' }} />}
         <main className="framework-main"><header className="main-topbar compact-topbar">
           {<Tooltip title={sidebarCollapsed ? '展开左侧导航' : '收起左侧导航'}><Button className="global-navigation-toggle" type="text" aria-label={sidebarCollapsed ? '展开左侧导航' : '收起左侧导航'} aria-expanded={!sidebarCollapsed} icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setSidebarCollapsed(value => !value)} /></Tooltip>}
           <nav className={'breadcrumb' + (projectName ? ' project-breadcrumb' : '')} aria-label="当前位置">
-            <Select className="compact-system-switch" aria-label="切换系统" size="small" variant="borderless" value={current.path === 'agent' ? 'tools' : 'teams'} popupMatchSelectWidth={180} onChange={value=>{location.href=value==='talent'?talentLink('knowledge'):value==='tools'?teamsLink('agent'):teamsLink('home');}} options={[{value:'teams',label:'iCode Teams'},{value:'talent',label:'Talents'},{value:'tools',label:'iCode / OpenCode'}]}/>
+            <Select className="compact-system-switch" aria-label="切换系统" size="small" variant="borderless" value={current.path === 'agent' ? 'tools' : 'teams'} popupMatchSelectWidth={180} onChange={value=>{location.href=value==='talent'?talentLink('knowledge'):value==='tools'?teamsLink('agent'):teamsLink('home');}} options={[{value:'teams',label:'iCode Teams'},...(role === 'owner' ? [{value:'talent',label:'Talents'}] : []),{value:'tools',label:'iCode / OpenCode'}]}/>
             <span className="breadcrumb-separator">/</span>{projectName ? <><a className="breadcrumb-parent" href="#/projects?tab=list">项目</a><span className="breadcrumb-separator">/</span><strong aria-current="page" title={projectName}>{projectName}</strong></> : <strong aria-current="page" title={titles[current.path] ?? '项目'}>{titles[current.path] ?? '项目'}</strong>}
           </nav>
           <div className="topbar-right">

@@ -1,0 +1,185 @@
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/UserController.java b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/UserController.java
+new file mode 100644
+index 0000000..77fcd02
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/UserController.java
+@@ -0,0 +1,70 @@
++package com.carddemo.iam.interfaces.rest;
++
++import com.carddemo.iam.application.PageResult;
++import com.carddemo.iam.application.UserDirectoryService;
++import com.carddemo.iam.domain.model.User;
++import com.carddemo.iam.interfaces.rest.dto.CreateUserRequest;
++import com.carddemo.iam.interfaces.rest.dto.PageResponse;
++import com.carddemo.iam.interfaces.rest.dto.UpdateUserRequest;
++import com.carddemo.iam.interfaces.rest.dto.UserResponse;
++import jakarta.validation.Valid;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.DeleteMapping;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.PutMapping;
++import org.springframework.web.bind.annotation.RequestBody;
++import org.springframework.web.bind.annotation.RequestHeader;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RequestParam;
++import org.springframework.web.bind.annotation.RestController;
++
++import java.util.List;
++
++@RestController
++@RequestMapping("/api/v1/users")
++public class UserController {
++
++    private static final String ACTING_USER_HEADER = "X-User-Id";
++
++    private final UserDirectoryService userService;
++
++    public UserController(UserDirectoryService userService) {
++        this.userService = userService;
++    }
++
++    @GetMapping
++    public PageResponse<UserResponse> list(@RequestParam(defaultValue = "0") int page,
++                                           @RequestParam(defaultValue = "10") int size) {
++        PageResult<User> result = userService.list(page, size);
++        List<UserResponse> items = result.items().stream().map(UserResponse::from).toList();
++        return new PageResponse<>(items, result.page(), result.size(), result.total());
++    }
++
++    @GetMapping("/{userId}")
++    public UserResponse get(@PathVariable String userId) {
++        return UserResponse.from(userService.get(userId));
++    }
++
++    @PostMapping
++    public ResponseEntity<UserResponse> create(@Valid @RequestBody CreateUserRequest request) {
++        User created = userService.create(request.userId(), request.toDetails(), request.password());
++        return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(created));
++    }
++
++    @PutMapping("/{userId}")
++    public UserResponse update(@PathVariable String userId,
++                               @Valid @RequestBody UpdateUserRequest request) {
++        return UserResponse.from(userService.update(userId, request.toDetails(), request.password()));
++    }
++
++    @DeleteMapping("/{userId}")
++    public ResponseEntity<Void> delete(@PathVariable String userId,
++                                       @RequestHeader(name = ACTING_USER_HEADER, required = false)
++                                       String actingUserId) {
++        userService.delete(userId, actingUserId);
++        return ResponseEntity.noContent().build();
++    }
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/CreateUserRequest.java b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/CreateUserRequest.java
+new file mode 100644
+index 0000000..088f9a9
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/CreateUserRequest.java
+@@ -0,0 +1,45 @@
++package com.carddemo.iam.interfaces.rest.dto;
++
++import com.carddemo.iam.domain.model.UserDetails;
++import io.swagger.v3.oas.annotations.media.Schema;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotNull;
++import jakarta.validation.constraints.Pattern;
++import jakarta.validation.constraints.Size;
++
++/**
++ * BR-USER-01..04：新增用户五项必填；用户号 8 位字母数字、姓名 1-20、密码 8-64、类型 A/U。
++ */
++public record CreateUserRequest(
++        @Schema(description = "用户号（8 位字母数字）", example = "USER0002",
++                requiredMode = Schema.RequiredMode.REQUIRED)
++        @NotBlank(message = "User ID must be supplied.")
++        @Pattern(regexp = "^[A-Za-z0-9]{8}$", message = "User ID must be 8 alphanumeric characters.")
++        String userId,
++
++        @Schema(description = "名", example = "Ada", requiredMode = Schema.RequiredMode.REQUIRED)
++        @NotBlank(message = "First Name must be supplied.")
++        @Size(max = 20, message = "First Name must be 20 characters or fewer.")
++        String firstName,
++
++        @Schema(description = "姓", example = "Lovelace", requiredMode = Schema.RequiredMode.REQUIRED)
++        @NotBlank(message = "Last Name must be supplied.")
++        @Size(max = 20, message = "Last Name must be 20 characters or fewer.")
++        String lastName,
++
++        @Schema(description = "密码（8-64 位）", example = "pass1234",
++                requiredMode = Schema.RequiredMode.REQUIRED)
++        @NotBlank(message = "Password must be supplied.")
++        @Size(min = 8, max = 64, message = "Password must be 8 to 64 characters.")
++        String password,
++
++        @Schema(description = "用户类型 A=管理员 / U=普通用户", example = "U",
++                allowableValues = {"A", "U"}, requiredMode = Schema.RequiredMode.REQUIRED)
++        @NotNull(message = "User Type must be supplied.")
++        @Pattern(regexp = "[AU]", message = "User Type must be A or U.")
++        String userType) {
++
++    public UserDetails toDetails() {
++        return new UserDetails(firstName, lastName, userType);
++    }
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/UpdateUserRequest.java b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/UpdateUserRequest.java
+new file mode 100644
+index 0000000..73c6589
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/UpdateUserRequest.java
+@@ -0,0 +1,31 @@
++package com.carddemo.iam.interfaces.rest.dto;
++
++import com.carddemo.iam.domain.model.UserDetails;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotNull;
++import jakarta.validation.constraints.Pattern;
++import jakarta.validation.constraints.Size;
++
++/**
++ * BR-USER-06：修改用户；password 可省略（保持不变）。
++ */
++public record UpdateUserRequest(
++        @NotBlank(message = "First Name must be supplied.")
++        @Size(max = 20, message = "First Name must be 20 characters or fewer.")
++        String firstName,
++
++        @NotBlank(message = "Last Name must be supplied.")
++        @Size(max = 20, message = "Last Name must be 20 characters or fewer.")
++        String lastName,
++
++        @NotNull(message = "User Type must be supplied.")
++        @Pattern(regexp = "[AU]", message = "User Type must be A or U.")
++        String userType,
++
++        @Size(min = 8, max = 64, message = "Password must be 8 to 64 characters.")
++        String password) {
++
++    public UserDetails toDetails() {
++        return new UserDetails(firstName, lastName, userType);
++    }
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/UserResponse.java b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/UserResponse.java
+new file mode 100644
+index 0000000..4a87940
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/interfaces/rest/dto/UserResponse.java
+@@ -0,0 +1,15 @@
++package com.carddemo.iam.interfaces.rest.dto;
++
++import com.carddemo.iam.domain.model.User;
++
++/**
++ * BR-USER-05：用户响应，绝不包含 password / passwordHash。
++ */
++public record UserResponse(String userId, String firstName, String lastName, String userType,
++                           long version) {
++
++    public static UserResponse from(User user) {
++        return new UserResponse(user.getUserId(), user.getFirstName(), user.getLastName(),
++                user.getUserType(), user.getVersion());
++    }
++}

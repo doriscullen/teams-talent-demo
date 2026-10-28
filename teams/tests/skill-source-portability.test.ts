@@ -19,7 +19,7 @@ async function fixture(run: (directory: string) => Promise<void>) {
 async function copySources(destination: string, ids = Object.keys(declaration.packages)) {
   for (const id of ids) for (const file of declaration.packages[id].files) {
     const path = join(destination, id, file.path); await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, await readFile(join(repo, 'workspace/skills', id, file.path)));
+    await writeFile(path, await readFile(join(repo, 'workspace/.agents/skills', id, file.path)));
     await chmod(path, 0o644);
   }
 }
@@ -75,7 +75,7 @@ test('changed bytes, missing/extra files and absent/invalid declarations fail wi
 test('autocrlf checkout preserves mixed original Skill bytes and every pinned four-requirement document', () => fixture(async directory => {
   const source = join(directory, 'source'), checkout = join(directory, 'checkout'); await mkdir(source);
   await cp(join(repo, '.gitattributes'), join(source, '.gitattributes'));
-  await copySources(join(source, 'workspace/skills'));
+  await copySources(join(source, 'workspace/.agents/skills'));
   await cp(join(repo, 'talents/content/four-requirements'), join(source, 'talents/content/four-requirements'), { recursive: true });
   const seedPath = 'shared/seed/talents/files';
   const artifacts = (await readdir(join(repo, seedPath))).filter(id => /^a-req-2026-00[1-4](?:-v2)?$/.test(id)).sort();
@@ -84,19 +84,19 @@ test('autocrlf checkout preserves mixed original Skill bytes and every pinned fo
   // This control file proves autocrlf is active rather than accidentally bypassed.
   await writeFile(join(source, 'control.txt'), 'one\ntwo\n');
   const git = (args: string[]) => exec('git', ['-C', source, ...args], { maxBuffer: 2 * 1024 * 1024 });
-  await git(['init', '-q']); await git(['config', 'core.autocrlf', 'true']); await git(['add', '--', '.gitattributes', 'workspace/skills', 'talents/content/four-requirements', seedPath, 'control.txt']);
+  await git(['init', '-q']); await git(['config', 'core.autocrlf', 'true']); await git(['add', '--', '.gitattributes', 'workspace/.agents/skills', 'talents/content/four-requirements', seedPath, 'control.txt']);
   await git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'portable source fixture']);
   await exec('git', ['clone', '--quiet', '--no-local', '-c', 'core.autocrlf=true', '-c', 'core.filemode=false', source, checkout]);
   assert.equal(await readFile(join(checkout, 'control.txt'), 'utf8'), 'one\r\ntwo\r\n');
   let crlf = 0, lf = 0;
   for (const [id, expected] of Object.entries(declaration.packages)) {
     for (const file of expected.files) {
-      const path = join(checkout, 'workspace/skills', id, file.path), bytes = await readFile(path);
+      const path = join(checkout, 'workspace/.agents/skills', id, file.path), bytes = await readFile(path);
       assert.equal(sha256(bytes), file.sha256, id + '/' + file.path);
       if (bytes.includes(Buffer.from('\r\n'))) crlf++; else if (bytes.includes(10)) lf++;
       await chmod(path, 0o644);
     }
-    assert.equal((await loadSourceSkillPackage(id, join(checkout, 'workspace/skills'))).sha256, skillPackageDigest(expected.files));
+    assert.equal((await loadSourceSkillPackage(id, join(checkout, 'workspace/.agents/skills'))).sha256, skillPackageDigest(expected.files));
   }
   assert.ok(crlf > 0 && lf > 0, 'both original CRLF and LF source bytes are exercised');
   const documents = join(source, 'talents/content/four-requirements');

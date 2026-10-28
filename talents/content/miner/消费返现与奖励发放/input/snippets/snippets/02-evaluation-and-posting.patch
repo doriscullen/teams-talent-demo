@@ -1,0 +1,363 @@
+diff --git a/workspace/carddemo-java-1025/services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java b/workspace/carddemo-java-1025/services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java
+new file mode 100644
+index 0000000..3189e61
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java
+@@ -0,0 +1,152 @@
++package com.carddemo.marketing.application;
++
++import com.carddemo.marketing.domain.exception.BusinessRuleException;
++import com.carddemo.marketing.domain.exception.InvalidRequestException;
++import com.carddemo.marketing.domain.exception.NotFoundException;
++import com.carddemo.marketing.domain.exception.RemoteServiceException;
++import com.carddemo.marketing.domain.model.AccountSnapshot;
++import com.carddemo.marketing.domain.model.Campaign;
++import com.carddemo.marketing.domain.model.RewardComputation;
++import com.carddemo.marketing.domain.model.RewardGrant;
++import com.carddemo.marketing.domain.repository.CampaignRepository;
++import com.carddemo.marketing.domain.repository.EnrollmentRepository;
++import com.carddemo.marketing.domain.repository.RewardGrantRepository;
++import com.carddemo.marketing.domain.service.EligibilityPolicy;
++import com.carddemo.marketing.infrastructure.client.AccountClient;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.time.Clock;
++import java.time.LocalDateTime;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.UUID;
++
++/**
++ * 奖励评估与发放（MK-REW-01..08）。
++ * 幂等：同一活动同一交易只发一次；返现入账由 account-service 以 rewardId 再保证一次幂等。
++ */
++@Service
++@Transactional(noRollbackFor = RemoteServiceException.class)
++public class RewardEvaluationService {
++
++    private final CampaignRepository campaigns;
++    private final EnrollmentRepository enrollments;
++    private final RewardGrantRepository rewards;
++    private final AccountClient accountClient;
++    private final Clock clock;
++
++    public RewardEvaluationService(CampaignRepository campaigns,
++                                   EnrollmentRepository enrollments,
++                                   RewardGrantRepository rewards,
++                                   AccountClient accountClient,
++                                   Clock clock) {
++        this.campaigns = campaigns;
++        this.enrollments = enrollments;
++        this.rewards = rewards;
++        this.accountClient = accountClient;
++        this.clock = clock;
++    }
++
++    public EvaluationOutcome evaluate(EvaluationCommand command) {
++        validate(command);
++        List<RewardView> grants = new ArrayList<>();
++        List<EvaluationOutcome.Skipped> skipped = new ArrayList<>();
++
++        AccountSnapshot account = accountClient.findAccount(command.accountId()).orElse(null);
++        if (account == null) {
++            skipped.add(new EvaluationOutcome.Skipped(null, null, EligibilityPolicy.ACCOUNT_NOT_FOUND));
++            return new EvaluationOutcome(grants, skipped);
++        }
++
++        LocalDateTime now = LocalDateTime.now(clock);
++        for (Campaign campaign : campaigns.findActiveAt(now)) {
++            if (rewards.existsByCampaignAndTransaction(campaign.getCampaignId(), command.transactionId())) {
++                skipped.add(new EvaluationOutcome.Skipped(campaign.getCampaignId(), campaign.getName(),
++                        "ALREADY_EVALUATED"));
++                continue;
++            }
++            boolean enrolled = enrollments
++                    .findEnrollment(campaign.getCampaignId(), command.cardNumber())
++                    .isPresent();
++            long rewardsOnCard = rewards.countByCampaignAndCard(campaign.getCampaignId(), command.cardNumber());
++            EligibilityPolicy.Evaluation evaluation = EligibilityPolicy.evaluateTransaction(
++                    campaign, account, command.amount(), command.categoryCode(), enrolled,
++                    rewardsOnCard, now);
++            if (!evaluation.eligible()) {
++                skipped.add(new EvaluationOutcome.Skipped(campaign.getCampaignId(), campaign.getName(),
++                        evaluation.reason()));
++                continue;
++            }
++
++            RewardComputation computation = evaluation.reward();
++            try {
++                campaign.consumeCashback(computation.amount());
++            } catch (BusinessRuleException ex) {
++                skipped.add(new EvaluationOutcome.Skipped(campaign.getCampaignId(), campaign.getName(),
++                        EligibilityPolicy.BUDGET_EXHAUSTED));
++                continue;
++            }
++
++            RewardGrant grant = new RewardGrant(UUID.randomUUID().toString(),
++                    campaign.getCampaignId(), command.transactionId(), command.cardNumber(),
++                    command.accountId(), command.customerId(), computation, now);
++            if (grant.isCashback()) {
++                try {
++                    accountClient.creditCashback(command.accountId(), grant.getRewardId(),
++                            campaign.getCampaignId(), grant.getRewardAmount());
++                    grant.markGranted(now);
++                } catch (RemoteServiceException ex) {
++                    grant.markPending("Cashback credit pending: " + ex.getMessage());
++                }
++            } else {
++                grant.markGranted(now);
++            }
++            rewards.saveReward(grant);
++            campaigns.saveCampaign(campaign);
++            grants.add(new RewardView(grant, campaign.getName()));
++        }
++        return new EvaluationOutcome(grants, skipped);
++    }
++
++    public RewardView fulfill(String rewardId) {
++        RewardGrant grant = rewards.findReward(rewardId)
++                .orElseThrow(() -> new NotFoundException("REWARD_NOT_FOUND",
++                        "Reward " + rewardId + " not found"));
++        Campaign campaign = campaigns.findCampaign(grant.getCampaignId()).orElse(null);
++
++        if (!grant.isGranted()) {
++            if (!grant.isCashback()) {
++                grant.markGranted(LocalDateTime.now(clock));
++            } else {
++                try {
++                    accountClient.creditCashback(grant.getAccountId(), grant.getRewardId(),
++                            grant.getCampaignId(), grant.getRewardAmount());
++                    grant.markGranted(LocalDateTime.now(clock));
++                } catch (RemoteServiceException ex) {
++                    grant.markPending(ex.getMessage());
++                    rewards.saveReward(grant);
++                    throw ex;
++                }
++            }
++            rewards.saveReward(grant);
++        }
++        return new RewardView(grant, campaign == null ? grant.getCampaignId() : campaign.getName());
++    }
++
++    private static void validate(EvaluationCommand command) {
++        if (command.transactionId() == null || command.transactionId().isBlank()) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Transaction ID must be supplied.");
++        }
++        if (command.cardNumber() == null || !command.cardNumber().matches("\\d{16}")) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Card Number must be 16 digits.");
++        }
++        if (command.accountId() == null || !command.accountId().matches("\\d{11}")) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Account ID must be 11 digits.");
++        }
++        if (command.amount() == null || command.amount().compareTo(BigDecimal.ZERO) <= 0) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Transaction amount must be greater than zero.");
++        }
++    }
++}
+diff --git a/workspace/carddemo-java-1025/services/transaction-service/src/main/java/com/carddemo/transaction/application/PostingService.java b/workspace/carddemo-java-1025/services/transaction-service/src/main/java/com/carddemo/transaction/application/PostingService.java
+new file mode 100644
+index 0000000..98bb096
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/transaction-service/src/main/java/com/carddemo/transaction/application/PostingService.java
+@@ -0,0 +1,151 @@
++package com.carddemo.transaction.application;
++
++import com.carddemo.transaction.domain.model.AccountSnapshot;
++import com.carddemo.transaction.domain.model.CardSnapshot;
++import com.carddemo.transaction.domain.model.DailyTransaction;
++import com.carddemo.transaction.domain.model.RejectReason;
++import com.carddemo.transaction.domain.model.TranCategoryBalance;
++import com.carddemo.transaction.domain.model.TransactionRecord;
++import com.carddemo.transaction.domain.model.TransactionStatus;
++import com.carddemo.transaction.domain.repository.DailyTransactionRepository;
++import com.carddemo.transaction.domain.repository.TranCategoryBalanceRepository;
++import com.carddemo.transaction.domain.repository.TransactionRepository;
++import com.carddemo.transaction.domain.service.PostingPolicy;
++import com.carddemo.transaction.infrastructure.client.AccountClient;
++import com.carddemo.transaction.infrastructure.client.CardClient;
++import com.carddemo.transaction.infrastructure.client.MarketingClient;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Optional;
++
++/**
++ * 日终入账用例（CBTRN02C）。单笔拒付不中断整批（BR-POST-05/08）；同一交易号重复提交按幂等返回（NR-POST-01）。
++ */
++@Service
++@Transactional
++public class PostingService {
++
++    private static final Logger log = LoggerFactory.getLogger(PostingService.class);
++    private static final BigDecimal ZERO = new BigDecimal("0.00");
++
++    private final TransactionRepository transactions;
++    private final DailyTransactionRepository dailyTransactions;
++    private final TranCategoryBalanceRepository balances;
++    private final TransactionIdGenerator idGenerator;
++    private final CardClient cardClient;
++    private final AccountClient accountClient;
++    private final PostingPolicy postingPolicy;
++    private final MarketingClient marketingClient;
++    private final boolean marketingEnabled;
++
++    public PostingService(TransactionRepository transactions,
++                          DailyTransactionRepository dailyTransactions,
++                          TranCategoryBalanceRepository balances,
++                          TransactionIdGenerator idGenerator,
++                          CardClient cardClient,
++                          AccountClient accountClient,
++                          PostingPolicy postingPolicy,
++                          MarketingClient marketingClient,
++                          @Value("${marketing.enabled:true}") boolean marketingEnabled) {
++        this.transactions = transactions;
++        this.dailyTransactions = dailyTransactions;
++        this.balances = balances;
++        this.idGenerator = idGenerator;
++        this.cardClient = cardClient;
++        this.accountClient = accountClient;
++        this.postingPolicy = postingPolicy;
++        this.marketingClient = marketingClient;
++        this.marketingEnabled = marketingEnabled;
++    }
++
++    public PostingResult post(List<PostingCommand> commands) {
++        List<PostingRejection> rejections = new ArrayList<>();
++        List<String> duplicates = new ArrayList<>();
++        int posted = 0;
++        int rejected = 0;
++        String generatedId = null;
++
++        for (PostingCommand command : commands) {
++            String transactionId = TransactionApplicationService.trimToNull(command.transactionId());
++            if (transactionId != null && transactions.existsByTransactionId(transactionId)) {
++                posted++;
++                duplicates.add(transactionId);
++                continue;
++            }
++            if (transactionId == null) {
++                generatedId = generatedId == null ? idGenerator.next() : idGenerator.increment(generatedId);
++                transactionId = generatedId;
++            }
++
++            LocalDateTime originalTimestamp = command.originalTimestamp() == null
++                    ? LocalDateTime.now() : command.originalTimestamp();
++            LocalDateTime processedTimestamp = LocalDateTime.now();
++
++            CardSnapshot card = cardClient.findCard(command.cardNumber()).orElse(null);
++            AccountSnapshot account = card == null ? null
++                    : accountClient.findAccount(card.accountId()).orElse(null);
++
++            Optional<RejectReason> rejection = postingPolicy.evaluate(card, account, command.amount(),
++                    originalTimestamp.toLocalDate());
++            if (rejection.isPresent()) {
++                RejectReason reason = rejection.get();
++                rejected++;
++                rejections.add(new PostingRejection(transactionId, reason.getCode(), reason.getDescription()));
++                dailyTransactions.saveDailyTransaction(DailyTransaction.rejected(transactionId,
++                        command.cardNumber(), command.typeCode(), command.categoryCode(), command.source(),
++                        command.description(), command.amount(), command.merchantId(), command.merchantName(),
++                        command.merchantCity(), command.merchantZip(), originalTimestamp, processedTimestamp,
++                        reason));
++                continue;
++            }
++
++            TranCategoryBalance balance = balances
++                    .find(account.accountId(), command.typeCode(), command.categoryCode())
++                    .orElseGet(() -> new TranCategoryBalance(account.accountId(), command.typeCode(),
++                            command.categoryCode(), ZERO));
++            balance.apply(command.amount());
++            balances.saveBalance(balance);
++
++            accountClient.applyPosting(account.accountId(), command.amount());
++
++            TransactionRecord record = new TransactionRecord(transactionId, account.accountId(),
++                    command.cardNumber(), command.typeCode(), command.categoryCode(), command.source(),
++                    command.description(), command.amount(), command.merchantId(), command.merchantName(),
++                    command.merchantCity(), command.merchantZip(), originalTimestamp, processedTimestamp,
++                    TransactionStatus.POSTED);
++            transactions.saveTransaction(record);
++            dailyTransactions.saveDailyTransaction(DailyTransaction.posted(record));
++            evaluateRewards(record, card, command);
++            posted++;
++        }
++
++        String status = rejected > 0 ? "COMPLETED_WITH_REJECTS" : "COMPLETED";
++        return new PostingResult(status, commands.size(), posted, rejected, rejections, duplicates);
++    }
++
++    /**
++     * ADR-009：入账是资金事实，营销是附加权益。评估失败只告警，不影响入账结果。
++     */
++    private void evaluateRewards(TransactionRecord record, CardSnapshot card, PostingCommand command) {
++        if (!marketingEnabled) {
++            return;
++        }
++        try {
++            marketingClient.evaluateRewards(new MarketingClient.RewardEvaluationCommand(
++                    record.getTransactionId(), command.cardNumber(), record.getAccountId(),
++                    card.customerId(), record.getAmount(), command.categoryCode(),
++                    command.typeCode(), command.description(), record.getProcessedTimestamp()));
++        } catch (RuntimeException ex) {
++            log.warn("Reward evaluation failed for transaction {}: {}",
++                    record.getTransactionId(), ex.getMessage());
++        }
++    }
++}
+diff --git a/workspace/carddemo-java-1025/services/transaction-service/src/main/java/com/carddemo/transaction/infrastructure/client/MarketingClient.java b/workspace/carddemo-java-1025/services/transaction-service/src/main/java/com/carddemo/transaction/infrastructure/client/MarketingClient.java
+new file mode 100644
+index 0000000..dd6e9a9
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/transaction-service/src/main/java/com/carddemo/transaction/infrastructure/client/MarketingClient.java
+@@ -0,0 +1,42 @@
++package com.carddemo.transaction.infrastructure.client;
++
++import com.carddemo.transaction.domain.exception.RemoteServiceException;
++import org.springframework.beans.factory.annotation.Qualifier;
++import org.springframework.stereotype.Component;
++import org.springframework.web.client.RestClient;
++import org.springframework.web.client.RestClientException;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++/**
++ * marketing-service 出站适配器：消费入账后触发奖励评估。
++ * 营销不可用不影响入账（调用方捕获异常并告警），见 ADR-009。
++ */
++@Component
++public class MarketingClient {
++
++    private final RestClient restClient;
++
++    public MarketingClient(@Qualifier("marketingRestClient") RestClient restClient) {
++        this.restClient = restClient;
++    }
++
++    public void evaluateRewards(RewardEvaluationCommand command) {
++        try {
++            restClient.post()
++                    .uri("/api/v1/reward-evaluations")
++                    .body(command)
++                    .retrieve()
++                    .toBodilessEntity();
++        } catch (RestClientException ex) {
++            throw new RemoteServiceException("marketing-service is unavailable", ex);
++        }
++    }
++
++    public record RewardEvaluationCommand(String transactionId, String cardNumber, String accountId,
++                                          String customerId, BigDecimal amount, String categoryCode,
++                                          String typeCode, String description,
++                                          LocalDateTime processedAt) {
++    }
++}

@@ -13,7 +13,7 @@ import { serviceHealth } from '../scripts/services.mjs';
 
 test('runtime fixture paths follow the material root rather than the imported machine',async()=>{
   const data=await readFixtures();assert.ok(data.skills.length>0);
-  for(const skill of data.skills)assert.equal(skill.path,join(workspace,'skills',skill.name,'SKILL.md'));
+  for(const skill of data.skills)assert.equal(skill.path,join(workspace,'.agents','skills',skill.name,'SKILL.md'));
   assert.equal(data.localPaths.cli,join(root,'scripts/teams-demo.mjs'));
   assert.equal(data.localPaths.collaborationSkill,join(root,'skills/teams-demo-collaboration/SKILL.md'));
 });

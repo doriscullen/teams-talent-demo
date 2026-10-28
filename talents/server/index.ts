@@ -6,10 +6,14 @@ import { extname, join, normalize, sep } from 'node:path';
 import { root, port, origin, teamsOrigin, runtimeDir, sharedDir, publicDir, localConfiguration } from './config.ts';
 import { Store } from './store.ts';
 import { HttpError } from './model.ts';
-import { clientState, ownedState, readTeamsData } from './teams-data.ts';
+import { clientState, ownedState, readSkill, readTeamsData } from './teams-data.ts';
 import { KnowledgeExporter } from './export.ts';
+import { readContent } from './content.ts';
+import { codegraphSnapshot, withCodegraph, withoutCodegraph } from './codegraph.ts';
+import { defaultTarget, projectRepositories, submitPullRequest } from './pull-requests.ts';
 
 const store = new Store(); await store.init();
+const submissions = new Set<string>();
 const exporter = new KnowledgeExporter(sharedDir);
 await exporter.export(store.state, true);
 const exportKnowledge = () => exporter.export(store.state).catch(error => console.error('Talents 知识导出失败：' + error.message));
@@ -18,7 +22,7 @@ async function bootstrap() {
   const teams = await readTeamsData();
   return {
     revision: store.state.revision,
-    state: clientState(store.state, teams.snapshot),
+    state: clientState(withCodegraph(store.state), teams.snapshot),
     teams: { origin: teamsOrigin, from: teams.from, exportedAt: teams.snapshot.exportedAt },
   };
 }
@@ -56,10 +60,31 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
       }
       if (method === 'GET' && path === '/api/health') { json(200, { app: 'talents-carddemo', service: 'talents', workspaceRoot: root, stateRoot: runtimeDir, sharedDir, version: '0.1.0', pid: process.pid, origin, teamsOrigin }); return; }
       if (method === 'GET' && path === '/api/bootstrap') { json(200, await bootstrap()); return; }
+      // Content files too large to bundle into the page, e.g. a trajectory diagnosis report (see tools/bundle-content.mjs).
+      if (method === 'GET' && path === '/api/content') {
+        const key = url.searchParams.get('key') ?? '', text = readContent(key);
+        if (text == null) throw new HttpError('内容不存在', 404);
+        response.writeHead(200, { 'Content-Type': (TYPES[extname(key)] ?? 'text/plain') + '; charset=utf-8', 'Cache-Control': 'no-cache' }); response.end(text); return;
+      }
+      if (method === 'GET' && path === '/api/skill') { json(200, await readSkill((await readTeamsData()).snapshot, url.searchParams.get('project') ?? '', url.searchParams.get('id') ?? '')); return; }
+      if (method === 'GET' && path === '/api/codegraph/carddemo') {
+        const { sources, ...graph } = codegraphSnapshot();
+        json(200, graph); return;
+      }
+      if (method === 'GET' && path === '/api/codegraph/carddemo/source') {
+        const graph = codegraphSnapshot();
+        if (url.searchParams.get('snapshot') !== graph.metadata.snapshotId) throw new HttpError('图谱已更新，请刷新后重试', 409);
+        const node = graph.nodes.find(n => n.id === url.searchParams.get('id'));
+        if (!node) throw new HttpError('符号不存在', 404);
+        const source = graph.sources[node.filePath];
+        if (source === undefined) throw new HttpError('快照中没有此源码', 404);
+        const start = Math.max(1, node.startLine - 3), end = Math.min(source.split('\n').length, node.endLine + 3, start + 299);
+        json(200, { filePath: node.filePath, startLine: start, endLine: end, content: source.split('\n').slice(start - 1, end).join('\n') }); return;
+      }
       if (method === 'PUT' && path === '/api/state') {
         const body = await bodyJson(request);
         if (!Number.isInteger(body.revision)) throw new HttpError('缺少 revision', 400);
-        const state = await store.mutate(body.revision, previous => ownedState(body.state, previous));
+        const state = await store.mutate(body.revision, previous => withoutCodegraph(ownedState(body.state, previous), previous));
         await exportKnowledge();
         json(200, { revision: state.revision }); return;
       }
@@ -67,6 +92,40 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
         await store.reset();
         await exportKnowledge();
         json(200, await bootstrap()); return;
+      }
+      if (method === 'GET' && path === '/api/pull-requests/target') { json(200, await defaultTarget(url.searchParams.get('project'))); return; }
+      if (method === 'POST' && path === '/api/pull-requests') {
+        const body = await bodyJson(request);
+        const key = body.artifactId + '/' + (body.suggestionId ?? '');
+        if (submissions.has(key)) throw new HttpError('正在提交，请稍候', 409);
+        const artifact = store.state.artifacts.find(a => a.id === body.artifactId);
+        if (!artifact) throw new HttpError('产物不存在', 404);
+        const existing = body.suggestionId ? artifact.suggestions?.find(s => s.id === body.suggestionId)?.submission : !artifact.draft && artifact.submission;
+        if (existing) { json(200, await bootstrap()); return; }
+        // One JSON line per step as it starts ({ step }), then { boot } or { error }, so the page can show progress.
+        response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
+        const send = (value: unknown) => response.write(JSON.stringify(value) + '\n');
+        submissions.add(key);
+        try {
+          const submitted = await submitPullRequest(structuredClone(artifact), { repository: body.repository, base: body.base, note: body.note, skillDirectory: body.skillDirectory, directory: artifact.projectId ? projectRepositories[artifact.projectId]?.directory : undefined }, body.suggestionId, undefined, step => send({ step }));
+          await store.mutate(null, previous => {
+            const next = structuredClone(previous), a = next.artifacts.find(a => a.id === body.artifactId)!;
+            if (body.suggestionId) {
+              a.suggestions = [...(a.suggestions ?? []).filter(s => s.id !== body.suggestionId), { id: body.suggestionId, status: 'submitted', submission: submitted, at: submitted.at }];
+            } else {
+              a.submission = submitted;
+              a.published = { version: submitted.version, at: submitted.at, note: body.note, delivery: 'local', files: a.files, specs: a.specs,
+                over: Object.fromEntries((a.files ?? []).map((key, i) => [key, { text: submitted.files[i].text }])), basis: a.draft?.basis as any };
+              a.draft = null;
+            }
+            return next;
+          });
+          send({ boot: await bootstrap() });
+        } catch (error) {
+          if (!(error instanceof HttpError)) console.error(error);
+          send({ error: error instanceof Error ? error.message : '提交失败' });
+        } finally { submissions.delete(key); response.end(); }
+        return;
       }
       throw new HttpError('接口不存在', 404);
     }

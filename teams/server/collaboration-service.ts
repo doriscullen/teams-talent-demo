@@ -9,7 +9,7 @@ import type { TalentTaskInputs } from '../src/talent-contract.js';
 import { mainTask, taskAutomation, taskNodeKnowledge, queueNextNodeKnowledge } from '../src/task-automation.js';
 import { requireCurrentTaskMember, taskAssigneeId, taskAssigneeName } from '../src/task-assignment.js';
 import { selectedSkillBindings } from '../src/resource-sharing.js';
-import { loadNativeSkillPackage, loadSourceSkillPackage } from './skill-packages.js';
+import { currentProjectSkillPackage, loadNativeSkillPackage, loadSourceSkillPackage } from './skill-packages.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -59,9 +59,10 @@ export async function collaborationContext(state: DemoState, data: Presentation,
   let skills: {id:string;scope:string;version:string;path:string|null;content:string|null;availability:string;loadedByAgent:boolean;sha256?:string|null;contentSha256?:string|null;files?:{path:string;sha256:string;executable:boolean}[];error?:string}[] = await Promise.all(selectedSkills.map(async id => {
     const user = userSkillExamples.find(s => s.id === id), project = data.skills.find(s => s.name === id);
     if (user) return {id,scope:'user',version:id==='teams-collaboration'?'demo-cli-v1':'example-v1',path:id==='teams-collaboration'?collaborationSkillPath:null,content:id==='teams-collaboration'?await readFile(collaborationSkillPath,'utf8'):user.content,availability:id==='teams-collaboration'?'demo-local-cli':'example-only',loadedByAgent:false};
-    const binding = bindings.find(item=>item.id===id), expectedVersion = binding?.version ?? (frozen && id==='dev-frontend-ui' ? frozen.skillVersion : project?.version);
+    // Before the context is frozen a project skill is used at its current version, including one Talents wrote; a frozen context keeps its version.
+    const binding = bindings.find(item=>item.id===id), expectedVersion = binding?.version ?? (frozen ? (id==='dev-frontend-ui' ? frozen.skillVersion : project?.version) : undefined);
     try {
-      const pkg=binding?.sha256 ? await loadNativeSkillPackage(id,binding.version,binding.sha256) : await loadSourceSkillPackage(id);
+      const pkg=binding?.sha256 ? await loadNativeSkillPackage(id,binding.version,binding.sha256) : frozen ? await loadSourceSkillPackage(id) : await currentProjectSkillPackage(scope.projectId,id);
       if(expectedVersion && pkg.version!==expectedVersion) throw new Error('冻结版本与实际文件版本不一致');
       const primary=pkg.files.find(file=>file.path==='SKILL.md')!;
       if(binding?.contentSha256 && primary.sha256!==binding.contentSha256)throw new Error('冻结正文摘要与内容包不一致');
@@ -153,7 +154,7 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
       const allowed = [...context.references.map(r => r.id), ...context.materials.map(m => m.id), ...context.skills.map(s => s.id), ...context.knowledge.assets.map((a: any) => a.id),...(context.nodeContract?.inputs.flatMap(item=>item.references.map(reference=>reference.id))??[])];
       need(Array.isArray(p.readReferences) && p.readReferences.every((id: unknown) => typeof id === 'string' && allowed.includes(id)), 'readReferences 只能列出当前上下文内实际阅读的引用');
       const selected=deliveryRequirement(next,scope.projectId,scope.taskId);
-      if(selected&&scope.nodeId==='prepare'&&!selected.preparedAt){need(context.talentInputs && context.knowledge.status==='available'&&context.skills.length>0,'Talent知识与Skill尚未就绪',409);selected.talentInputsSnapshot=context.talentInputs;selected.preparedAt=at;selected.inputDigest=context.basisDigest;selected.nodes.prepare={status:'running',updatedAt:at,summary:'iCode明确采用需求、知识与Skill输入；等待PRD及澄清完成标准'};selected.updatedAt=at;}
+      if(selected&&scope.nodeId==='prepare'&&!selected.preparedAt){need(context.talentInputs && context.skills.length>0,'Skill 尚未就绪',409);selected.talentInputsSnapshot=context.talentInputs;selected.preparedAt=at;selected.inputDigest=context.basisDigest;selected.nodes.prepare={status:'running',updatedAt:at,summary:'iCode明确采用需求、知识与Skill输入；等待PRD及澄清完成标准'};selected.updatedAt=at;}
       if(selected){need(context.nodeInputs&&context.nodeInputs.selection.status==='configured','当前节点尚未配置输入',409);selected.nodeInputSnapshots??={};selected.nodeInputSnapshots[scope.nodeId as RequirementNode]??=structuredClone(context.nodeInputs);selected.nodeContractVersion??=taskNodeContractVersion;}
       adoptionId = randomUUID();
       ledger.adoptions.push({ ...scope, id: adoptionId, role: body.role, runId, sessionId, basisDigest: context.basisDigest, readReferences: [...new Set(p.readReferences as string[])], at, revision });

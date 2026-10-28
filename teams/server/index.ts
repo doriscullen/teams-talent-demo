@@ -28,7 +28,7 @@ import { locateChrysEngine } from './engine-locate.js';
 import { createSourcePluginCatalog } from '../src/source-plugins.js';
 import { updateWorkspace, type WorkspaceAction } from '../src/workspace.js';
 import { headers, bodyJson, staticFile, readFixtures } from './http-shared.js';
-import { exportTeamsSnapshot, knowledgeVersion, projectKnowledge, readTalentsFile } from './shared-data.js';
+import { exportTeamsSnapshot, knowledgeVersion, projectKnowledge, projectSkillVersions, readTalentsFile } from './shared-data.js';
 import { transition } from '../src/domain.js';
 import { isTraceApi, proxyTrace, startTraceService, stopTraceService } from './trace-service.js';
 import { ProjectWorkService } from './project-work.js';
@@ -93,7 +93,7 @@ const server = createServer(async (request, response) => {
       if(role!=='owner'&&role!=='member')throw new DomainError('请选择角色',400);
       json(200,await taskSessionStream(store.state,role,query as unknown as TaskSessionStreamQuery));return;
     }
-    if (request.method === 'GET' && path === '/api/talents/knowledge') { json(200, { talentsOrigin: talentOrigin, artifacts: await projectKnowledge(url.searchParams.get('project') ?? 'carddemo') }); return; }
+    if (request.method === 'GET' && path === '/api/talents/knowledge') { const project = url.searchParams.get('project') ?? 'carddemo'; json(200, { talentsOrigin: talentOrigin, artifacts: await projectKnowledge(project), skills: await projectSkillVersions(project) }); return; }
     if (request.method === 'GET' && path === '/api/talents/file') { json(200, await readTalentsFile(url.searchParams.get('artifact') ?? '', Number(url.searchParams.get('version')), url.searchParams.get('path') ?? '')); return; }
     if (request.method === 'GET' && path === '/api/project-work') {
       const { role, mode = 'tui', ...target } = Object.fromEntries(url.searchParams);

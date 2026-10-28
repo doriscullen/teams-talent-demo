@@ -42,13 +42,13 @@ function teamsSystemLink(page: string, supplied: SystemLinkContext = {}) {
   return url.toString();
 }
 export const teamsLink = (page: string, context?: SystemLinkContext) => teamsSystemLink(page, context);
-/** Talents is a separate app: owner (管理员端) mines and publishes, member (开发者端) applies. Old Talent page names map to the closest Talents page. */
+/** Talents is a separate app used by the owner to mine knowledge and submit PRs. Old Talent page names map to the closest Talents page. */
 export function talentLink(page: string, supplied: SystemLinkContext = {}) {
   const context = { ...currentSystemContext(), ...supplied };
   const name = page.replace(/^#\/?/, '').split('?')[0];
-  const target = name === 'knowledge' ? context.role === 'owner' ? 'review' : 'dev-knowledge' : ['sessions', 'evolution'].includes(name) ? 'tasks' : name;
+  const target = name === 'knowledge' ? 'review' : ['sessions', 'evolution'].includes(name) ? 'tasks' : name;
   const url = new URL('/talents', systemRuntime().talentOrigin);
-  url.searchParams.set('role', context.role);
+  url.searchParams.set('role', 'owner');
   url.hash = '/' + target + '?project=' + encodeURIComponent(context.projectId);
   return url.toString();
 }

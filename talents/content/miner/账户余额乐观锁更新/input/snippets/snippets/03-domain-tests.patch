@@ -1,0 +1,102 @@
+diff --git a/services/account-service/src/test/java/com/carddemo/account/domain/model/AccountTest.java b/services/account-service/src/test/java/com/carddemo/account/domain/model/AccountTest.java
+new file mode 100644
+index 0000000..106ad90
+--- /dev/null
++++ b/services/account-service/src/test/java/com/carddemo/account/domain/model/AccountTest.java
+@@ -0,0 +1,96 @@
++package com.carddemo.account.domain.model;
++
++import com.carddemo.account.domain.exception.BusinessRuleException;
++import org.junit.jupiter.api.Test;
++
++import java.math.BigDecimal;
++import java.time.LocalDate;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++
++class AccountTest {
++
++    private Account account(String balance) {
++        return new Account("00000000001", new AccountDetails("Y",
++                new BigDecimal(balance), new BigDecimal("2000.00"), new BigDecimal("1000.00"),
++                LocalDate.of(2020, 1, 1), LocalDate.of(2028, 1, 1), LocalDate.of(2028, 1, 1),
++                new BigDecimal("0.00"), new BigDecimal("0.00"), "10001", "A000000000"));
++    }
++
++    @Test
++    void postingWithPositiveAmountIncreasesBalanceAndCycleCredit() {
++        Account account = account("100.00");
++
++        account.applyPosting(new BigDecimal("50.25"));
++
++        assertThat(account.getCurrentBalance()).isEqualByComparingTo("150.25");
++        assertThat(account.getCurrentCycleCredit()).isEqualByComparingTo("50.25");
++        assertThat(account.getCurrentCycleDebit()).isEqualByComparingTo("0.00");
++    }
++
++    @Test
++    void postingWithNegativeAmountIncreasesCycleDebit() {
++        Account account = account("100.00");
++
++        account.applyPosting(new BigDecimal("-30.00"));
++
++        assertThat(account.getCurrentBalance()).isEqualByComparingTo("70.00");
++        assertThat(account.getCurrentCycleDebit()).isEqualByComparingTo("-30.00");
++        assertThat(account.getCurrentCycleCredit()).isEqualByComparingTo("0.00");
++    }
++
++    @Test
++    void billPaymentRejectsAccountWithoutOutstandingBalance() {
++        Account account = account("0.00");
++
++        assertThatThrownBy(() -> account.applyBillPayment(new BigDecimal("10.00")))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("NOTHING_TO_PAY");
++    }
++
++    @Test
++    void billPaymentRejectsAmountAboveBalance() {
++        Account account = account("100.00");
++
++        assertThatThrownBy(() -> account.applyBillPayment(new BigDecimal("100.01")))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("PAYMENT_EXCEEDS_BALANCE");
++    }
++
++    @Test
++    void interestAccrualResetsCycleTotals() {
++        Account account = account("100.00");
++        account.applyPosting(new BigDecimal("40.00"));
++
++        account.accrueInterest(new BigDecimal("5.50"));
++
++        assertThat(account.getCurrentBalance()).isEqualByComparingTo("145.50");
++        assertThat(account.getCurrentCycleCredit()).isEqualByComparingTo("0.00");
++        assertThat(account.getCurrentCycleDebit()).isEqualByComparingTo("0.00");
++    }
++
++    @Test
++    void cashbackReducesBalanceAndRejectsNonPositiveAmount() {
++        Account account = account("100.00");
++
++        account.applyCashback(new BigDecimal("20.00"));
++
++        assertThat(account.getCurrentBalance()).isEqualByComparingTo("80.00");
++        assertThatThrownBy(() -> account.applyCashback(BigDecimal.ZERO))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("INVALID_CASHBACK_AMOUNT");
++    }
++
++    @Test
++    void updateRejectsStatusOutsideLegacyEnumeration() {
++        Account account = account("100.00");
++        AccountDetails invalid = new AccountDetails("X", new BigDecimal("1.00"), new BigDecimal("1.00"),
++                new BigDecimal("1.00"), LocalDate.of(2020, 1, 1), LocalDate.of(2028, 1, 1),
++                LocalDate.of(2028, 1, 1), new BigDecimal("0.00"), new BigDecimal("0.00"), null, null);
++
++        assertThatThrownBy(() -> account.applyDetails(invalid))
++                .isInstanceOf(BusinessRuleException.class)
++                .extracting("code").isEqualTo("INVALID_ACCOUNT_STATUS");
++    }
++}

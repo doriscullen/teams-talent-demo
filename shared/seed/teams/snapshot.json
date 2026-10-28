@@ -76,6 +76,112 @@
           "path": "workspace/carddemo-java-1025/docs/design/adr/ADR-007-authentication-scope.md",
           "summary": "已有系统的认证范围与限制说明；属于设计资料。"
         }
+      ],
+      "skills": [
+        {
+          "id": "arch-adr-writing",
+          "name": "arch-adr-writing",
+          "version": "1.0.0",
+          "description": "按标准格式（MADR）记录架构决策的背景、决策、备选方案与后果，编号归档并关联设计文档。做出重要技术决策时使用。",
+          "path": "workspace/.agents/skills/arch-adr-writing/SKILL.md",
+          "sha256": "cf296a778e31f80852b6c66e016163cfd44b7b47f8aadaae9e7fab209544bc9c"
+        },
+        {
+          "id": "arch-impact-analysis",
+          "name": "arch-impact-analysis",
+          "version": "1.0.0",
+          "description": "完整识别变更影响面（代码/数据/接口/配置/文档/权限），输出风险清单与回退建议。任何变更进入设计阶段或需求范围变更时使用。",
+          "path": "workspace/.agents/skills/arch-impact-analysis/SKILL.md",
+          "sha256": "572a784afcbd402ce1f07f395f80a1e5208e8e309427ee3fb7b2870aedf903fa"
+        },
+        {
+          "id": "ba-acceptance-criteria",
+          "name": "ba-acceptance-criteria",
+          "version": "1.0.0",
+          "description": "把需求说明书拆分为用户故事，并为每条故事定义可测试的Given/When/Then验收标准，校验故事与需求ID的关联完整性（RTM）。在需求定稿前、验收标准编写与G1评审材料准备时使用。",
+          "path": "workspace/.agents/skills/ba-acceptance-criteria/SKILL.md",
+          "sha256": "f70a1e6209873d4181a0a7af81a729fd6155012a468dd59ab4dd508b7dd3c6cd"
+        },
+        {
+          "id": "ba-requirement-analysis",
+          "name": "ba-requirement-analysis",
+          "version": "1.0.0",
+          "description": "把原始业务诉求转化为结构化、可开发、可测试的需求说明书，覆盖背景、目标、范围、功能需求、非功能需求、业务规则、依赖、风险、合规标注。",
+          "path": "workspace/.agents/skills/ba-requirement-analysis/SKILL.md",
+          "sha256": "015dacbfe6421cff210cbf8093f2ea55bb802a97de611ebc271379f117240571"
+        },
+        {
+          "id": "ba-requirement-tracing",
+          "name": "ba-requirement-tracing",
+          "version": "1.0.0",
+          "description": "维护需求追踪矩阵（RTM），确保需求→故事→用例→测试→变更全链路可追溯。需求变更、迭代规划、审计追溯检查时使用。",
+          "path": "workspace/.agents/skills/ba-requirement-tracing/SKILL.md",
+          "sha256": "3f1cd91d0c6639995597dac4bccc9c0980ea71130501f3b7d265d5a193081a4e"
+        },
+        {
+          "id": "cobol-legacy-knowledge",
+          "name": "cobol-legacy-knowledge",
+          "version": "1.0.0",
+          "description": "从存量AS/400 COBOL代码提取可追溯的业务与系统知识（L1–L5五层模型），并通过适配层转化为BA/Arch岗位消费格式。需求/设计任务涉及存量系统时使用。",
+          "path": "workspace/.agents/skills/cobol-legacy-knowledge/SKILL.md",
+          "sha256": "2e6c8458adf1fedb645229eea1b61203381ab9fba1fa6c33c82be97bbcadfcf6"
+        },
+        {
+          "id": "dev-backend-service",
+          "name": "dev-backend-service",
+          "version": "1.0.0",
+          "description": "按银行后端架构规范（DDD分层、微服务）实现业务逻辑：Application层→Domain层→Infrastructure层，含DTO映射、业务规则追溯、统一错误码、日志与接口实现。后端服务/业务逻辑层开发任务时使用。",
+          "path": "workspace/.agents/skills/dev-backend-service/SKILL.md",
+          "sha256": "3bb2a87b0a70257ca24e72959f04f62b93df22d9f7433f4ec570581ad0df3d9c"
+        },
+        {
+          "id": "dev-code-reviewer",
+          "name": "dev-code-reviewer",
+          "version": "1.0.0",
+          "description": "辅助代码评审：自动检查编码规范、常见缺陷、架构一致性、安全漏洞，生成按严重级别分类、可定位到代码行的评审意见。MR提交后、代码评审前使用。",
+          "path": "workspace/.agents/skills/dev-code-reviewer/SKILL.md",
+          "sha256": "146c22f9465777f6737633ae388833174d2967d37a56b60a414d771769a987ad"
+        },
+        {
+          "id": "dev-frontend-ui",
+          "name": "dev-frontend-ui",
+          "version": "1.0.0",
+          "description": "按UI设计稿与交互规范像素级实现前端界面：组件复用、状态管理、表单校验、接口对接、响应式、A11y、i18n与性能优化。前端页面/组件开发任务时使用。",
+          "path": "workspace/.agents/skills/dev-frontend-ui/SKILL.md",
+          "sha256": "320ce4d6edf32bfccf52c34270c02ff892e38e11540914f76b309d881c4ef419"
+        },
+        {
+          "id": "dev-unit-test",
+          "name": "dev-unit-test",
+          "version": "1.0.0",
+          "description": "生成并运行高质量单元测试，覆盖正常/边界/异常/回滚路径，量化覆盖率。编码完成、提交MR前使用。",
+          "path": "workspace/.agents/skills/dev-unit-test/SKILL.md",
+          "sha256": "bd39c84706b597982c679d40744bd3bf08794bfc0993d29bb52198b7075273ea"
+        },
+        {
+          "id": "qa-integration-test",
+          "name": "qa-integration-test",
+          "version": "1.0.0",
+          "description": "确保跨系统/跨模块集成正确：集成范围确认、SIT环境规划、接口/数据流/业务场景/异常容错/幂等测试与联调管理。SIT阶段多系统/模块集成测试设计与执行时使用。",
+          "path": "workspace/.agents/skills/qa-integration-test/SKILL.md",
+          "sha256": "4e8a6017d3af0a15935f65921d71610b9de3aecec8862745eea42ea33d311386"
+        },
+        {
+          "id": "qa-uat-support",
+          "name": "qa-uat-support",
+          "version": "1.0.0",
+          "description": "支持业务用户完成UAT：范围确认、场景梳理、用例评审、环境数据准备、培训支持、执行跟踪与验收材料。UAT阶段用户验收测试支持与协调时使用。",
+          "path": "workspace/.agents/skills/qa-uat-support/SKILL.md",
+          "sha256": "dd9f686f55a899ad670eddd69e72a6ce4d35605974b9caf4659d7e8b301eafee"
+        },
+        {
+          "id": "sec-scan-review",
+          "name": "sec-scan-review",
+          "version": "1.0.0",
+          "description": "将SAST/DAST/依赖扫描结果按CVSS与内部标准分级，识别误报，给出修复/豁免处置意见与放行/打回结论。构建完成、发布前或依赖更新后使用。",
+          "path": "workspace/.agents/skills/sec-scan-review/SKILL.md",
+          "sha256": "73943dc70bb95fb3545f145aa54c2037ce13dc792645e0c78e277c7c480f54ae"
+        }
       ]
     },
     {
@@ -111,10 +217,26 @@
           "path": "docs/product/teams-roadmap.md",
           "summary": "团队共享与协作能力的阶段目标。"
         }
-      ]
+      ],
+      "skills": []
     }
   ],
   "sessions": [
+    {
+      "id": "6b82c08d-eb3b-4bdc-b373-54fed16a7fcd",
+      "memberId": "member",
+      "title": "CardDemo 迁移与扩建（19 轮）",
+      "updatedAt": "2026-10-26 23:58",
+      "turns": 19,
+      "agent": "Code Agent",
+      "model": "deepseek-pro",
+      "requirementId": "DEMO-MKT-001",
+      "summary": "从 COBOL 业务提取与微服务迁移起步，扩展到 Web 界面、银行业务模块，第 18 轮重建高端卡多月消费返现能力。",
+      "transcript": true,
+      "projectId": "carddemo",
+      "memberName": "陈晨",
+      "cwd": "workspace/carddemo-java-1025"
+    },
     {
       "id": "3f2a9c41d7e0",
       "memberId": "member",

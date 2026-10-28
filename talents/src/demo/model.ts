@@ -1,5 +1,5 @@
 // Lookups and source changes over the client state.
-import type { Artifact, Basis, Capability, Project, Source, TalentsState, Task } from '../types.ts';
+import type { Artifact, Basis, Capability, Source, TalentsState, Task } from '../types.ts';
 import { content } from '../content.ts';
 
 const byId = <T extends { id: string }>(list: T[], id: string | null | undefined) => list.find(x => x.id === id) ?? null;
@@ -13,24 +13,25 @@ export const agent = (st: TalentsState, id: string) => byId(st.agents, id);
 export const member = (st: TalentsState, id: string) => byId(st.team.members, id);
 export const memberName = (st: TalentsState, id: string, fallback?: string) => member(st, id)?.name ?? fallback ?? id;
 
-export const projectsOf = (st: TalentsState, sourceId: string) => st.projects.filter(p => p.sourceIds.includes(sourceId));
-export const projectRepos = (st: TalentsState, projectId: string) =>
-  (project(st, projectId)?.sourceIds ?? []).map(id => source(st, id)).filter((s): s is Source => !!s && s.type === 'repo');
-/** An artifact belongs to every project that holds one of its sources; session artifacts follow their sessions. */
-export function artifactProjects(st: TalentsState, a: Artifact) {
-  const ids = new Map<string, Project>();
-  a.sources.forEach(sid => projectsOf(st, sid).forEach(p => ids.set(p.id, p)));
-  (a.sessions ?? []).forEach(id => { const s = session(st, id); const p = s && project(st, s.projectId); if (p) ids.set(p.id, p); });
-  return [...ids.values()];
-}
+// ---------- Team and project levels ----------
+// A level is a project id, or null for the team. Sources, tasks and artifacts each belong to one level.
+export const levelName = (st: TalentsState, pid: string | null) => pid ? project(st, pid)?.name ?? pid : '团队';
+/** Repositories and document sets of the level. */
+export const levelSources = (st: TalentsState, pid: string | null) => st.sources.filter(s => s.type !== 'sessions' && (s.projectId ?? null) === pid);
+export const projectRepos = (st: TalentsState, pid: string) => levelSources(st, pid).filter(s => s.type === 'repo');
+/** Sessions a task of the level can analyse: the project's, or at team level those of every project. */
+export const levelSessions = (st: TalentsState, pid: string | null) => pid ? st.sessions.filter(s => s.projectId === pid) : st.sessions;
 
-/** Files of a development-pattern library: index, then per spec 范式总结, 代码分析报告 and its PR records (see content/miner/pr-map.json). */
+/** Files of a development-pattern library: index, then per spec 范式总结, 代码分析报告, its PR records (PR mode)
+ *  or its mining metadata (diff mode: meta.json records the scenario, repository and engine; see content/miner). */
 export function minerFiles(names: string[]) {
   const map: Record<string, string> = JSON.parse(content('miner/pr-map.json') ?? '{}');
   const out = ['miner/index.md'];
   names.forEach(n => {
     out.push('miner/' + n + '/summary.md', 'miner/' + n + '/analyzer.md');
-    Object.keys(map).filter(pr => map[pr] === n).forEach(pr => out.push('miner/' + n + '/input/prs/' + pr + '/metadata.json'));
+    const prs = Object.keys(map).filter(pr => map[pr] === n);
+    if (prs.length) prs.forEach(pr => out.push('miner/' + n + '/input/prs/' + pr + '/metadata.json'));
+    else if (content('miner/' + n + '/meta.json') != null) out.push('miner/' + n + '/meta.json');
   });
   return out;
 }

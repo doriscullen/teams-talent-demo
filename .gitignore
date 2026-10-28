@@ -19,3 +19,6 @@ __pycache__/
 
 # Shared exchange directory written at runtime by Teams and Talents
 /shared/data/
+
+# Rebuildable CodeGraph databases (the visualization snapshot is committed).
+.codegraph/

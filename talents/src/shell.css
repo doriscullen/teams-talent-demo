@@ -18,5 +18,11 @@
 .framework-root .page-scroll>.page-stack{width:100%;max-width:none;margin:0}
 @media(max-width:760px){.framework-root .page-scroll{padding:var(--ui-space-3)}}
 
-/* Talents shows one entry's pages at a time; navigation groups without pages are hidden. */
+/* Talents shows one entry's pages at a time, all in a single group: the group headings carry no meaning
+   here and are hidden (which also keeps groups from being folded), and groups without pages are hidden. */
+.framework-sidebar nav .nav-group{display:none}
 .framework-sidebar nav>div:not(:has(.nav-entry)){display:none}
+
+/* Match the Teams navigation size, preserving the upstream compact mobile sidebar. */
+.framework-root .framework-sidebar{--ui-font-size-navigation:14px;--ui-font-size-eyebrow:13px;--ui-shell-nav-row:38px}
+.framework-root .framework-sidebar nav .nav-group{line-height:1.5}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "bf9dd92a-7a31-4b49-89f1-fb0dd6a6c508",
+  "name": "活动资格判定与有效期控制",
+  "description": "营销活动资格校验与有效期控制开发范式：活动状态机与时间窗、账户状态与目标账户组、报名及参与限制的判定链实现",
+  "scenario": "活动资格判定与有效期控制：实现营销活动资格校验与有效期控制，包含活动状态、时间窗口、账户状态、目标账户组、报名及参与限制。",
+  "scenarioSource": "user",
+  "mode": "diff",
+  "repository": {
+    "path": "/Users/doris/work/temp/carddemo-java-1025",
+    "branch": "master",
+    "commit": "b0823de07b463f51e5066457d60b608f7b4174db"
+  },
+  "snippets": [
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-campaign-eligibility/snippets/01-campaign-policy.patch",
+      "archived": "input/snippets/snippets/01-campaign-policy.patch",
+      "sha256": "7f5281c7f11579d2b756a63bbf81d61e51d337ee81f2720aa82153e76f7399f0",
+      "size": 20485
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-campaign-eligibility/snippets/02-tests.patch",
+      "archived": "input/snippets/snippets/02-tests.patch",
+      "sha256": "ea8e9850c36b9ea83410ff2fee16ed931e618abc2154b749dfc58e0bcd3d55be",
+      "size": 10815
+    }
+  ],
+  "template": {
+    "kind": "default",
+    "original": null,
+    "archived": "input/template.md",
+    "sha256": "c5f0ede39dccccd21d003707cd548b9ca8bd2f76f2e20c620e01218187f2211d"
+  },
+  "engine": {
+    "id": "icode-miner-diff",
+    "version": "0.1.0"
+  },
+  "executionId": "76d01b3c-758b-45e3-a077-778afded800c",
+  "createdAt": "2026-10-27T17:50:06+08:00"
+}

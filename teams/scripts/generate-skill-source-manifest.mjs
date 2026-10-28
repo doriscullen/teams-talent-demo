@@ -13,9 +13,9 @@ const destination = join(repo, 'teams/fixtures/skill-source-files.json');
 if (process.argv.slice(2).some(arg => arg !== '--check') || process.argv.slice(2).length > 1) throw Error('Usage: node teams/scripts/generate-skill-source-manifest.mjs [--check]');
 const inventory = JSON.parse(await readFile(join(repo, 'teams/fixtures/skill-inventory.json'), 'utf8'));
 const packages = Object.fromEntries(inventory.map(item => [item.name, { files: [] }]));
-const indexed = (await exec('git', ['-C', repo, 'ls-files', '--stage', '-z', '--', 'workspace/skills'], { maxBuffer: 2 * 1024 * 1024 })).stdout;
+const indexed = (await exec('git', ['-C', repo, 'ls-files', '--stage', '-z', '--', 'workspace/.agents/skills'], { maxBuffer: 2 * 1024 * 1024 })).stdout;
 for (const entry of indexed.split('\0').filter(Boolean)) {
-  const match = /^(100644|100755) ([0-9a-f]+) 0\tworkspace\/skills\/([^/]+)\/(.+)$/.exec(entry);
+  const match = /^(100644|100755) ([0-9a-f]+) 0\tworkspace\/\.agents\/skills\/([^/]+)\/(.+)$/.exec(entry);
   if (!match || !packages[match[3]]) throw Error('Unregistered or non-regular indexed Skill file: ' + entry);
   const [, mode, object, id, path] = match;
   const bytes = (await exec('git', ['-C', repo, 'cat-file', 'blob', object], { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024 })).stdout;
@@ -25,7 +25,7 @@ for (const [id, value] of Object.entries(packages)) {
   if (!value.files.some(file => file.path === 'SKILL.md')) throw Error('Indexed Skill body is missing: ' + id);
   value.files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
-const content = JSON.stringify({ version: 1, sourceRoot: 'workspace/skills', packages }, null, 2) + '\n';
+const content = JSON.stringify({ version: 1, sourceRoot: 'workspace/.agents/skills', packages }, null, 2) + '\n';
 if (process.argv.includes('--check')) {
   if (await readFile(destination, 'utf8') !== content) throw Error('Skill source declaration differs from the Git index; regenerate intentionally');
 } else {

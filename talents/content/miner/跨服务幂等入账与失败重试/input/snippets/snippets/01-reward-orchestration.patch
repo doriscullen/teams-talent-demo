@@ -1,0 +1,510 @@
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java b/services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java
+new file mode 100644
+index 0000000..3189e61
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/application/RewardEvaluationService.java
+@@ -0,0 +1,152 @@
++package com.carddemo.marketing.application;
++
++import com.carddemo.marketing.domain.exception.BusinessRuleException;
++import com.carddemo.marketing.domain.exception.InvalidRequestException;
++import com.carddemo.marketing.domain.exception.NotFoundException;
++import com.carddemo.marketing.domain.exception.RemoteServiceException;
++import com.carddemo.marketing.domain.model.AccountSnapshot;
++import com.carddemo.marketing.domain.model.Campaign;
++import com.carddemo.marketing.domain.model.RewardComputation;
++import com.carddemo.marketing.domain.model.RewardGrant;
++import com.carddemo.marketing.domain.repository.CampaignRepository;
++import com.carddemo.marketing.domain.repository.EnrollmentRepository;
++import com.carddemo.marketing.domain.repository.RewardGrantRepository;
++import com.carddemo.marketing.domain.service.EligibilityPolicy;
++import com.carddemo.marketing.infrastructure.client.AccountClient;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.time.Clock;
++import java.time.LocalDateTime;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.UUID;
++
++/**
++ * 奖励评估与发放（MK-REW-01..08）。
++ * 幂等：同一活动同一交易只发一次；返现入账由 account-service 以 rewardId 再保证一次幂等。
++ */
++@Service
++@Transactional(noRollbackFor = RemoteServiceException.class)
++public class RewardEvaluationService {
++
++    private final CampaignRepository campaigns;
++    private final EnrollmentRepository enrollments;
++    private final RewardGrantRepository rewards;
++    private final AccountClient accountClient;
++    private final Clock clock;
++
++    public RewardEvaluationService(CampaignRepository campaigns,
++                                   EnrollmentRepository enrollments,
++                                   RewardGrantRepository rewards,
++                                   AccountClient accountClient,
++                                   Clock clock) {
++        this.campaigns = campaigns;
++        this.enrollments = enrollments;
++        this.rewards = rewards;
++        this.accountClient = accountClient;
++        this.clock = clock;
++    }
++
++    public EvaluationOutcome evaluate(EvaluationCommand command) {
++        validate(command);
++        List<RewardView> grants = new ArrayList<>();
++        List<EvaluationOutcome.Skipped> skipped = new ArrayList<>();
++
++        AccountSnapshot account = accountClient.findAccount(command.accountId()).orElse(null);
++        if (account == null) {
++            skipped.add(new EvaluationOutcome.Skipped(null, null, EligibilityPolicy.ACCOUNT_NOT_FOUND));
++            return new EvaluationOutcome(grants, skipped);
++        }
++
++        LocalDateTime now = LocalDateTime.now(clock);
++        for (Campaign campaign : campaigns.findActiveAt(now)) {
++            if (rewards.existsByCampaignAndTransaction(campaign.getCampaignId(), command.transactionId())) {
++                skipped.add(new EvaluationOutcome.Skipped(campaign.getCampaignId(), campaign.getName(),
++                        "ALREADY_EVALUATED"));
++                continue;
++            }
++            boolean enrolled = enrollments
++                    .findEnrollment(campaign.getCampaignId(), command.cardNumber())
++                    .isPresent();
++            long rewardsOnCard = rewards.countByCampaignAndCard(campaign.getCampaignId(), command.cardNumber());
++            EligibilityPolicy.Evaluation evaluation = EligibilityPolicy.evaluateTransaction(
++                    campaign, account, command.amount(), command.categoryCode(), enrolled,
++                    rewardsOnCard, now);
++            if (!evaluation.eligible()) {
++                skipped.add(new EvaluationOutcome.Skipped(campaign.getCampaignId(), campaign.getName(),
++                        evaluation.reason()));
++                continue;
++            }
++
++            RewardComputation computation = evaluation.reward();
++            try {
++                campaign.consumeCashback(computation.amount());
++            } catch (BusinessRuleException ex) {
++                skipped.add(new EvaluationOutcome.Skipped(campaign.getCampaignId(), campaign.getName(),
++                        EligibilityPolicy.BUDGET_EXHAUSTED));
++                continue;
++            }
++
++            RewardGrant grant = new RewardGrant(UUID.randomUUID().toString(),
++                    campaign.getCampaignId(), command.transactionId(), command.cardNumber(),
++                    command.accountId(), command.customerId(), computation, now);
++            if (grant.isCashback()) {
++                try {
++                    accountClient.creditCashback(command.accountId(), grant.getRewardId(),
++                            campaign.getCampaignId(), grant.getRewardAmount());
++                    grant.markGranted(now);
++                } catch (RemoteServiceException ex) {
++                    grant.markPending("Cashback credit pending: " + ex.getMessage());
++                }
++            } else {
++                grant.markGranted(now);
++            }
++            rewards.saveReward(grant);
++            campaigns.saveCampaign(campaign);
++            grants.add(new RewardView(grant, campaign.getName()));
++        }
++        return new EvaluationOutcome(grants, skipped);
++    }
++
++    public RewardView fulfill(String rewardId) {
++        RewardGrant grant = rewards.findReward(rewardId)
++                .orElseThrow(() -> new NotFoundException("REWARD_NOT_FOUND",
++                        "Reward " + rewardId + " not found"));
++        Campaign campaign = campaigns.findCampaign(grant.getCampaignId()).orElse(null);
++
++        if (!grant.isGranted()) {
++            if (!grant.isCashback()) {
++                grant.markGranted(LocalDateTime.now(clock));
++            } else {
++                try {
++                    accountClient.creditCashback(grant.getAccountId(), grant.getRewardId(),
++                            grant.getCampaignId(), grant.getRewardAmount());
++                    grant.markGranted(LocalDateTime.now(clock));
++                } catch (RemoteServiceException ex) {
++                    grant.markPending(ex.getMessage());
++                    rewards.saveReward(grant);
++                    throw ex;
++                }
++            }
++            rewards.saveReward(grant);
++        }
++        return new RewardView(grant, campaign == null ? grant.getCampaignId() : campaign.getName());
++    }
++
++    private static void validate(EvaluationCommand command) {
++        if (command.transactionId() == null || command.transactionId().isBlank()) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Transaction ID must be supplied.");
++        }
++        if (command.cardNumber() == null || !command.cardNumber().matches("\\d{16}")) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Card Number must be 16 digits.");
++        }
++        if (command.accountId() == null || !command.accountId().matches("\\d{11}")) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Account ID must be 11 digits.");
++        }
++        if (command.amount() == null || command.amount().compareTo(BigDecimal.ZERO) <= 0) {
++            throw new InvalidRequestException("VALIDATION_FAILED", "Transaction amount must be greater than zero.");
++        }
++    }
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/RewardGrant.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/RewardGrant.java
+new file mode 100644
+index 0000000..1ba3697
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/model/RewardGrant.java
+@@ -0,0 +1,174 @@
++package com.carddemo.marketing.domain.model;
++
++import com.carddemo.marketing.domain.exception.BusinessRuleException;
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.EnumType;
++import jakarta.persistence.Enumerated;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++import jakarta.persistence.UniqueConstraint;
++import jakarta.persistence.Version;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++/**
++ * 奖励发放记录。同一活动同一交易唯一（MK-REW-01 幂等）。
++ */
++@Entity
++@Table(name = "reward_grant",
++        uniqueConstraints = @UniqueConstraint(name = "uk_reward_campaign_txn",
++                columnNames = {"campaign_id", "transaction_id"}))
++public class RewardGrant {
++
++    @Id
++    @Column(name = "reward_id", length = 36, nullable = false, updatable = false)
++    private String rewardId;
++
++    @Column(name = "campaign_id", length = 36, nullable = false)
++    private String campaignId;
++
++    @Column(name = "transaction_id", length = 16, nullable = false)
++    private String transactionId;
++
++    @Column(name = "card_number", length = 16, nullable = false)
++    private String cardNumber;
++
++    @Column(name = "account_id", length = 11, nullable = false)
++    private String accountId;
++
++    @Column(name = "customer_id", length = 9)
++    private String customerId;
++
++    @Enumerated(EnumType.STRING)
++    @Column(name = "reward_type", length = 16, nullable = false)
++    private RewardType rewardType;
++
++    @Column(name = "reward_amount", nullable = false, precision = 12, scale = 2)
++    private BigDecimal rewardAmount;
++
++    @Column(name = "reward_points", nullable = false)
++    private int rewardPoints;
++
++    @Enumerated(EnumType.STRING)
++    @Column(name = "status", length = 16, nullable = false)
++    private RewardStatus status;
++
++    @Column(name = "failure_reason", length = 200)
++    private String failureReason;
++
++    @Column(name = "created_at", nullable = false)
++    private LocalDateTime createdAt;
++
++    @Column(name = "granted_at")
++    private LocalDateTime grantedAt;
++
++    @Version
++    @Column(name = "version", nullable = false)
++    private long version;
++
++    protected RewardGrant() {
++        // for JPA
++    }
++
++    public RewardGrant(String rewardId, String campaignId, String transactionId, String cardNumber,
++                       String accountId, String customerId, RewardComputation computation,
++                       LocalDateTime createdAt) {
++        if (computation.amount().signum() <= 0 && computation.points() <= 0) {
++            throw new BusinessRuleException("REWARD_ZERO", "Computed reward must be greater than zero.");
++        }
++        this.rewardId = rewardId;
++        this.campaignId = campaignId;
++        this.transactionId = transactionId;
++        this.cardNumber = cardNumber;
++        this.accountId = accountId;
++        this.customerId = customerId;
++        this.rewardType = computation.rewardType();
++        this.rewardAmount = computation.rewardType() == RewardType.CASHBACK
++                ? computation.amount() : BigDecimal.ZERO.setScale(2);
++        this.rewardPoints = computation.points();
++        this.status = RewardStatus.PENDING;
++        this.createdAt = createdAt;
++    }
++
++    public void markGranted(LocalDateTime now) {
++        this.status = RewardStatus.GRANTED;
++        this.grantedAt = now;
++        this.failureReason = null;
++    }
++
++    public void markPending(String reason) {
++        this.status = RewardStatus.PENDING;
++        this.failureReason = reason;
++    }
++
++    public void markFailed(String reason) {
++        this.status = RewardStatus.FAILED;
++        this.failureReason = reason;
++    }
++
++    public boolean isGranted() {
++        return status == RewardStatus.GRANTED;
++    }
++
++    public boolean isCashback() {
++        return rewardType == RewardType.CASHBACK;
++    }
++
++    public String getRewardId() {
++        return rewardId;
++    }
++
++    public String getCampaignId() {
++        return campaignId;
++    }
++
++    public String getTransactionId() {
++        return transactionId;
++    }
++
++    public String getCardNumber() {
++        return cardNumber;
++    }
++
++    public String getAccountId() {
++        return accountId;
++    }
++
++    public String getCustomerId() {
++        return customerId;
++    }
++
++    public RewardType getRewardType() {
++        return rewardType;
++    }
++
++    public BigDecimal getRewardAmount() {
++        return rewardAmount;
++    }
++
++    public int getRewardPoints() {
++        return rewardPoints;
++    }
++
++    public RewardStatus getStatus() {
++        return status;
++    }
++
++    public String getFailureReason() {
++        return failureReason;
++    }
++
++    public LocalDateTime getCreatedAt() {
++        return createdAt;
++    }
++
++    public LocalDateTime getGrantedAt() {
++        return grantedAt;
++    }
++
++    public long getVersion() {
++        return version;
++    }
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/domain/repository/RewardGrantRepository.java b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/repository/RewardGrantRepository.java
+new file mode 100644
+index 0000000..09f14b6
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/domain/repository/RewardGrantRepository.java
+@@ -0,0 +1,26 @@
++package com.carddemo.marketing.domain.repository;
++
++import com.carddemo.marketing.domain.model.RewardGrant;
++
++import java.util.List;
++import java.util.Optional;
++
++public interface RewardGrantRepository {
++
++    Optional<RewardGrant> findReward(String rewardId);
++
++    RewardGrant saveReward(RewardGrant grant);
++
++    boolean existsByCampaignAndTransaction(String campaignId, String transactionId);
++
++    long countByCampaignAndCard(String campaignId, String cardNumber);
++
++    PageResult<RewardGrant> findRewards(String accountId, String cardNumber, String campaignId,
++                                        int page, int size);
++
++    List<RewardGrant> findByCampaign(String campaignId);
++
++    List<RewardGrant> findGranted();
++
++    long countByStatus(String status);
++}
+diff --git a/services/marketing-service/src/main/java/com/carddemo/marketing/infrastructure/client/AccountClient.java b/services/marketing-service/src/main/java/com/carddemo/marketing/infrastructure/client/AccountClient.java
+new file mode 100644
+index 0000000..81a279a
+--- /dev/null
++++ b/services/marketing-service/src/main/java/com/carddemo/marketing/infrastructure/client/AccountClient.java
+@@ -0,0 +1,68 @@
++package com.carddemo.marketing.infrastructure.client;
++
++import com.carddemo.marketing.domain.exception.RemoteServiceException;
++import com.carddemo.marketing.domain.model.AccountSnapshot;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import org.springframework.beans.factory.annotation.Qualifier;
++import org.springframework.stereotype.Component;
++import org.springframework.web.client.RestClient;
++import org.springframework.web.client.RestClientException;
++
++import java.math.BigDecimal;
++import java.util.Optional;
++
++/**
++ * account-service 出站适配器：读账户快照、返现入账（幂等键 rewardId）。
++ */
++@Component
++public class AccountClient {
++
++    private final RestClient restClient;
++    private final ObjectMapper objectMapper;
++
++    public AccountClient(@Qualifier("accountRestClient") RestClient restClient, ObjectMapper objectMapper) {
++        this.restClient = restClient;
++        this.objectMapper = objectMapper;
++    }
++
++    public Optional<AccountSnapshot> findAccount(String accountId) {
++        try {
++            return restClient.get()
++                    .uri("/api/v1/accounts/{accountId}", accountId)
++                    .exchange((request, response) -> {
++                        if (response.getStatusCode().value() == 404) {
++                            return Optional.<AccountSnapshot>empty();
++                        }
++                        if (!response.getStatusCode().is2xxSuccessful()) {
++                            throw new RemoteServiceException("account-service responded with HTTP "
++                                    + response.getStatusCode().value());
++                        }
++                        AccountBody body = objectMapper.readValue(response.getBody(), AccountBody.class);
++                        return Optional.of(body.toSnapshot());
++                    });
++        } catch (RestClientException ex) {
++            throw new RemoteServiceException("account-service is unavailable", ex);
++        }
++    }
++
++    public void creditCashback(String accountId, String rewardId, String campaignId, BigDecimal amount) {
++        try {
++            restClient.post()
++                    .uri("/api/v1/accounts/{accountId}/cashback-credits", accountId)
++                    .body(new CashbackCreditBody(rewardId, campaignId, amount))
++                    .retrieve()
++                    .toBodilessEntity();
++        } catch (RestClientException ex) {
++            throw new RemoteServiceException("account-service cashback credit failed", ex);
++        }
++    }
++
++    record AccountBody(String accountId, String activeStatus, BigDecimal currentBalance, String groupId) {
++        AccountSnapshot toSnapshot() {
++            return new AccountSnapshot(accountId, activeStatus, currentBalance, groupId);
++        }
++    }
++
++    record CashbackCreditBody(String rewardId, String campaignId, BigDecimal amount) {
++    }
++}
+diff --git a/services/marketing-service/src/main/resources/db/migration/V1__marketing_schema.sql b/services/marketing-service/src/main/resources/db/migration/V1__marketing_schema.sql
+new file mode 100644
+index 0000000..04daac4
+--- /dev/null
++++ b/services/marketing-service/src/main/resources/db/migration/V1__marketing_schema.sql
+@@ -0,0 +1,60 @@
++CREATE TABLE campaign (
++    campaign_id              VARCHAR(36) PRIMARY KEY,
++    name                     VARCHAR(80)  NOT NULL,
++    description              VARCHAR(300),
++    campaign_type            VARCHAR(32)  NOT NULL,
++    status                   VARCHAR(16)  NOT NULL,
++    start_at                 TIMESTAMP    NOT NULL,
++    end_at                   TIMESTAMP    NOT NULL,
++    target_group_id          VARCHAR(10),
++    category_code            VARCHAR(4),
++    min_transaction_amount   NUMERIC(12, 2) NOT NULL,
++    reward_rate              NUMERIC(6, 4),
++    fixed_reward_amount      NUMERIC(12, 2),
++    max_reward_per_transaction NUMERIC(12, 2),
++    max_rewards_per_card     INTEGER,
++    budget                   NUMERIC(12, 2) NOT NULL,
++    consumed_amount          NUMERIC(12, 2) NOT NULL,
++    points_multiplier        NUMERIC(5, 2),
++    enrollment_required      BOOLEAN      NOT NULL,
++    created_at               TIMESTAMP    NOT NULL,
++    updated_at               TIMESTAMP    NOT NULL,
++    version                  BIGINT       NOT NULL DEFAULT 0
++);
++
++CREATE INDEX idx_campaign_status_period ON campaign (status, start_at, end_at);
++
++CREATE TABLE enrollment (
++    enrollment_id VARCHAR(36) PRIMARY KEY,
++    campaign_id   VARCHAR(36) NOT NULL,
++    card_number   VARCHAR(16) NOT NULL,
++    account_id    VARCHAR(11) NOT NULL,
++    customer_id   VARCHAR(9),
++    enrolled_at   TIMESTAMP   NOT NULL,
++    version       BIGINT      NOT NULL DEFAULT 0,
++    CONSTRAINT uk_enrollment_campaign_card UNIQUE (campaign_id, card_number)
++);
++
++CREATE INDEX idx_enrollment_card ON enrollment (card_number);
++
++CREATE TABLE reward_grant (
++    reward_id       VARCHAR(36) PRIMARY KEY,
++    campaign_id     VARCHAR(36) NOT NULL,
++    transaction_id  VARCHAR(16) NOT NULL,
++    card_number     VARCHAR(16) NOT NULL,
++    account_id      VARCHAR(11) NOT NULL,
++    customer_id     VARCHAR(9),
++    reward_type     VARCHAR(16) NOT NULL,
++    reward_amount   NUMERIC(12, 2) NOT NULL,
++    reward_points   INTEGER       NOT NULL,
++    status          VARCHAR(16)   NOT NULL,
++    failure_reason  VARCHAR(200),
++    created_at      TIMESTAMP     NOT NULL,
++    granted_at      TIMESTAMP,
++    version         BIGINT        NOT NULL DEFAULT 0,
++    CONSTRAINT uk_reward_campaign_txn UNIQUE (campaign_id, transaction_id)
++);
++
++CREATE INDEX idx_reward_account ON reward_grant (account_id, created_at);
++CREATE INDEX idx_reward_card ON reward_grant (card_number);
++CREATE INDEX idx_reward_campaign ON reward_grant (campaign_id);
