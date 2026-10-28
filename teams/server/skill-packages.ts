@@ -2,6 +2,7 @@ import { lstat, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import inventory from '../fixtures/skill-inventory.json';
 import sourceFiles from '../fixtures/skill-source-files.json';
+import { projectSkillVersions } from './shared-data.js';
 import { projectSkillIds, resourcePublicationHistory, resourceSubscriptions, type SkillCatalogEntry } from '../src/resource-sharing.js';
 import type { DemoState, Role } from '../src/domain.js';
 import { DomainError } from '../src/domain.js';
@@ -17,7 +18,7 @@ export interface SkillSourceFiles {
 const sourceMaintenance = '；如为有意更新，请先更新 Skill 版本并将源文件加入 Git 索引，再从仓库根目录运行 node teams/scripts/generate-skill-source-manifest.mjs，核对后显式发布新版本（不修改历史 provenance）';
 function declaredFiles(id: string, declaration: SkillSourceFiles) {
   const entries = declaration.packages?.[id]?.files;
-  if (declaration.version !== 1 || declaration.sourceRoot !== 'workspace/skills' || !Array.isArray(entries) || !entries.length || entries.length > 1024) throw new Error('Skill 源包文件声明缺失或无效：' + id + sourceMaintenance);
+  if (declaration.version !== 1 || declaration.sourceRoot !== 'workspace/.agents/skills' || !Array.isArray(entries) || !entries.length || entries.length > 1024) throw new Error('Skill 源包文件声明缺失或无效：' + id + sourceMaintenance);
   const names = new Set<string>();
   for (const entry of entries) {
     if (!entry || typeof entry.path !== 'string' || !portableSkillPath(entry.path) || names.has(entry.path.toLowerCase()) || typeof entry.executable !== 'boolean' || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw new Error('Skill 源包文件声明无效：' + id);
@@ -49,7 +50,7 @@ async function files(root:string,declared:ReturnType<typeof declaredFiles>,prefi
   }
   return result.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
 }
-export async function loadSourceSkillPackage(id:string,sourceDirectory=join(workspace,'skills'),declaration:SkillSourceFiles=sourceFiles):Promise<NativeSkillPackage> {
+export async function loadSourceSkillPackage(id:string,sourceDirectory=join(workspace,'.agents','skills'),declaration:SkillSourceFiles=sourceFiles):Promise<NativeSkillPackage> {
   const metadata=item(id),path=join(sourceDirectory,id),stat=await lstat(path);
   if(!stat.isDirectory()||stat.isSymbolicLink())throw new Error('Skill 来源必须是实际目录：'+id);
   // Source-package identity uses committed Git modes, never host chmod or ZIP modes.
@@ -62,9 +63,18 @@ export async function loadSourceSkillPackage(id:string,sourceDirectory=join(work
   if(declaredVersion!==metadata.version)throw new Error(`Skill 元数据与正文版本不一致：${id} (${metadata.version} / ${declaredVersion??'未声明'})`);
   const pkg={id,name:id,version:metadata.version,sha256:skillPackageDigest(entries),files:entries};validateSkillPackage(pkg);return pkg;
 }
+/** A project skill as the project uses it now: the source package with the files of the latest version Talents wrote for the project. */
+export async function currentProjectSkillPackage(projectId:string,id:string):Promise<NativeSkillPackage> {
+  const pkg=await loadSourceSkillPackage(id),written=(await projectSkillVersions(projectId)).find(version=>version.skillId===id);
+  if(!written)return pkg;
+  const files=new Map(pkg.files.map(file=>[file.path,file]));
+  for(const file of written.files)if(file.content!==null){const bytes=Buffer.from(file.content);files.set(file.path,{path:file.path,sha256:sha256(bytes),executable:files.get(file.path)?.executable??false,bytes});}
+  const list=[...files.values()].sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+  const result={...pkg,version:written.version,sha256:skillPackageDigest(list),files:list};validateSkillPackage(result);return result;
+}
 function entry(pkg:NativeSkillPackage):SkillCatalogEntry {
   const metadata=item(pkg.id),owner=projectSkillIds.includes(pkg.id);
-  return {id:pkg.id,name:pkg.name,description:metadata.description,version:pkg.version,sha256:pkg.sha256,contentSha256:pkg.files.find(file=>file.path==='SKILL.md')!.sha256,category:'skill',publisher:owner?'owner':'library',publisherName:owner?'林悦':'研发效能团队',source:'workspace/skills/'+pkg.id};
+  return {id:pkg.id,name:pkg.name,description:metadata.description,version:pkg.version,sha256:pkg.sha256,contentSha256:pkg.files.find(file=>file.path==='SKILL.md')!.sha256,category:'skill',publisher:owner?'owner':'library',publisherName:owner?'林悦':'研发效能团队',source:'workspace/.agents/skills/'+pkg.id};
 }
 export async function readSkillCatalog() {
   const packages=await Promise.all(inventory.map(skill=>loadSourceSkillPackage(skill.name)));

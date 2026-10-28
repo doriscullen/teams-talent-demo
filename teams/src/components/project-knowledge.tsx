@@ -45,7 +45,7 @@ function ArtifactDrawer({ artifact, onClose }: { artifact: PublishedArtifact; on
       ...(artifact.stats ?? []).map(([label, value]) => ({ key: label, label, children: value })),
     ]} />
     {artifact.kind === 'index'
-      ? <p className="muted">索引类知识通过 MCP 在线查询，开发者在 Talents 应用后由 iCode 直接调用，始终使用最新版本。</p>
+      ? <><p className="muted">索引类知识通过 MCP 在线查询，可配置 MCP 在线查询远端索引。</p>{artifact.id === 'a-cg-java' && <Button href={talentLink('review', { projectId: artifact.projectId ?? undefined }) + '&id=' + encodeURIComponent(artifact.id)} target="_blank" rel="noreferrer">查看真实代码图谱</Button>}</>
       : <>{artifact.files.length > 1 && <Segmented className="talents-file-tabs" value={path} onChange={value => setPath(value as string)} options={artifact.files.map(item => ({ value: item.path, label: item.title }))} />}
         {file && <FileView artifact={artifact} file={file} />}</>}
   </Drawer>;
@@ -74,10 +74,10 @@ export function ProjectKnowledge({ projectId, compact = false }: { projectId: st
         <div className="project-material-list">{group.items.map(artifact => <div className="project-material" key={artifact.id} data-artifact={artifact.id}><div>
           <strong>{artifact.name}</strong><p>{artifact.description}</p>
           <small>{artifact.capabilityName} · v{artifact.version} · 发布于 {day(artifact.publishedAt)}{artifact.note ? ' · ' + artifact.note : ''}</small>
-        </div><Tag>{deliveryNames[artifact.delivery]}</Tag><Button size="small" onClick={() => setOpened(artifact)}>查看</Button></div>)}</div></section>)
-      : <><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Talents 尚未为此项目发布知识" /><p className="muted">Talents 读取本项目对接的代码仓与设计文档挖掘知识，Owner 审阅发布后在这里展示。</p></>}
+        </div>{artifact.projectId === null && <Tag>团队知识</Tag>}<Tag>{deliveryNames[artifact.delivery]}</Tag><Button size="small" onClick={() => setOpened(artifact)}>查看</Button></div>)}</div></section>)
+      : <><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可展示的项目知识" /><p className="muted">文件类知识通过 PR 提交到代码仓，由开发者审阅合入。</p></>}
     <Space wrap className="card-actions">
-      <Button type={ready ? 'default' : 'primary'} href={talentLink('knowledge', { projectId, role })}>{role === 'owner' ? '在 Talents 挖掘知识' : '在 Talents 应用知识'}</Button>
+      {role === 'owner' && <Button href={talentLink('knowledge', { projectId, role })}>在 Talents 挖掘知识</Button>}
       {!loading && <Button size="small" onClick={() => setAttempt(value => value + 1)}>刷新</Button>}
     </Space>
     {opened?.projectId === projectId && <ArtifactDrawer key={opened.id + ":" + opened.version} artifact={opened} onClose={() => setOpened(null)} />}

@@ -1,7 +1,8 @@
 import { projectMembers, projectTeam } from '../teams-domain.js';
 import { ProjectTaskManagement } from '../components/project-task-management.js';
 import { displayProjectDescription } from '../display-text.js';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getTalentsKnowledge, type TalentsSkillVersion } from '../api.js';
 import { Button, Descriptions, Form, Input, Modal, Space, Tabs, Tag } from 'antd';
 import { FileTextOutlined, PlusOutlined } from '@ant-design/icons';
 import { useDemo } from '../context.js';
@@ -14,6 +15,9 @@ import { ProjectKnowledge } from '../components/project-knowledge.js';
 
 export function ProjectContent() {
   const { state, data, role, navigate } = useDemo();
+  // Project skills Talents wrote a new version of (applying a trajectory diagnosis suggestion) show that version.
+  const [talentsSkills, setTalentsSkills] = useState<TalentsSkillVersion[]>([]);
+  useEffect(() => { let live = true; getTalentsKnowledge('carddemo').then(value => { if (live) setTalentsSkills(value.skills ?? []); }, () => undefined); return () => { live = false; }; }, [state.revision]);
   return <ProjectContentTemplate projectId="carddemo" name={state.workspace.project.name} description={displayProjectDescription(state.workspace.project.description)} origin={<Origin kind="simulated" />}
     information={[
       { key: 'team', label: '所属团队', children: projectTeam(state, 'carddemo').name }, { key: 'owner', label: '项目 Owner', children: '林悦' },
@@ -24,7 +28,11 @@ export function ProjectContent() {
     assets={<ProjectAssets projectId="carddemo" />}
     knowledge={<ProjectKnowledge projectId="carddemo" />}
     requirements={<><RequirementMaterials /><div className="card-actions"><Button type="primary" onClick={() => navigate('projects?tab=delivery&node=prepare')}>进入需求澄清</Button></div></>}
-    skills={data.skills.filter(skill => data.blueprint.skill_groups.some(group => group.skills.includes(skill.name))).map(skill => ({ ...skill, source: '项目采用的导入素材', displayPath: skill.path.slice(skill.path.indexOf('/workspace/') + 1), content: data.skillContents[skill.name] }))}
+    skills={data.skills.filter(skill => data.blueprint.skill_groups.some(group => group.skills.includes(skill.name))).map(skill => {
+      const base = { ...skill, source: '项目采用的导入素材', displayPath: skill.path.slice(skill.path.indexOf('/workspace/') + 1), content: data.skillContents[skill.name] };
+      const written = talentsSkills.find(version => version.skillId === skill.name);
+      return written ? { ...base, version: written.version, source: `Talents 轨迹诊断改进 · 基于 ${written.basedOn.version} · ${written.note}`, content: written.files.find(file => file.path === 'SKILL.md')?.content ?? base.content } : base;
+    })}
     skillFooter={<div className="project-skill-context"><div><strong>本次交付配置</strong><p>前端 Skill {state.adoptedSkill} · Code Agent {state.adoptedAgent} · Review / 测试 / 安全扫描分别保留依据</p><Tag color="green">项目内可用</Tag></div><Space wrap><Button type="primary" onClick={() => navigate('projects?tab=delivery&node=prepare')}>在需求澄清中选用</Button><Button onClick={() => navigate('resources')}>查看共享能力</Button>{role === 'owner' && <Button onClick={() => navigate('connections?tab=quality')}>维护质量能力</Button>}</Space></div>}
   />;
 }

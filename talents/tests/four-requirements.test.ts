@@ -16,7 +16,7 @@ const hash=(text:Buffer|string)=>createHash('sha256').update(text).digest('hex')
 const scenarioIds=new Set([...fourRequirementScenarios,...fourRequirementScenariosV2].map(s=>s.artifactId));
 const legacySeed=()=>{const state=seedState();state.artifacts=state.artifacts.filter(a=>!scenarioIds.has(a.id));return state;};
 test('four source artifacts append atomically without replacing user data or claiming execution',()=>{
- const state=legacySeed();state.tasks.push({id:'user-run',status:'running'});state.dev.applied['existing']={version:2};
+ const state=legacySeed();state.tasks.push({id:'user-run',status:'running'});state.skillVersions.push({projectId:'carddemo',skillId:'existing',version:'2.0.0',basedOn:{version:'1.0.0'},at:'2026-10-28',note:'user skill',from:{artifact:'user-artifact',suggestion:'user-suggestion'},files:[]});
  const before=structuredClone(state),added=appendFourRequirements(state);
  assert.equal(added.added.length,4);assert.deepEqual(state,before);assert.deepEqual({...added.state,artifacts:added.state.artifacts.filter(a=>!added.added.includes(a.id))},before);
  assert.equal(appendFourRequirements(added.state).state,added.state);
@@ -57,12 +57,12 @@ test('explicit v2 registration retains every v1 artifact and exported full text'
 test('fresh initialization and explicit reset publish both versions without migrating existing state',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'four-input-seed-')),path=join(directory,'state.json');
  try{
-  assert.equal(SEED_VERSION,8,'additive sources must not reset an existing v8 workspace');
+  assert.equal(SEED_VERSION,12,'source registration keeps the Owner-only schema version');
   const fresh=new Store(path);await fresh.init();
   const expected=[...scenarioIds].sort();
   assert.deepEqual(fresh.state.artifacts.filter(a=>scenarioIds.has(a.id)).map(a=>a.id).sort(),expected);
   assert.deepEqual(fresh.state.tasks,legacySeed().tasks,'source registration does not create execution tasks');
-  const legacy=legacySeed();legacy.revision=37;legacy.tasks.push({id:'user-task',status:'running'});legacy.dev.applied['user-artifact']={version:9};
+  const legacy=legacySeed();legacy.revision=37;legacy.tasks.push({id:'user-task',status:'running'});legacy.skillVersions.push({projectId:'carddemo',skillId:'user-skill',version:'9.0.0',basedOn:{version:'8.0.0'},at:'2026-10-28',note:'user skill',from:{artifact:'user-artifact',suggestion:'user-suggestion'},files:[]});
   const bytes=JSON.stringify(legacy,null,2)+'\n';await writeFile(path,bytes);
   const existing=new Store(path);await existing.init();
   assert.deepEqual(existing.state,legacy);assert.equal(await readFile(path,'utf8'),bytes);

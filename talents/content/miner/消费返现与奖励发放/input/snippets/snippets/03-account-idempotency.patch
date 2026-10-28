@@ -1,0 +1,483 @@
+diff --git a/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/application/AccountApplicationService.java b/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/application/AccountApplicationService.java
+new file mode 100644
+index 0000000..161896e
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/application/AccountApplicationService.java
+@@ -0,0 +1,82 @@
++package com.carddemo.account.application;
++
++import com.carddemo.account.domain.exception.NotFoundException;
++import com.carddemo.account.domain.model.Account;
++import com.carddemo.account.domain.model.AccountDetails;
++import com.carddemo.account.domain.model.RewardCredit;
++import com.carddemo.account.domain.repository.AccountRepository;
++import com.carddemo.account.domain.repository.RewardCreditRepository;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++import java.util.List;
++
++/**
++ * 账户用例服务。对应遗留程序 COACTVWC（查询）、COACTUPC（维护）、
++ * CBTRN02C（记账）、COBIL00C（还款）、CBACT04C（利息入账）。
++ */
++@Service
++@Transactional
++public class AccountApplicationService {
++
++    private final AccountRepository accounts;
++    private final RewardCreditRepository rewardCredits;
++
++    public AccountApplicationService(AccountRepository accounts, RewardCreditRepository rewardCredits) {
++        this.accounts = accounts;
++        this.rewardCredits = rewardCredits;
++    }
++
++    @Transactional(readOnly = true)
++    public Account getById(String accountId) {
++        return accounts.findByAccountId(accountId)
++                .orElseThrow(() -> new NotFoundException("ACCOUNT_NOT_FOUND",
++                        "Account " + accountId + " not found"));
++    }
++
++    @Transactional(readOnly = true)
++    public List<Account> findAll() {
++        return accounts.findAllAccounts();
++    }
++
++    public Account update(String accountId, AccountDetails details) {
++        Account account = getById(accountId);
++        account.applyDetails(details);
++        return accounts.saveAccount(account);
++    }
++
++    public Account applyPosting(String accountId, BigDecimal amount) {
++        Account account = getById(accountId);
++        account.applyPosting(amount);
++        return accounts.saveAccount(account);
++    }
++
++    public Account applyBillPayment(String accountId, BigDecimal amount) {
++        Account account = getById(accountId);
++        account.applyBillPayment(amount);
++        return accounts.saveAccount(account);
++    }
++
++    public Account accrueInterest(String accountId, BigDecimal amount) {
++        Account account = getById(accountId);
++        account.accrueInterest(amount);
++        return accounts.saveAccount(account);
++    }
++
++    /**
++     * 营销返现入账（幂等）：同一 rewardId 重复调用只入账一次。
++     */
++    public Account creditCashback(String accountId, String rewardId, String campaignId, BigDecimal amount) {
++        if (rewardCredits.existsByRewardId(rewardId)) {
++            return getById(accountId);
++        }
++        Account account = getById(accountId);
++        account.applyCashback(amount);
++        Account saved = accounts.saveAccount(account);
++        rewardCredits.saveCredit(new RewardCredit(rewardId, accountId, campaignId, amount,
++                LocalDateTime.now()));
++        return saved;
++    }
++}
+diff --git a/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/domain/model/Account.java b/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/domain/model/Account.java
+new file mode 100644
+index 0000000..b7ced16
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/domain/model/Account.java
+@@ -0,0 +1,236 @@
++package com.carddemo.account.domain.model;
++
++import com.carddemo.account.domain.exception.BusinessRuleException;
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++import jakarta.persistence.Version;
++
++import java.math.BigDecimal;
++import java.time.LocalDate;
++import java.util.Objects;
++
++/**
++ * 账户聚合根。对应遗留 VSAM 文件 ACCTDAT，记录布局见 copybook CVACT01Y（RECLN 300）。
++ */
++@Entity
++@Table(name = "account")
++public class Account {
++
++    private static final BigDecimal ZERO = new BigDecimal("0.00");
++
++    @Id
++    @Column(name = "account_id", length = 11, nullable = false, updatable = false)
++    private String accountId;
++
++    @Column(name = "active_status", length = 1, nullable = false)
++    private String activeStatus;
++
++    @Column(name = "current_balance", nullable = false, precision = 12, scale = 2)
++    private BigDecimal currentBalance;
++
++    @Column(name = "credit_limit", nullable = false, precision = 12, scale = 2)
++    private BigDecimal creditLimit;
++
++    @Column(name = "cash_credit_limit", nullable = false, precision = 12, scale = 2)
++    private BigDecimal cashCreditLimit;
++
++    @Column(name = "open_date", nullable = false)
++    private LocalDate openDate;
++
++    @Column(name = "expiration_date", nullable = false)
++    private LocalDate expirationDate;
++
++    @Column(name = "reissue_date", nullable = false)
++    private LocalDate reissueDate;
++
++    @Column(name = "current_cycle_credit", nullable = false, precision = 12, scale = 2)
++    private BigDecimal currentCycleCredit;
++
++    @Column(name = "current_cycle_debit", nullable = false, precision = 12, scale = 2)
++    private BigDecimal currentCycleDebit;
++
++    @Column(name = "address_zip", length = 10)
++    private String addressZip;
++
++    @Column(name = "group_id", length = 10)
++    private String groupId;
++
++    @Version
++    @Column(name = "version", nullable = false)
++    private long version;
++
++    protected Account() {
++        // for JPA
++    }
++
++    public Account(String accountId, AccountDetails details) {
++        this.accountId = accountId;
++        applyDetails(details);
++        this.version = 0;
++    }
++
++    /**
++     * BR-POST-006：记账。amount 为正表示消费/借款（增加欠款与本期贷方），为负表示还款/冲正。
++     */
++    public void applyPosting(BigDecimal amount) {
++        Objects.requireNonNull(amount, "amount must not be null");
++        currentBalance = currentBalance.add(amount);
++        if (amount.signum() >= 0) {
++            currentCycleCredit = currentCycleCredit.add(amount);
++        } else {
++            currentCycleDebit = currentCycleDebit.add(amount);
++        }
++    }
++
++    /**
++     * BR-BILL-001/002：账单支付，金额恒等于当前余额，仅减少余额，不改本期贷/借累计。
++     */
++    public void applyBillPayment(BigDecimal amount) {
++        if (amount.signum() <= 0) {
++            throw new BusinessRuleException("INVALID_PAYMENT_AMOUNT", "Payment amount must be greater than zero.");
++        }
++        if (currentBalance.signum() <= 0) {
++            throw new BusinessRuleException("NOTHING_TO_PAY", "You have nothing to pay...");
++        }
++        if (amount.compareTo(currentBalance) > 0) {
++            throw new BusinessRuleException("PAYMENT_EXCEEDS_BALANCE",
++                    "Payment amount must not exceed the current balance.");
++        }
++        currentBalance = currentBalance.subtract(amount);
++    }
++
++    /**
++     * BR-INT-001：月度利息入账，并清零本期贷/借累计（CBACT04C 1050-UPDATE-ACCOUNT）。
++     */
++    public void accrueInterest(BigDecimal interest) {
++        Objects.requireNonNull(interest, "interest must not be null");
++        currentBalance = currentBalance.add(interest);
++        currentCycleCredit = ZERO;
++        currentCycleDebit = ZERO;
++    }
++
++    /**
++     * NR-REWARD-01：营销返现入账，直接冲减欠款；余额可为负（表示溢缴/贷记）。
++     * 幂等由调用方以 rewardId 保证（见 account_service.reward_credit）。
++     */
++    public void applyCashback(BigDecimal amount) {
++        if (amount == null || amount.signum() <= 0) {
++            throw new BusinessRuleException("INVALID_CASHBACK_AMOUNT",
++                    "Cashback amount must be greater than zero.");
++        }
++        currentBalance = currentBalance.subtract(amount);
++    }
++
++    public boolean matches(AccountDetails details) {
++        return activeStatus.equals(details.activeStatus())
++                && currentBalance.compareTo(details.currentBalance()) == 0
++                && creditLimit.compareTo(details.creditLimit()) == 0
++                && cashCreditLimit.compareTo(details.cashCreditLimit()) == 0
++                && openDate.equals(details.openDate())
++                && expirationDate.equals(details.expirationDate())
++                && reissueDate.equals(details.reissueDate())
++                && currentCycleCredit.compareTo(details.currentCycleCredit()) == 0
++                && currentCycleDebit.compareTo(details.currentCycleDebit()) == 0
++                && Objects.equals(addressZip, details.addressZip())
++                && Objects.equals(groupId, details.groupId());
++    }
++
++    /**
++     * R-ACTUP-08/09/10：账户字段校验与更新。
++     */
++    public void applyDetails(AccountDetails details) {
++        Objects.requireNonNull(details, "details must not be null");
++        if (!"Y".equals(details.activeStatus()) && !"N".equals(details.activeStatus())) {
++            throw new BusinessRuleException("INVALID_ACCOUNT_STATUS", "Account Status must be Y or N.");
++        }
++        requireAmount(details.currentBalance(), "Current Balance");
++        requireAmount(details.creditLimit(), "Credit Limit");
++        requireAmount(details.cashCreditLimit(), "Cash Credit Limit");
++        requireAmount(details.currentCycleCredit(), "Current Cycle Credit Limit");
++        requireAmount(details.currentCycleDebit(), "Current Cycle Debit Limit");
++        requireDate(details.openDate(), "Open Date");
++        requireDate(details.expirationDate(), "Expiration Date");
++        requireDate(details.reissueDate(), "Reissue Date");
++
++        this.activeStatus = details.activeStatus();
++        this.currentBalance = details.currentBalance();
++        this.creditLimit = details.creditLimit();
++        this.cashCreditLimit = details.cashCreditLimit();
++        this.openDate = details.openDate();
++        this.expirationDate = details.expirationDate();
++        this.reissueDate = details.reissueDate();
++        this.currentCycleCredit = details.currentCycleCredit();
++        this.currentCycleDebit = details.currentCycleDebit();
++        this.addressZip = details.addressZip();
++        this.groupId = details.groupId();
++    }
++
++    private static void requireAmount(BigDecimal value, String field) {
++        if (value == null) {
++            throw new BusinessRuleException("MISSING_AMOUNT", field + " must be supplied.");
++        }
++    }
++
++    private static void requireDate(LocalDate value, String field) {
++        if (value == null) {
++            throw new BusinessRuleException("MISSING_DATE", field + " must be supplied.");
++        }
++        if (value.getYear() < 1900 || value.getYear() > 2099) {
++            throw new BusinessRuleException("INVALID_DATE", field + " : Century is not valid.");
++        }
++    }
++
++    public String getAccountId() {
++        return accountId;
++    }
++
++    public String getActiveStatus() {
++        return activeStatus;
++    }
++
++    public BigDecimal getCurrentBalance() {
++        return currentBalance;
++    }
++
++    public BigDecimal getCreditLimit() {
++        return creditLimit;
++    }
++
++    public BigDecimal getCashCreditLimit() {
++        return cashCreditLimit;
++    }
++
++    public LocalDate getOpenDate() {
++        return openDate;
++    }
++
++    public LocalDate getExpirationDate() {
++        return expirationDate;
++    }
++
++    public LocalDate getReissueDate() {
++        return reissueDate;
++    }
++
++    public BigDecimal getCurrentCycleCredit() {
++        return currentCycleCredit;
++    }
++
++    public BigDecimal getCurrentCycleDebit() {
++        return currentCycleDebit;
++    }
++
++    public String getAddressZip() {
++        return addressZip;
++    }
++
++    public String getGroupId() {
++        return groupId;
++    }
++
++    public long getVersion() {
++        return version;
++    }
++}
+diff --git a/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/domain/model/RewardCredit.java b/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/domain/model/RewardCredit.java
+new file mode 100644
+index 0000000..e7cfe38
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/account-service/src/main/java/com/carddemo/account/domain/model/RewardCredit.java
+@@ -0,0 +1,66 @@
++package com.carddemo.account.domain.model;
++
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++/**
++ * 返现入账幂等记录：同一 rewardId 只允许入账一次（NR-REWARD-01）。
++ */
++@Entity
++@Table(name = "reward_credit")
++public class RewardCredit {
++
++    @Id
++    @Column(name = "reward_id", length = 36, nullable = false, updatable = false)
++    private String rewardId;
++
++    @Column(name = "account_id", length = 11, nullable = false)
++    private String accountId;
++
++    @Column(name = "campaign_id", length = 36, nullable = false)
++    private String campaignId;
++
++    @Column(name = "amount", nullable = false, precision = 12, scale = 2)
++    private BigDecimal amount;
++
++    @Column(name = "created_at", nullable = false)
++    private LocalDateTime createdAt;
++
++    protected RewardCredit() {
++        // for JPA
++    }
++
++    public RewardCredit(String rewardId, String accountId, String campaignId, BigDecimal amount,
++                        LocalDateTime createdAt) {
++        this.rewardId = rewardId;
++        this.accountId = accountId;
++        this.campaignId = campaignId;
++        this.amount = amount;
++        this.createdAt = createdAt;
++    }
++
++    public String getRewardId() {
++        return rewardId;
++    }
++
++    public String getAccountId() {
++        return accountId;
++    }
++
++    public String getCampaignId() {
++        return campaignId;
++    }
++
++    public BigDecimal getAmount() {
++        return amount;
++    }
++
++    public LocalDateTime getCreatedAt() {
++        return createdAt;
++    }
++}
+diff --git a/workspace/carddemo-java-1025/services/account-service/src/main/resources/db/migration/V3__reward_credit.sql b/workspace/carddemo-java-1025/services/account-service/src/main/resources/db/migration/V3__reward_credit.sql
+new file mode 100644
+index 0000000..ab92240
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/account-service/src/main/resources/db/migration/V3__reward_credit.sql
+@@ -0,0 +1,9 @@
++CREATE TABLE reward_credit (
++    reward_id   VARCHAR(36) PRIMARY KEY,
++    account_id  VARCHAR(11)   NOT NULL,
++    campaign_id VARCHAR(36)   NOT NULL,
++    amount      NUMERIC(12, 2) NOT NULL,
++    created_at  TIMESTAMP      NOT NULL
++);
++
++CREATE INDEX idx_reward_credit_account ON reward_credit (account_id);
+diff --git a/workspace/carddemo-java-1025/services/marketing-service/src/main/resources/db/migration/V1__marketing_schema.sql b/workspace/carddemo-java-1025/services/marketing-service/src/main/resources/db/migration/V1__marketing_schema.sql
+new file mode 100644
+index 0000000..04daac4
+--- /dev/null
++++ b/workspace/carddemo-java-1025/services/marketing-service/src/main/resources/db/migration/V1__marketing_schema.sql
+@@ -0,0 +1,60 @@
++CREATE TABLE campaign (
++    campaign_id              VARCHAR(36) PRIMARY KEY,
++    name                     VARCHAR(80)  NOT NULL,
++    description              VARCHAR(300),
++    campaign_type            VARCHAR(32)  NOT NULL,
++    status                   VARCHAR(16)  NOT NULL,
++    start_at                 TIMESTAMP    NOT NULL,
++    end_at                   TIMESTAMP    NOT NULL,
++    target_group_id          VARCHAR(10),
++    category_code            VARCHAR(4),
++    min_transaction_amount   NUMERIC(12, 2) NOT NULL,
++    reward_rate              NUMERIC(6, 4),
++    fixed_reward_amount      NUMERIC(12, 2),
++    max_reward_per_transaction NUMERIC(12, 2),
++    max_rewards_per_card     INTEGER,
++    budget                   NUMERIC(12, 2) NOT NULL,
++    consumed_amount          NUMERIC(12, 2) NOT NULL,
++    points_multiplier        NUMERIC(5, 2),
++    enrollment_required      BOOLEAN      NOT NULL,
++    created_at               TIMESTAMP    NOT NULL,
++    updated_at               TIMESTAMP    NOT NULL,
++    version                  BIGINT       NOT NULL DEFAULT 0
++);
++
++CREATE INDEX idx_campaign_status_period ON campaign (status, start_at, end_at);
++
++CREATE TABLE enrollment (
++    enrollment_id VARCHAR(36) PRIMARY KEY,
++    campaign_id   VARCHAR(36) NOT NULL,
++    card_number   VARCHAR(16) NOT NULL,
++    account_id    VARCHAR(11) NOT NULL,
++    customer_id   VARCHAR(9),
++    enrolled_at   TIMESTAMP   NOT NULL,
++    version       BIGINT      NOT NULL DEFAULT 0,
++    CONSTRAINT uk_enrollment_campaign_card UNIQUE (campaign_id, card_number)
++);
++
++CREATE INDEX idx_enrollment_card ON enrollment (card_number);
++
++CREATE TABLE reward_grant (
++    reward_id       VARCHAR(36) PRIMARY KEY,
++    campaign_id     VARCHAR(36) NOT NULL,
++    transaction_id  VARCHAR(16) NOT NULL,
++    card_number     VARCHAR(16) NOT NULL,
++    account_id      VARCHAR(11) NOT NULL,
++    customer_id     VARCHAR(9),
++    reward_type     VARCHAR(16) NOT NULL,
++    reward_amount   NUMERIC(12, 2) NOT NULL,
++    reward_points   INTEGER       NOT NULL,
++    status          VARCHAR(16)   NOT NULL,
++    failure_reason  VARCHAR(200),
++    created_at      TIMESTAMP     NOT NULL,
++    granted_at      TIMESTAMP,
++    version         BIGINT        NOT NULL DEFAULT 0,
++    CONSTRAINT uk_reward_campaign_txn UNIQUE (campaign_id, transaction_id)
++);
++
++CREATE INDEX idx_reward_account ON reward_grant (account_id, created_at);
++CREATE INDEX idx_reward_card ON reward_grant (card_number);
++CREATE INDEX idx_reward_campaign ON reward_grant (campaign_id);

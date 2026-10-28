@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "b5dc31fe-3c77-4532-8dd5-93668f0ce6d4",
+  "name": "账户余额乐观锁更新",
+  "description": "账户余额更新并发控制的乐观锁实现范式：实体版本字段、事务内余额变更与统一 409 冲突响应",
+  "scenario": "账户余额乐观锁更新：实现账户余额更新的乐观锁机制，包含实体版本字段、事务内余额变更及并发更新冲突的统一错误响应。",
+  "scenarioSource": "user",
+  "mode": "diff",
+  "repository": {
+    "path": "/Users/doris/work/temp/carddemo-java-1025",
+    "branch": "master",
+    "commit": "b0823de07b463f51e5066457d60b608f7b4174db"
+  },
+  "snippets": [
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-account-concurrency/snippets/01-account-update.patch",
+      "archived": "input/snippets/snippets/01-account-update.patch",
+      "sha256": "dc50bf56826caffaea2a732ae7e3543c484b6f7a2d408fc399f92f1da44d7a74",
+      "size": 14600
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-account-concurrency/snippets/02-error-response.patch",
+      "archived": "input/snippets/snippets/02-error-response.patch",
+      "sha256": "158ab24b8d0456c0b190a39ff12f97099dd6b30598ea34a4ad1af197dc471e57",
+      "size": 4783
+    },
+    {
+      "original": "/Users/doris/work/temp/docs/demo/miner-diff-account-concurrency/snippets/03-domain-tests.patch",
+      "archived": "input/snippets/snippets/03-domain-tests.patch",
+      "sha256": "7542647bcb953a30301afdb66e0088916aaccdc9cc3c6b0a0200228229fb347c",
+      "size": 4278
+    }
+  ],
+  "template": {
+    "kind": "default",
+    "original": null,
+    "archived": "input/template.md",
+    "sha256": "c5f0ede39dccccd21d003707cd548b9ca8bd2f76f2e20c620e01218187f2211d"
+  },
+  "engine": {
+    "id": "icode-miner-diff",
+    "version": "0.1.0"
+  },
+  "executionId": "8d567dd7-d4ba-4bae-b9e3-ca7704de9527",
+  "createdAt": "2026-10-27T18:45:20+08:00"
+}

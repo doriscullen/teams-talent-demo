@@ -18,6 +18,7 @@ import { registeredTaskSkill } from '../../teams/server/talent-intake.ts';
 import { fourRequirementScenarios, fourRequirementScenariosV2, fourRequirementNodes } from '../../shared/four-requirement-scenarios.ts';
 import { sharedPaths, type TalentsKnowledge } from '../../shared/contracts.ts';
 import { seedState } from '../server/seed.ts';
+import { withCodegraph } from '../server/codegraph.ts';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const scenarios = [...fourRequirementScenarios, ...fourRequirementScenariosV2];
@@ -93,7 +94,7 @@ test('empty startup and reset publish all eight sources; Teams selects their rea
     assert.deepEqual(await readFile(join(talentState, 'state.json')), beforePreview, 'documented copy/preview command must not write state');
     const published = JSON.parse(await readFile(join(shared, sharedPaths.talentsKnowledge), 'utf8')) as TalentsKnowledge;
     const knowledge = await get<{ artifacts: TalentsKnowledge['artifacts'] }>(teamsOrigin, '/api/talents/knowledge?project=carddemo');
-    assert.deepEqual(knowledge.artifacts, published.artifacts.filter(a => a.projectId === 'carddemo'));
+    assert.deepEqual(knowledge.artifacts, published.artifacts.filter(a => a.projectId === 'carddemo' || a.projectId === null));
     let fileCount = 0, selectionCount = 0;
     for (const [index, scenario] of scenarios.entries()) {
       const artifact = knowledge.artifacts.find(a => a.id === scenario.artifactId)!;
@@ -129,7 +130,9 @@ test('empty startup and reset publish all eight sources; Teams selects their rea
     const response = await fetch(talentOrigin + '/api/reset', { method: 'POST', headers: { origin: talentOrigin, 'content-type': 'application/json' }, body: '{}' });
     assert.equal(response.status, 200, await response.clone().text());
     const afterReset = await get<{ state: ReturnType<typeof seedState> }>(talentOrigin, '/api/bootstrap');
-    assert.deepEqual(afterReset.state.artifacts, seedState().artifacts);
+    assert.deepEqual(afterReset.state.artifacts, withCodegraph(seedState()).artifacts);
+    const persistedReset = JSON.parse(await readFile(join(talentState, 'state.json'), 'utf8')) as ReturnType<typeof seedState>;
+    assert.deepEqual(persistedReset.artifacts, seedState().artifacts, 'display-only CodeGraph metadata must not be stored');
     const resetExport = JSON.parse(await readFile(join(shared, sharedPaths.talentsKnowledge), 'utf8')) as TalentsKnowledge;
     assert.deepEqual(resetExport.artifacts, published.artifacts);
     // A normal restart preserves a valid existing state byte-for-byte, including its revision.

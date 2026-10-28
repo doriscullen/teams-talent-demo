@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "4afb868c-410f-4109-a8cd-edac07937a95",
+  "name": "消费返现与奖励发放",
+  "description": "实现消费后返现/积分奖励的开发范式：活动资格校验、按比例计算奖励、入账后触发发奖、幂等入账与失败重试",
+  "scenario": "实现餐饮消费返现，包含活动资格校验、按比例计算奖励、消费入账后发奖、幂等入账及失败重试。",
+  "scenarioSource": "user",
+  "mode": "diff",
+  "repository": {
+    "path": "/Users/doris/work/temp/carddemo-java-1025",
+    "branch": "master",
+    "commit": "ea7bdb196f37f4cf0dc243bcc638e717a519fbb5"
+  },
+  "snippets": [
+    {
+      "original": "/Users/doris/work/carddemo/teams-talent-demo/workspace/carddemo-java-1025/docs/demo/miner-diff-cashback/snippets/01-domain.patch",
+      "archived": "input/snippets/snippets/01-domain.patch",
+      "sha256": "d95f125400c193ec2c243827c3ad5953cee1a8674aa139e308d5d13001d45e51",
+      "size": 20474
+    },
+    {
+      "original": "/Users/doris/work/carddemo/teams-talent-demo/workspace/carddemo-java-1025/docs/demo/miner-diff-cashback/snippets/02-evaluation-and-posting.patch",
+      "archived": "input/snippets/snippets/02-evaluation-and-posting.patch",
+      "sha256": "0531e15315f1fd58e6ed93d02283bab3d9adee6466f4e6c290911037fa06636f",
+      "size": 18205
+    },
+    {
+      "original": "/Users/doris/work/carddemo/teams-talent-demo/workspace/carddemo-java-1025/docs/demo/miner-diff-cashback/snippets/03-account-idempotency.patch",
+      "archived": "input/snippets/snippets/03-account-idempotency.patch",
+      "sha256": "cd18451a0a3b5ef44360f7054b8501cae18223fcb957282e9aae1257d6d01357",
+      "size": 18438
+    },
+    {
+      "original": "/Users/doris/work/carddemo/teams-talent-demo/workspace/carddemo-java-1025/docs/demo/miner-diff-cashback/snippets/04-tests.patch",
+      "archived": "input/snippets/snippets/04-tests.patch",
+      "sha256": "facce6cab88c8166b6831e3e25347af7bfa844882a2604cc264a314018683668",
+      "size": 17305
+    }
+  ],
+  "template": {
+    "kind": "default",
+    "original": null,
+    "archived": "input/template.md",
+    "sha256": "c5f0ede39dccccd21d003707cd548b9ca8bd2f76f2e20c620e01218187f2211d"
+  },
+  "engine": {
+    "id": "icode-miner-diff",
+    "version": "0.1.0"
+  },
+  "executionId": "68b81cc0-11b9-410a-925c-483751ef48c4",
+  "createdAt": "2026-10-27T11:06:20+08:00"
+}

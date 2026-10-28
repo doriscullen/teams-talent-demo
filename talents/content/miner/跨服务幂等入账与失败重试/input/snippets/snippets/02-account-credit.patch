@@ -1,0 +1,191 @@
+diff --git a/services/account-service/src/main/java/com/carddemo/account/application/AccountApplicationService.java b/services/account-service/src/main/java/com/carddemo/account/application/AccountApplicationService.java
+new file mode 100644
+index 0000000..161896e
+--- /dev/null
++++ b/services/account-service/src/main/java/com/carddemo/account/application/AccountApplicationService.java
+@@ -0,0 +1,82 @@
++package com.carddemo.account.application;
++
++import com.carddemo.account.domain.exception.NotFoundException;
++import com.carddemo.account.domain.model.Account;
++import com.carddemo.account.domain.model.AccountDetails;
++import com.carddemo.account.domain.model.RewardCredit;
++import com.carddemo.account.domain.repository.AccountRepository;
++import com.carddemo.account.domain.repository.RewardCreditRepository;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++import java.util.List;
++
++/**
++ * 账户用例服务。对应遗留程序 COACTVWC（查询）、COACTUPC（维护）、
++ * CBTRN02C（记账）、COBIL00C（还款）、CBACT04C（利息入账）。
++ */
++@Service
++@Transactional
++public class AccountApplicationService {
++
++    private final AccountRepository accounts;
++    private final RewardCreditRepository rewardCredits;
++
++    public AccountApplicationService(AccountRepository accounts, RewardCreditRepository rewardCredits) {
++        this.accounts = accounts;
++        this.rewardCredits = rewardCredits;
++    }
++
++    @Transactional(readOnly = true)
++    public Account getById(String accountId) {
++        return accounts.findByAccountId(accountId)
++                .orElseThrow(() -> new NotFoundException("ACCOUNT_NOT_FOUND",
++                        "Account " + accountId + " not found"));
++    }
++
++    @Transactional(readOnly = true)
++    public List<Account> findAll() {
++        return accounts.findAllAccounts();
++    }
++
++    public Account update(String accountId, AccountDetails details) {
++        Account account = getById(accountId);
++        account.applyDetails(details);
++        return accounts.saveAccount(account);
++    }
++
++    public Account applyPosting(String accountId, BigDecimal amount) {
++        Account account = getById(accountId);
++        account.applyPosting(amount);
++        return accounts.saveAccount(account);
++    }
++
++    public Account applyBillPayment(String accountId, BigDecimal amount) {
++        Account account = getById(accountId);
++        account.applyBillPayment(amount);
++        return accounts.saveAccount(account);
++    }
++
++    public Account accrueInterest(String accountId, BigDecimal amount) {
++        Account account = getById(accountId);
++        account.accrueInterest(amount);
++        return accounts.saveAccount(account);
++    }
++
++    /**
++     * 营销返现入账（幂等）：同一 rewardId 重复调用只入账一次。
++     */
++    public Account creditCashback(String accountId, String rewardId, String campaignId, BigDecimal amount) {
++        if (rewardCredits.existsByRewardId(rewardId)) {
++            return getById(accountId);
++        }
++        Account account = getById(accountId);
++        account.applyCashback(amount);
++        Account saved = accounts.saveAccount(account);
++        rewardCredits.saveCredit(new RewardCredit(rewardId, accountId, campaignId, amount,
++                LocalDateTime.now()));
++        return saved;
++    }
++}
+diff --git a/services/account-service/src/main/java/com/carddemo/account/domain/model/RewardCredit.java b/services/account-service/src/main/java/com/carddemo/account/domain/model/RewardCredit.java
+new file mode 100644
+index 0000000..e7cfe38
+--- /dev/null
++++ b/services/account-service/src/main/java/com/carddemo/account/domain/model/RewardCredit.java
+@@ -0,0 +1,66 @@
++package com.carddemo.account.domain.model;
++
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++/**
++ * 返现入账幂等记录：同一 rewardId 只允许入账一次（NR-REWARD-01）。
++ */
++@Entity
++@Table(name = "reward_credit")
++public class RewardCredit {
++
++    @Id
++    @Column(name = "reward_id", length = 36, nullable = false, updatable = false)
++    private String rewardId;
++
++    @Column(name = "account_id", length = 11, nullable = false)
++    private String accountId;
++
++    @Column(name = "campaign_id", length = 36, nullable = false)
++    private String campaignId;
++
++    @Column(name = "amount", nullable = false, precision = 12, scale = 2)
++    private BigDecimal amount;
++
++    @Column(name = "created_at", nullable = false)
++    private LocalDateTime createdAt;
++
++    protected RewardCredit() {
++        // for JPA
++    }
++
++    public RewardCredit(String rewardId, String accountId, String campaignId, BigDecimal amount,
++                        LocalDateTime createdAt) {
++        this.rewardId = rewardId;
++        this.accountId = accountId;
++        this.campaignId = campaignId;
++        this.amount = amount;
++        this.createdAt = createdAt;
++    }
++
++    public String getRewardId() {
++        return rewardId;
++    }
++
++    public String getAccountId() {
++        return accountId;
++    }
++
++    public String getCampaignId() {
++        return campaignId;
++    }
++
++    public BigDecimal getAmount() {
++        return amount;
++    }
++
++    public LocalDateTime getCreatedAt() {
++        return createdAt;
++    }
++}
+diff --git a/services/account-service/src/main/java/com/carddemo/account/domain/repository/RewardCreditRepository.java b/services/account-service/src/main/java/com/carddemo/account/domain/repository/RewardCreditRepository.java
+new file mode 100644
+index 0000000..185ec97
+--- /dev/null
++++ b/services/account-service/src/main/java/com/carddemo/account/domain/repository/RewardCreditRepository.java
+@@ -0,0 +1,10 @@
++package com.carddemo.account.domain.repository;
++
++import com.carddemo.account.domain.model.RewardCredit;
++
++public interface RewardCreditRepository {
++
++    boolean existsByRewardId(String rewardId);
++
++    RewardCredit saveCredit(RewardCredit credit);
++}
+diff --git a/services/account-service/src/main/resources/db/migration/V3__reward_credit.sql b/services/account-service/src/main/resources/db/migration/V3__reward_credit.sql
+new file mode 100644
+index 0000000..ab92240
+--- /dev/null
++++ b/services/account-service/src/main/resources/db/migration/V3__reward_credit.sql
+@@ -0,0 +1,9 @@
++CREATE TABLE reward_credit (
++    reward_id   VARCHAR(36) PRIMARY KEY,
++    account_id  VARCHAR(11)   NOT NULL,
++    campaign_id VARCHAR(36)   NOT NULL,
++    amount      NUMERIC(12, 2) NOT NULL,
++    created_at  TIMESTAMP      NOT NULL
++);
++
++CREATE INDEX idx_reward_credit_account ON reward_credit (account_id);

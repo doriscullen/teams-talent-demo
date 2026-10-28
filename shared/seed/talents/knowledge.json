@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "exportedAt": "2026-10-26T02:32:00.000Z",
+  "exportedAt": "2026-10-27T13:47:28.270Z",
   "artifacts": [
     {
       "id": "a-platinum-cashback-page",
@@ -461,22 +461,25 @@
       "category": "index",
       "kind": "index",
       "version": 3,
-      "publishedAt": "2026-10-26 02:05",
-      "note": "同步代码变化：3 个新提交",
+      "publishedAt": "2026-10-27T12:16:47.022Z",
+      "note": "本地真实索引 · 5774e64217fd5b2c",
       "delivery": "cloud",
       "stats": [
         [
           "文件",
-          "1,284"
+          "324"
         ],
         [
           "节点",
-          "41,206"
+          "4,606"
         ],
         [
           "关系",
-          "152,883"
+          "7,676"
         ]
+      ],
+      "agents": [
+        "Code"
       ],
       "files": []
     },
@@ -506,6 +509,9 @@
           "向量维度",
           "1,024"
         ]
+      ],
+      "agents": [
+        "Code"
       ],
       "files": []
     },
@@ -547,7 +553,7 @@
     },
     {
       "id": "a-std",
-      "projectId": "carddemo",
+      "projectId": null,
       "name": "银行编码规范要点",
       "description": "分层、建模、接口与安全约定，以及五类检查规则。",
       "capability": "doc-extract",
@@ -558,6 +564,10 @@
       "publishedAt": "2026-10-18 14:02",
       "note": "首次发布",
       "delivery": "local",
+      "agents": [
+        "Code",
+        "Reviewer"
+      ],
       "files": [
         {
           "path": "doc-knowledge/银行编码规范要点.md",
@@ -570,14 +580,14 @@
       "id": "a-miner",
       "projectId": "carddemo",
       "name": "carddemo-java-1025 开发范式",
-      "description": "从已合并 PR 总结的实现范式，含步骤、约束和示例代码。",
-      "capability": "miner-pr",
-      "capabilityName": "开发范式挖掘（PR）",
+      "description": "从已合并 PR 与代码片段挖掘的实现范式，含步骤、约束和示例代码。",
+      "capability": "miner-diff",
+      "capabilityName": "开发范式挖掘（代码片段）",
       "category": "code",
       "kind": "files",
       "version": 2,
-      "publishedAt": "2026-10-24 17:40",
-      "note": "新增范式「营销奖励发放」",
+      "publishedAt": "2026-10-27 18:50",
+      "note": "新增 5 个代码片段挖掘的开发范式，保留「统一错误码与异常处理」",
       "delivery": "local",
       "files": [
         {
@@ -586,53 +596,78 @@
           "type": "markdown"
         },
         {
-          "path": "miner/跨服务幂等记账/summary.md",
-          "title": "跨服务幂等记账：范式总结",
+          "path": "miner/消费返现与奖励发放/summary.md",
+          "title": "消费返现与奖励发放：范式总结",
           "type": "markdown"
         },
         {
-          "path": "miner/跨服务幂等记账/analyzer.md",
-          "title": "跨服务幂等记账：代码分析报告",
+          "path": "miner/消费返现与奖励发放/analyzer.md",
+          "title": "消费返现与奖励发放：代码分析报告",
           "type": "markdown"
         },
         {
-          "path": "miner/跨服务幂等记账/input/prs/41/metadata.json",
-          "title": "PR #41",
+          "path": "miner/消费返现与奖励发放/meta.json",
+          "title": "消费返现与奖励发放：挖掘元数据",
           "type": "json"
         },
         {
-          "path": "miner/跨服务幂等记账/input/prs/47/metadata.json",
-          "title": "PR #47",
-          "type": "json"
-        },
-        {
-          "path": "miner/跨服务幂等记账/input/prs/58/metadata.json",
-          "title": "PR #58",
-          "type": "json"
-        },
-        {
-          "path": "miner/乐观锁更新账户余额/summary.md",
-          "title": "乐观锁更新账户余额：范式总结",
+          "path": "miner/跨服务幂等入账与失败重试/summary.md",
+          "title": "跨服务幂等入账与失败重试：范式总结",
           "type": "markdown"
         },
         {
-          "path": "miner/乐观锁更新账户余额/analyzer.md",
-          "title": "乐观锁更新账户余额：代码分析报告",
+          "path": "miner/跨服务幂等入账与失败重试/analyzer.md",
+          "title": "跨服务幂等入账与失败重试：代码分析报告",
           "type": "markdown"
         },
         {
-          "path": "miner/乐观锁更新账户余额/input/prs/23/metadata.json",
-          "title": "PR #23",
+          "path": "miner/跨服务幂等入账与失败重试/meta.json",
+          "title": "跨服务幂等入账与失败重试：挖掘元数据",
           "type": "json"
         },
         {
-          "path": "miner/乐观锁更新账户余额/input/prs/29/metadata.json",
-          "title": "PR #29",
+          "path": "miner/活动资格判定与有效期控制/summary.md",
+          "title": "活动资格判定与有效期控制：范式总结",
+          "type": "markdown"
+        },
+        {
+          "path": "miner/活动资格判定与有效期控制/analyzer.md",
+          "title": "活动资格判定与有效期控制：代码分析报告",
+          "type": "markdown"
+        },
+        {
+          "path": "miner/活动资格判定与有效期控制/meta.json",
+          "title": "活动资格判定与有效期控制：挖掘元数据",
           "type": "json"
         },
         {
-          "path": "miner/乐观锁更新账户余额/input/prs/52/metadata.json",
-          "title": "PR #52",
+          "path": "miner/账户余额乐观锁更新/summary.md",
+          "title": "账户余额乐观锁更新：范式总结",
+          "type": "markdown"
+        },
+        {
+          "path": "miner/账户余额乐观锁更新/analyzer.md",
+          "title": "账户余额乐观锁更新：代码分析报告",
+          "type": "markdown"
+        },
+        {
+          "path": "miner/账户余额乐观锁更新/meta.json",
+          "title": "账户余额乐观锁更新：挖掘元数据",
+          "type": "json"
+        },
+        {
+          "path": "miner/用户维护与删除保护/summary.md",
+          "title": "用户维护与删除保护：范式总结",
+          "type": "markdown"
+        },
+        {
+          "path": "miner/用户维护与删除保护/analyzer.md",
+          "title": "用户维护与删除保护：代码分析报告",
+          "type": "markdown"
+        },
+        {
+          "path": "miner/用户维护与删除保护/meta.json",
+          "title": "用户维护与删除保护：挖掘元数据",
           "type": "json"
         },
         {
@@ -658,31 +693,6 @@
         {
           "path": "miner/统一错误码与异常处理/input/prs/35/metadata.json",
           "title": "PR #35",
-          "type": "json"
-        },
-        {
-          "path": "miner/营销奖励发放/summary.md",
-          "title": "营销奖励发放：范式总结",
-          "type": "markdown"
-        },
-        {
-          "path": "miner/营销奖励发放/analyzer.md",
-          "title": "营销奖励发放：代码分析报告",
-          "type": "markdown"
-        },
-        {
-          "path": "miner/营销奖励发放/input/prs/61/metadata.json",
-          "title": "PR #61",
-          "type": "json"
-        },
-        {
-          "path": "miner/营销奖励发放/input/prs/63/metadata.json",
-          "title": "PR #63",
-          "type": "json"
-        },
-        {
-          "path": "miner/营销奖励发放/input/prs/66/metadata.json",
-          "title": "PR #66",
           "type": "json"
         }
       ]

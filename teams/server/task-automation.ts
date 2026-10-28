@@ -74,7 +74,7 @@ export class TaskAutomationService {
         const inputs = await this.dependencies.inputs(this.store.state, scope);
         return await this.save(scope, state => {
           const record = taskAutomation(state, scope)?.knowledge; if (record?.id !== id) throw new DomainError('工作区已变化，本次知识导入结果未写入');
-          record.status = inputs.knowledge.length && inputs.skills.some(skill => skill.available) ? 'ready' : 'waiting'; record.inputs = inputs; record.finishedAt = new Date().toISOString();
+          record.status = inputs.skills.some(skill => skill.available) ? 'ready' : 'waiting'; record.inputs = inputs; record.finishedAt = new Date().toISOString();
         }, '自动导入任务知识 · 已核对输入', role);
       } catch (error) {
         if (taskAutomation(this.store.state, scope)?.knowledge?.id !== id) throw error;

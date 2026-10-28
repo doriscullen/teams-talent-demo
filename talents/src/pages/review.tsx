@@ -1,18 +1,24 @@
-// 产物审阅：待审阅 / 已发布列表，以及整页的审阅工作台（内容、对比、对话修订、手动编辑、发布）。
-import { useEffect, useRef, useState } from 'react';
-import { Button, Form, Input, Modal, Radio, Segmented, Select, Space } from 'antd';
+// 产物管理：一个层级（团队或项目）的待审阅、轨迹诊断和已有产物列表，以及知识产物的审阅工作台（内容、与上次版本对比、提交 PR）。
+import { useState } from 'react';
+import { Button, Segmented, Space } from 'antd';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
+import { levelHash } from '../navigation.ts';
 import type { Artifact, Basis, TalentsState } from '../types.ts';
-import { artifact, artifactProjects, basisOf, capability, changesSince, source, task, type Changes } from '../demo/model.ts';
-import { hashId, now, versionLabel, when } from '../demo/format.ts';
+import { artifact, basisOf, capability, changesSince, levelSources, source, type Changes } from '../demo/model.ts';
+import { versionLabel, when } from '../demo/format.ts';
 import * as K from '../demo/knowledge.ts';
+import { isDiagnosis, pendingCount } from '../demo/suggestions.ts';
 import { ArtifactStatus, CapIcon, CardGrid, EmptyState, Fields, FileMark, ItemCard, Section } from '../components/ui.tsx';
 import { DiffView, FileContent, FileList, IndexSummary, linkTarget } from '../components/files.tsx';
+import { SubmitDialog, SubmissionLink } from '../components/submit-pr.tsx';
+import type { Toolbar } from './level.tsx';
 
 // ---------- List ----------
 /** Published knowledge whose source changed after it was built; the capability must be able to update. */
 function staleChanges(st: TalentsState, a: Artifact) {
+  // The demo graph is a committed snapshot shown independently of workspace changes.
+  if (a.id === 'a-cg-java') return null;
   if (a.draft || !capability(st, a.cap).update) return null;
   const c = changesSince(source(st, a.sources[0]), basisOf(a));
   return c && c.count ? c : null;
@@ -27,200 +33,105 @@ function basisRow(st: TalentsState, a: Artifact, basis: Basis | null | undefined
   return ['基于', src.name + '，' + (basis.version ? versionLabel(basis.version) : '提交 ' + basis.commit)];
 }
 
-export function Review() {
-  const { state: st, route, go } = useTalents();
-  if (route.params.id) return <Workbench key={route.params.id} id={route.params.id} />;
-  // Re-extract opens the task form prefilled from the task that built this artifact; it does not start a run.
-  const reExtract = (a: Artifact) => go('#/tasks?new=1&from=' + a.id);
+// Re-extract opens the task form prefilled from the task that built this artifact; it does not start a run.
+const reExtractHash = (a: Artifact) => levelHash(a.projectId, 'tasks', { new: '1', from: a.id });
+
+export function LevelReview({ pid, toolbar }: { pid: string | null; toolbar: Toolbar }) {
+  const { state: st, go } = useTalents();
+  const open = (a: Artifact) => go(levelHash(pid, 'review', { id: a.id }));
   const card = (a: Artifact) => {
+    if (isDiagnosis(a)) return diagnosisCard(a);
     const cap = capability(st, a.cap), st_ = K.status(a), stale = staleChanges(st, a);
-    const whenText = st_ === 'published' ? (a.published!.auto ? '自动发布于 ' : '发布于 ') + when(a.published!.at) : '生成于 ' + when(a.draft!.created);
-    return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={cap.name} extra={<ArtifactStatus a={a} />} onClick={() => go('#/review?id=' + a.id)}
-      caption={whenText} actions={<>{stale && <Button size="small" onClick={() => reExtract(a)}>重新提取</Button>}
-        <Button size="small" type={st_ === 'published' ? 'default' : 'primary'} onClick={() => go('#/review?id=' + a.id)}>{st_ === 'published' ? '查看' : '审阅'}</Button></>}>
+    const whenText = st_ === 'published' ? (K.isIndex(a) ? '索引更新于 ' : a.submission ? '提交于 ' : '生成于 ') + when(a.published!.at) : '生成于 ' + when(a.draft!.created);
+    return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={cap.name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
+      caption={whenText} actions={<>{stale && <Button size="small" onClick={() => go(reExtractHash(a))}>重新提取</Button>}
+        <Button size="small" type={st_ === 'published' ? 'default' : 'primary'} onClick={() => open(a)}>{st_ === 'published' ? '查看' : '审阅'}</Button></>}>
       <p className="ui-note">{a.desc}</p>{stale && <StaleNote st={st} a={a} c={stale} />}
     </ItemCard>;
   };
-  const pending = st.artifacts.filter(a => a.draft), done = st.artifacts.filter(a => !a.draft);
-  return <div className="page-stack">
-    <PageHeader title="产物审阅" description="审阅知识任务的产出，修订满意后发布到团队空间。开发者只能看到已发布的内容。" />
-    <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
-    {done.length > 0 && <Section title="已发布" note={done.length + ' 个'}><CardGrid>{done.map(card)}</CardGrid></Section>}
-  </div>;
+  // A diagnosis is not reviewed and published: its card tells how many suggestions wait to be applied.
+  const diagnosisCard = (a: Artifact) => {
+    const n = pendingCount(a);
+    return <ItemCard key={a.id} icon={<CapIcon cap={capability(st, a.cap)} />} title={a.name} subtitle={capability(st, a.cap).name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
+      caption={'诊断于 ' + when(a.draft?.created)} actions={<Button size="small" type={n ? 'primary' : 'default'} onClick={() => open(a)}>{n ? '查看建议' : '查看'}</Button>}>
+      <p className="ui-note">{a.desc}</p>
+      {n > 0 && <div className="update-note"><b>{n} 条优化建议待提交</b><span className="caption">提交对项目 Skill 或 AGENTS.md 的改进 PR</span></div>}
+    </ItemCard>;
+  };
+  const mine = st.artifacts.filter(a => a.projectId === pid), knowledge = mine.filter(a => !isDiagnosis(a)), diagnoses = mine.filter(isDiagnosis);
+  const pending = knowledge.filter(a => a.draft), done = knowledge.filter(a => !a.draft);
+  return <>
+    {toolbar()}
+    <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : mine.length === 0 && levelSources(st, pid).length === 0
+      ? <EmptyState title="还没有产物">先登记来源，再创建知识任务生成产物。<Button type="link" onClick={() => go(levelHash(pid, 'sources'))}>登记来源</Button></EmptyState>
+      : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
+    {diagnoses.length > 0 && <Section title="轨迹诊断" note={diagnoses.length + ' 个'}><CardGrid>{diagnoses.map(card)}</CardGrid></Section>}
+    {done.length > 0 && <Section title="已有产物" note={done.length + ' 个'}><CardGrid>{done.map(card)}</CardGrid></Section>}
+  </>;
 }
 
 // ---------- Workbench ----------
-const CHAT_SCRIPTS = [
-  { file: /业务规则目录/, match: /BR-CASH-02|期间|边界|包含|不含/,
-    prompt: 'BR-CASH-02 的期间边界不对，请对照 cashback-contract.md 改成开始含、结束不含',
-    edit: (text: string) => text.split('\n').map(l => l.startsWith('| BR-CASH-02 |')
-      ? l.replace(/2026-11-01 00:00:00 \+08:00 至 2027-02-01 00:00:00 \+08:00（两端均包含）/, '2026-11-01 00:00:00 +08:00（含）至 2027-02-01 00:00:00 +08:00（不含）') : l).join('\n'),
-    summary: '修正 BR-CASH-02 的期间边界',
-    reply: '已对照 cashback-contract.md 修正 BR-CASH-02：消费期间改为 2026-11-01 00:00（含）至 2027-02-01 00:00（不含），与 Campaign.isActiveAt() 的 [startAt, endAt) 判定一致。其他规则没有改动。' },
-  { file: /改进建议/, match: /判定链|第 ?3 ?条|绝对|确认/,
-    prompt: '第 3 条规则太绝对，改成“沿用参考实现的判定链前，须逐条对照新需求并经人确认”',
-    edit: (text: string) => text.replace(/^3\.\s+\*\*[^*]+\*\*/m, '3. **沿用参考实现的判定链前，须逐条对照新需求并经人确认。**'),
-    summary: '放宽第 3 条经验规则',
-    reply: '已改写第 3 条规则：允许沿用参考实现的资格判定链，但要求先逐条对照新需求，并经人确认。' },
-];
-const scriptsFor = (file: string) => CHAT_SCRIPTS.filter(s => s.file.test(file));
+// The artifact is shown as it was produced; a new version of published knowledge can be compared with the
+// version online. The admin publishes it as it is (there is no revising in this first version).
 const isMd = (key: string) => /\.md$/.test(key);
-interface Message { who: 'me' | 'icode' | 'busy'; text: string }
 
-function Workbench({ id }: { id: string }) {
-  const { state: st, update, toast } = useTalents();
+export function Workbench({ id }: { id: string }) {
+  const { state: st } = useTalents();
   const a = artifact(st, id);
   const which: K.Which = a?.draft ? 'current' : 'published';
   const [file, setFile] = useState(() => a && !K.isIndex(a) ? (K.files(a, which).find(f => !/index\.md$/.test(f)) ?? a.files?.[0] ?? null) : null);
   const [tab, setTab] = useState<'content' | 'diff'>('content');
-  const [base, setBase] = useState<'published' | 'original'>(a?.published && a.draft ? 'published' : 'original');
-  const [side, setSide] = useState<'chat' | 'edit'>('chat');
-  const [chat, setChat] = useState<Message[]>([]), [say, setSay] = useState(''), [busy, setBusy] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const chatBox = useRef<HTMLDivElement>(null);
-  useEffect(() => { chatBox.current?.scrollTo(0, chatBox.current.scrollHeight); }, [chat]);
-  if (!a) return <EmptyState>找不到这个产物。<a href="#/review">返回产物审阅</a></EmptyState>;
+  if (!a) return <EmptyState>找不到这个产物。<a href="#/projects">返回项目</a></EmptyState>;
   const cap = capability(st, a.cap), files = K.isIndex(a) ? [] : K.files(a, which);
-
-  const baseText = (key: string) => base === 'published' && !K.files(a, 'published').includes(key) ? null : K.text(a, base, key);
+  // Only a new version of published knowledge has something to compare with.
+  const comparable = !!a.draft && !!a.published && !K.isIndex(a);
+  const online = (key: string) => K.files(a, 'published').includes(key) ? K.text(a, 'published', key) : null;
   const mark = (key: string) => {
-    if (!a.draft || !isMd(key)) return null;
-    const before = baseText(key);
+    if (!comparable || !isMd(key)) return null;
+    const before = online(key);
     if (before == null) return <FileMark kind="new" />;
     return before !== K.text(a, 'current', key) ? <FileMark kind="mod" /> : null;
-  };
-  const send = (text: string) => {
-    text = text.trim();
-    if (!text || busy || !file) return;
-    setChat(c => [...c, { who: 'me', text }, { who: 'busy', text: 'iCode 正在修改…' }]); setSay(''); setBusy(true);
-    setTimeout(() => {
-      const key = file, script = scriptsFor(key).find(s => s.match.test(text));
-      const before = K.text(a, 'current', key) ?? '';
-      let after: string | null = null, reply: string, summary: string | undefined;
-      if (!isMd(key)) reply = '这个文件是报告，不直接修改。可以切换到“改进建议”或其他文档后再提修改要求。';
-      else if (script) { after = script.edit(before); reply = script.reply; summary = script.summary; }
-      else {
-        const lines = before.split('\n'), at = lines.findIndex(l => /^#\s/.test(l));
-        lines.splice(at + 1, 0, '', '> 审阅修订：' + text);
-        after = lines.join('\n');
-        reply = '已按要求修改「' + K.fileLabel(key) + '」，在开头补充了说明。可以在“对比”中查看改动。';
-      }
-      if (after != null && after !== before) {
-        update(d => { artifact(d, id)!.draft!.revisions.push({ kind: 'chat', file: key, text: after!, prompt: text, summary: summary ?? '按审阅意见修订「' + K.fileLabel(key) + '」', at: now() }); });
-        setTab('diff');
-        if (!a.published) setBase('original');
-      }
-      setChat(c => [...c.filter(m => m.who !== 'busy'), { who: 'icode', text: reply }]); setBusy(false);
-    }, 1600);
   };
 
   let main;
   if (K.isIndex(a)) main = <IndexSummary a={a} />;
   else if (!file) main = null;
-  else if (tab === 'diff' && a.draft) main = isMd(file) ? <div className="diff-wrap"><DiffView before={baseText(file)} after={K.text(a, 'current', file)} /></div>
+  else if (tab === 'diff' && comparable) main = isMd(file) ? <div className="diff-wrap"><DiffView before={online(file)} after={K.text(a, 'current', file)} /></div>
     : <div className="index-summary"><p className="ui-note">这个文件不支持对比，请切换到“内容”查看。</p></div>;
   else main = <FileContent st={st} a={a} file={file} text={K.text(a, which, file)} />;
 
   return <div className="wb">
-    <PageHeader title={a.name} description={cap.name} actions={<Space><ArtifactStatus a={a} />{a.draft && <Button type="primary" onClick={() => setPublishing(true)}>发布</Button>}</Space>} />
+    <PageHeader title={a.name} description={cap.name} actions={<Space><ArtifactStatus a={a} />{(a.draft || (a.kind === 'files' && !a.submission)) && <Button type="primary" onClick={() => setPublishing(true)}>{K.isIndex(a) ? '启用远端索引' : '提交 PR'}</Button>}</Space>} />
     <div className={'wb-body' + (files.length ? '' : ' no-files')}>
       {files.length > 0 && <FileList current={file} onSelect={setFile} groups={K.fileGroups(a, files).map(g => ({ title: g.title, items: g.items.map(f => ({ key: f, indent: !!g.title, label: <>{K.fileLabel(f)}{mark(f)}</> })) }))} />}
       <section className="wb-main">
-        {a.draft && !K.isIndex(a) && <div className="wb-toolbar">
-          <Segmented value={tab} onChange={v => setTab(v as typeof tab)} options={[{ value: 'content', label: '内容' }, { value: 'diff', label: '对比' }]} />
-          {tab === 'diff' && <Select value={base} onChange={setBase} popupMatchSelectWidth={false} options={[...(a.published ? [{ value: 'published' as const, label: '与线上版本（v' + a.published.version + '）对比' }] : []), { value: 'original' as const, label: '与原始产物对比' }]} />}
+        {comparable && <div className="wb-toolbar">
+          <Segmented value={tab} onChange={v => setTab(v as typeof tab)} options={[{ value: 'content', label: '内容' }, { value: 'diff', label: '与上次版本（v' + a.published!.version + '）对比' }]} />
         </div>}
         <div className="wb-view" key={file + tab} onClick={e => { const target = file && linkTarget(e, file); if (target && a.files?.includes(target)) setFile(target); }}>{main}</div>
       </section>
       <aside className="wb-side"><div className="side-body">
-        {!a.draft ? <PublishedSide st={st} a={a} /> : K.isIndex(a)
-          ? <>{basisRow(st, a, a.draft.basis) && <Fields rows={[basisRow(st, a, a.draft.basis)]} />}<p className="ui-note">索引类产物不需要修订，确认后直接发布。发布后，之后的每次更新都会自动发布，不再需要审阅。</p></>
-          : <>
-            <Segmented block value={side} onChange={v => setSide(v as typeof side)} options={[{ value: 'chat', label: '和 iCode 对话' }, { value: 'edit', label: '手动编辑' }]} />
-            {side === 'chat' ? <>
-              <p className="caption">接着挖掘时的 iCode 会话继续，会话 <code>{hashId(task(st, a.draft.task)?.id ?? a.id)}</code></p>
-              <div className="chat" ref={chatBox}>
-                <div className="msg icode">告诉我哪里需要修改，我会直接修改产物，修改结果可以在“对比”中查看。</div>
-                {chat.map((m, i) => <div key={i} className={'msg ' + (m.who === 'busy' ? 'icode busy' : m.who)}>{m.text}</div>)}
-              </div>
-              {file && scriptsFor(file).length > 0 && <div className="ai-examples">{scriptsFor(file).map(s => <Button key={s.prompt} size="small" onClick={() => send(s.prompt)}>{s.prompt}</Button>)}</div>}
-              <div className="chat-input"><Input.TextArea rows={2} value={say} onChange={e => setSay(e.target.value)} placeholder="说明需要修改的地方"
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(say); } }} />
-                <Button type="primary" loading={busy} onClick={() => send(say)}>发送</Button></div>
-            </> : file && isMd(file) ? <ManualEdit key={file + a.draft.revisions.length} text={K.text(a, 'current', file) ?? ''} label={K.fileLabel(file)} onSave={text => {
-              if (text === K.text(a, 'current', file)) { toast('内容没有变化'); return; }
-              update(d => { artifact(d, id)!.draft!.revisions.push({ kind: 'manual', file, text, at: now() }); });
-              setTab('diff'); toast('已保存修订 ' + (a.draft!.revisions.length + 1));
-            }} /> : <p className="ui-note">这个文件不能手动编辑，可以通过对话修订。</p>}
-            <div className="history"><div className="caption">修订记录</div><ol>
-              <li><b>原始产物</b><span className="caption">{when(a.draft.created)}</span></li>
-              {a.draft.revisions.map((r, i) => <li key={i}><b>修订 {i + 1}（{r.kind === 'chat' ? '对话' : '手动'}）</b><span className="caption">{K.fileLabel(r.file)}</span></li>)}
-            </ol></div>
-          </>}
+        {!a.draft ? <PublishedSide st={st} a={a} /> : <>
+          <h3>{a.published ? '新版本待审阅' : '待审阅'}</h3>
+          <Fields rows={[['生成于', when(a.draft.created)], basisRow(st, a, a.draft.basis), !!a.published && ['上次版本', 'v' + a.published.version + '，生成于 ' + when(a.published.at)]]} />
+          <p className="ui-note">{K.isIndex(a) ? '索引保留在远端，配置 MCP 后可在线查询。'
+            : '确认内容后自动创建 PR，由开发者审阅并合入代码仓。' + (a.published ? '可以切换到“对比”查看与上次版本的差异。' : '')}</p>
+        </>}
       </div></aside>
     </div>
-    {publishing && <PublishDialog a={a} onClose={() => setPublishing(false)} />}
+    {publishing && <SubmitDialog a={a} onClose={() => setPublishing(false)} />}
   </div>;
-}
-
-function ManualEdit({ text, label, onSave }: { text: string; label: string; onSave(text: string): void }) {
-  const [value, setValue] = useState(text);
-  return <><p className="caption">正在编辑：{label}</p><Input.TextArea className="editor-area" value={value} onChange={e => setValue(e.target.value)} autoSize={{ minRows: 14, maxRows: 30 }} />
-    <div className="actions end"><Button type="primary" onClick={() => onSave(value)}>保存修订</Button></div></>;
 }
 
 function PublishedSide({ st, a }: { st: TalentsState; a: Artifact }) {
   const { go } = useTalents();
   const p = a.published!, stale = staleChanges(st, a);
-  return <><h3>已发布</h3>
-    <Fields rows={[['版本', 'v' + p.version], ['发布于', p.at], basisRow(st, a, p.basis), ['交付方式', K.deliveryLabel[p.delivery]], ['更新说明', p.note]]} />
-    {stale ? <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go('#/tasks?new=1&from=' + a.id)}>重新提取</Button></div></>
-      : <p className="caption">{K.isIndex(a) ? '对应的知识任务运行后会自动发布新版本。' : '重新运行对应的知识任务后，新版本会出现在“待审阅”。'}</p>}
+  return <><h3>{K.isIndex(a) ? '远端索引' : a.submission ? 'PR 已创建' : '已有版本'}</h3>
+    <Fields rows={[[ '版本', 'v' + p.version], ['生成于', p.at], basisRow(st, a, p.basis), ['更新说明', p.note]]} />
+    {a.submission && <SubmissionLink submission={a.submission} />}
+    <p className="caption">{K.isIndex(a) ? '索引位于远端，可通过 MCP 查询。' : '知识变更通过 PR 提交到代码仓，审阅和合入在代码托管平台完成。'}</p>
+    {stale ? <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go(reExtractHash(a))}>重新提取</Button></div></>
+      : <p className="caption">{K.isIndex(a) ? '对应的知识任务运行后会更新远端索引。' : '重新运行对应的知识任务后，新版本会出现在“待审阅”。'}</p>}
   </>;
-}
-
-/** Update note for re-extracted business knowledge: what changed in the documents since the published version. */
-function docNote(st: TalentsState, a: Artifact) {
-  const c = changesSince(source(st, a.sources[0]), a.published?.basis);
-  return c && c.count ? '根据文档变化更新：' + c.text : '更新业务知识';
-}
-function PublishDialog({ a, onClose }: { a: Artifact; onClose(): void }) {
-  const { state: st, update, toast, focusProject } = useTalents();
-  const [busy, setBusy] = useState(false);
-  const index = K.isIndex(a), draft = a.draft!;
-  const notes = [...new Set(draft.revisions.map(r => r.summary ?? '修订「' + K.fileLabel(r.file) + '」'))];
-  const published = a.published;
-  const defNote = published ? (a.folder === 'miner' && (a.specs ?? []).length > (published.specs ?? []).length
-    ? '新增范式「' + (a.specs ?? []).filter(n => !(published.specs ?? []).includes(n)).join('」「') + '」'
-    : a.cap === 'doc-extract' ? docNote(st, a) + (notes.length ? '；' + notes.join('；') : '') : '更新内容') : '首次发布';
-  // Publish to the project it was published to before, else the project the user came for, else the source's project.
-  const target = published ? published.project : (focusProject ?? (artifactProjects(st, a)[0] ?? st.projects[0])?.id);
-  const [form] = Form.useForm<{ project: string; delivery: 'local' | 'cloud'; note: string }>();
-  const submit = (v: { project: string; delivery: 'local' | 'cloud'; note: string }) => {
-    setBusy(true);
-    setTimeout(() => {
-      const version = update(d => {
-        const x = artifact(d, a.id)!, revs = x.draft!.revisions;
-        const over: Record<string, { text: string }> = {};
-        (x.files ?? []).forEach(key => { if (revs.some(r => r.file === key)) over[key] = { text: K.text(x, 'current', key) ?? '' }; });
-        x.published = { version: (x.published?.version ?? 0) + 1, at: now(), note: v.note.trim() || '更新内容', delivery: v.delivery, project: v.project,
-          files: (x.files ?? []).slice(), specs: x.specs?.slice(), over, basis: x.draft!.basis ?? null };
-        x.draft = null;
-        return x.published.version;
-      });
-      onClose(); toast('已发布 v' + version + ' 到团队空间');
-    }, 800);
-  };
-  return <Modal open title={<div><div className="caption">{a.name}</div>发布到团队空间</div>} okText="发布" cancelText="取消" confirmLoading={busy} onOk={() => form.submit()} onCancel={onClose}>
-    <Form form={form} layout="vertical" onFinish={submit} initialValues={{ project: target, delivery: published ? published.delivery : index ? 'cloud' : 'local', note: defNote }}>
-      <Form.Item name="project" label="发布到" extra="该项目的成员可以在开发者端看到并应用。"><Select options={st.projects.map(p => ({ value: p.id, label: p.name }))} /></Form.Item>
-      <Form.Item name="delivery" label="交付方式">
-        <Radio.Group className="option-list">
-          <Radio value="local" disabled={index}><b>同步到本地</b><span className="caption">{index ? '索引需要在线查询，不能同步到本地' : '适合小而常用的知识，开发者本机保存一份'}</span></Radio>
-          <Radio value="cloud"><b>云端查询</b><span className="caption">适合大而常变的知识，开发者的 iCode 在线查询</span></Radio>
-        </Radio.Group>
-      </Form.Item>
-      <Form.Item name="note" label="更新说明" extra="开发者更新时会看到这段说明。"><Input.TextArea rows={2} /></Form.Item>
-    </Form>
-  </Modal>;
 }

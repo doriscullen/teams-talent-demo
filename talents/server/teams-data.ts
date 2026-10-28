@@ -2,9 +2,9 @@
 // projects, code repositories, design documents and shared sessions; Talents shows them read-only
 // and keeps only its own metadata about them (TalentsState.sourceMeta).
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { sharedPaths, type SharedProject, type SharedSession, type TeamsSnapshot } from '../../shared/contracts.ts';
-import { seedDir, sharedDir } from './config.ts';
+import { repositoryRoot, seedDir, sharedDir } from './config.ts';
 import { CLIENT_OWNED_KEYS, HttpError, SOURCE_META_KEYS, type DocTreeGroup, type LocalSource, type Source, type SourceMeta, type TalentsState } from './model.ts';
 
 export type SnapshotOrigin = 'shared' | 'seed' | 'none';
@@ -75,7 +75,7 @@ function wiggle(seed: number, spread: number) { const x = Math.sin(seed * 9301 +
 function session(s: SharedSession, i: number) {
   const qa = s.agent === 'Q&A Agent';
   return { id: s.id, title: s.title, updated: s.updatedAt, created: s.updatedAt, cwd: s.cwd, turns: s.turns, agent: s.agent, model: s.model,
-    owner: s.memberId, ownerName: s.memberName, projectId: s.projectId, requirementId: s.requirementId, summary: s.summary,
+    owner: s.memberId, ownerName: s.memberName, projectId: s.projectId, requirementId: s.requirementId, summary: s.summary, transcript: !!s.transcript,
     messages: Math.round(s.turns * (2.2 + wiggle(i, 1.4))),
     tokens: Math.round(s.turns * (28000 + wiggle(i + 7, 36000))),
     files: qa ? 0 : Math.max(1, Math.round(s.turns * (0.12 + wiggle(i + 3, 0.2)))) };
@@ -92,19 +92,28 @@ export function teamsModel(snapshot: TeamsSnapshot, meta: Record<string, SourceM
   return {
     team: { name: snapshot.team.name, admin: owner?.id ?? '', me: me?.id ?? '',
       members: members.map(m => ({ id: m.id, name: m.name, role: m.role, status: m.status, title: m.role === 'owner' ? 'Owner' : '成员' })) },
-    projects: projects.map(p => ({ id: p.id, name: p.name, description: p.description, sourceIds: sources.filter(s => s.projectId === p.id).map(s => s.id) })),
+    projects: projects.map(p => ({ id: p.id, name: p.name, description: p.description, skills: p.skills ?? [] })),
     sources,
     sessions: snapshot.sessions.filter(s => visible.has(s.projectId)).map(session),
   };
 }
 
+/** SKILL.md of a project skill, read from the path Teams gives (relative to the repository root). */
+export async function readSkill(snapshot: TeamsSnapshot, projectId: string, skillId: string, root = repositoryRoot) {
+  const skill = snapshot.projects.find(p => p.id === projectId && !p.readonly)?.skills?.find(s => s.id === skillId);
+  if (!skill) throw new HttpError('项目 Skill 不存在', 404);
+  const path = resolve(root, skill.path);
+  if (relative(root, path).startsWith('..')) throw new HttpError('Skill 路径无效', 400);
+  try { return { ...skill, content: await readFile(path, 'utf8') }; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new HttpError('找不到 Skill 文件：' + skill.path, 404); throw error; }
+}
+
 /** The state the front-end works on: Talents state merged with the Teams-derived team, projects, sources and sessions. */
 export function clientState(state: TalentsState, snapshot: TeamsSnapshot) {
   const teams = teamsModel(snapshot, state.sourceMeta);
-  const projects = teams.projects.map(p => ({ ...p, sourceIds: [...p.sourceIds, ...state.localSources.filter(s => s.projectIds.includes(p.id)).map(s => s.id)] }));
   const owned = Object.fromEntries(CLIENT_OWNED_KEYS.map(key => [key, state[key]]));
   const sources: Source[] = [SESSIONS_SOURCE, ...teams.sources, ...state.localSources];
-  return { ...owned, team: teams.team, projects, sources, sessions: teams.sessions };
+  return { ...owned, team: teams.team, projects: teams.projects, sources, sessions: teams.sessions };
 }
 
 /**
@@ -116,7 +125,6 @@ export function ownedState(client: Record<string, any>, previous: TalentsState):
   if (!client || typeof client !== 'object' || !Array.isArray(client.sources) || !Array.isArray(client.projects) || !Array.isArray(client.artifacts) || !Array.isArray(client.tasks)) throw new HttpError('状态格式无效', 400);
   const next = structuredClone(previous);
   for (const key of CLIENT_OWNED_KEYS) if (client[key] !== undefined) (next as any)[key] = client[key];
-  const visible = new Set<string>(client.projects.map((p: { id: string }) => p.id));
   const sourceMeta = { ...previous.sourceMeta }, localSources: LocalSource[] = [];
   for (const s of client.sources as Source[]) {
     if (s.type === 'sessions') continue;
@@ -126,13 +134,8 @@ export function ownedState(client: Record<string, any>, previous: TalentsState):
       sourceMeta[s.id] = meta;
       continue;
     }
-    const before = previous.localSources.find(x => x.id === s.id);
-    const projectIds = [
-      ...client.projects.filter((p: { sourceIds: string[] }) => p.sourceIds.includes(s.id)).map((p: { id: string }) => p.id),
-      ...(before?.projectIds ?? []).filter(id => !visible.has(id)),
-    ];
-    const { fromTeams, projectId, titles, ...rest } = s;
-    localSources.push({ ...(rest as unknown as LocalSource), type: 'docs', projectIds });
+    const { fromTeams, titles, ...rest } = s;
+    localSources.push({ ...(rest as unknown as LocalSource), type: 'docs', projectId: typeof s.projectId === 'string' ? s.projectId : null });
   }
   return { ...next, sourceMeta, localSources };
 }

@@ -46,7 +46,7 @@ export async function staticFile(path: string, app: 'teams', response: ServerRes
 }
 export async function readFixtures() {
   const [presentation, baseline, teamsProject] = await Promise.all(['fixtures/presentation.json', 'teams-baseline.json', 'fixtures/teams-project.json'].map(path => readFile(join(root, path), 'utf8').then(JSON.parse)));
-  const skills = presentation.skills.map((skill: { name: string }) => ({ ...skill, path: join(workspace, 'skills', skill.name, 'SKILL.md') }));
+  const skills = presentation.skills.map((skill: { name: string }) => ({ ...skill, path: join(workspace, '.agents', 'skills', skill.name, 'SKILL.md') }));
   const catalog = await readSkillCatalog();
   return { ...presentation, ...catalog, skills, baseline, teamsProject, localPaths: { collaborationSkill: join(root, 'skills/teams-demo-collaboration/SKILL.md'), cli: join(root, 'scripts/teams-demo.mjs') } };
 }

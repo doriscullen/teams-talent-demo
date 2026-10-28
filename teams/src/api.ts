@@ -1,5 +1,5 @@
 import { currentSystemContext, systemRuntime } from './system-links.js';
-import type { PublishedArtifact, PublishedFile } from '../../shared/contracts.js';
+import type { PublishedArtifact, PublishedFile, PublishedSkillVersion } from '../../shared/contracts.js';
 import type { DemoState, Role, Action } from './domain.js';
 import type { WorkspaceAction } from './workspace.js';
 import type blueprint from '../fixtures/demo-blueprint.json';
@@ -60,7 +60,9 @@ export const act = (state: DemoState, role: Role, action: Action, reason?: strin
 export const updateWorkspace = (state: DemoState, role: Role, kind: WorkspaceAction, payload: Record<string,unknown>) => tracedJson<DemoState>('teams', '/api/workspace', { method: 'POST', body: JSON.stringify({ revision:state.revision, kind, payload, ...currentSystemContext(), role }) });
 export const reset = (state: DemoState, role: Role) => tracedJson<DemoState>('teams', '/api/reset', { method: 'POST', body: JSON.stringify({ revision: state.revision, role }) });
 export const native = <T = any>(role: Role, action: string, data: Record<string, unknown> = {}) => tracedJson<T>('teams', '/api/native/' + action, { method: 'POST', body: JSON.stringify({ role, ...data }) });
-export const getTalentsKnowledge = (projectId: string) => tracedJson<{ talentsOrigin: string; artifacts: PublishedArtifact[] }>('teams', '/api/talents/knowledge?project=' + encodeURIComponent(projectId));
+/** skills: the latest version Talents wrote of each project skill, with its files' content. */
+export type TalentsSkillVersion = Omit<PublishedSkillVersion, 'files'> & { files: Array<PublishedSkillVersion['files'][number] & { content: string | null }> };
+export const getTalentsKnowledge = (projectId: string) => tracedJson<{ talentsOrigin: string; artifacts: PublishedArtifact[]; skills: TalentsSkillVersion[] }>('teams', '/api/talents/knowledge?project=' + encodeURIComponent(projectId));
 export const getTalentsFile = (artifact: Pick<PublishedArtifact, 'id' | 'version'>, path: string) => tracedJson<PublishedFile & { content: string }>('teams', '/api/talents/file?' + new URLSearchParams({ artifact: artifact.id, version: String(artifact.version), path }));
 
 export const getProjectWork = (role: Role, target: import('./project-work.js').ProjectWorkSelection) => tracedJson<import('./project-work.js').ProjectWorkPlan>('teams', '/api/project-work?' + new URLSearchParams({ role, ...target }).toString());

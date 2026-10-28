@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceRoot": "workspace/skills",
+  "sourceRoot": "workspace/.agents/skills",
   "packages": {
     "arch-adr-writing": {
       "files": [

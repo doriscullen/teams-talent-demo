@@ -1,6 +1,7 @@
 {
   "note": "成员已共享到团队的 iCode 会话（演示数据）。交付会话 WORK-PLATINUM-001 在成员上报后才加入共享列表。",
   "sessions": [
+    { "id": "6b82c08d-eb3b-4bdc-b373-54fed16a7fcd", "memberId": "member", "title": "CardDemo 迁移与扩建（19 轮）", "updatedAt": "2026-10-26 23:58", "turns": 19, "agent": "Code Agent", "model": "deepseek-pro", "requirementId": "DEMO-MKT-001", "summary": "从 COBOL 业务提取与微服务迁移起步，扩展到 Web 界面、银行业务模块，第 18 轮重建高端卡多月消费返现能力。", "transcript": true },
     { "id": "3f2a9c41d7e0", "memberId": "member", "title": "返现明细查询：分页游标与重复记录", "updatedAt": "2026-10-26 18:42", "turns": 58, "agent": "Code Agent", "model": "deepseek-pro", "requirementId": "MKT-002" },
     { "id": "8b61e05a3c92", "memberId": "member", "title": "返现明细接口补充单元测试", "updatedAt": "2026-10-25 16:10", "turns": 24, "agent": "Code Agent", "model": "deepseek-flash", "requirementId": "MKT-002" },
     { "id": "c47d1f80b2a6", "memberId": "su", "title": "账单返现汇总与明细合计不一致排查", "updatedAt": "2026-10-26 15:37", "turns": 63, "agent": "Code Agent", "model": "deepseek-pro", "requirementId": "MKT-003" },

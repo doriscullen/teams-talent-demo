@@ -1,0 +1,356 @@
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/application/UserDirectoryService.java b/services/iam-service/src/main/java/com/carddemo/iam/application/UserDirectoryService.java
+new file mode 100644
+index 0000000..d15034e
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/application/UserDirectoryService.java
+@@ -0,0 +1,124 @@
++package com.carddemo.iam.application;
++
++import com.carddemo.iam.domain.exception.BusinessRuleException;
++import com.carddemo.iam.domain.exception.NotFoundException;
++import com.carddemo.iam.domain.exception.ValidationException;
++import com.carddemo.iam.domain.model.User;
++import com.carddemo.iam.domain.model.UserDetails;
++import com.carddemo.iam.domain.repository.UserRepository;
++import com.carddemo.iam.domain.security.PasswordHasher;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++/**
++ * 用户目录用例。对应遗留程序 COUSR00C（列表）、COUSR01C（新增）、
++ * COUSR02C（修改）、COUSR03C（删除）。
++ */
++@Service
++@Transactional
++public class UserDirectoryService {
++
++    private static final int DEFAULT_PAGE_SIZE = 10;
++    private static final int MAX_PAGE_SIZE = 100;
++
++    private final UserRepository users;
++    private final PasswordHasher passwordHasher;
++
++    public UserDirectoryService(UserRepository users, PasswordHasher passwordHasher) {
++        this.users = users;
++        this.passwordHasher = passwordHasher;
++    }
++
++    /**
++     * BR-USER-05：按用户号升序分页，默认每页 10 条。
++     */
++    @Transactional(readOnly = true)
++    public PageResult<User> list(int page, int size) {
++        int safePage = page < 0 ? 0 : page;
++        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
++        return new PageResult<>(users.findAllUsers(safePage, safeSize), safePage, safeSize,
++                users.countUsers());
++    }
++
++    @Transactional(readOnly = true)
++    public User get(String rawUserId) {
++        String userId = requireUserId(rawUserId);
++        return users.findByUserId(userId)
++                .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND",
++                        "User " + userId + " not found"));
++    }
++
++    /**
++     * BR-USER-01..04：新增用户；用户号重复 → 409 USER_ALREADY_EXISTS。
++     */
++    public User create(String rawUserId, UserDetails details, String password) {
++        User user = new User(rawUserId, details, passwordHasher.hash(requirePassword(password)));
++        if (users.existsByUserId(user.getUserId())) {
++            throw new BusinessRuleException("USER_ALREADY_EXISTS",
++                    "User " + user.getUserId() + " already exists");
++        }
++        return users.saveUser(user);
++    }
++
++    /**
++     * BR-USER-06：修改用户，password 缺省表示保持不变；
++     * NR-USER-01：不允许把最后一个管理员降级为普通用户。
++     */
++    public User update(String rawUserId, UserDetails details, String password) {
++        User user = get(rawUserId);
++        boolean demotingAdmin = user.isAdmin()
++                && !User.TYPE_ADMIN.equals(details == null ? null : details.userType());
++        if (demotingAdmin && isLastAdmin()) {
++            throw new BusinessRuleException("LAST_ADMIN",
++                    "Cannot demote the last administrator of the system.");
++        }
++        user.applyDetails(details);
++        if (password != null) {
++            user.changePassword(passwordHasher.hash(requirePassword(password)));
++        }
++        return users.saveUser(user);
++    }
++
++    /**
++     * NR-USER-01/02：禁止删除自己、禁止删除最后一个管理员。
++     */
++    public void delete(String rawUserId, String actingUserId) {
++        User user = get(rawUserId);
++        String actor = User.normalizeUserId(actingUserId);
++        if (actor != null && actor.equals(user.getUserId())) {
++            throw new BusinessRuleException("CANNOT_DELETE_SELF",
++                    "You cannot delete your own user record.");
++        }
++        if (user.isAdmin() && isLastAdmin()) {
++            throw new BusinessRuleException("LAST_ADMIN",
++                    "Cannot delete the last administrator of the system.");
++        }
++        users.deleteUser(user.getUserId());
++    }
++
++    private boolean isLastAdmin() {
++        return users.countByUserType(User.TYPE_ADMIN) <= 1;
++    }
++
++    private static String requireUserId(String rawUserId) {
++        String userId = User.normalizeUserId(rawUserId);
++        if (userId == null || userId.isEmpty()) {
++            throw new ValidationException("userId", "User ID must be supplied.");
++        }
++        return userId;
++    }
++
++    /**
++     * BR-USER-03：密码 8-64 位，前后空白去掉后保存（登录同样 trim，见 ADR-008）。
++     */
++    private static String requirePassword(String password) {
++        if (password == null || password.isBlank()) {
++            throw new ValidationException("password", "Password must be supplied.");
++        }
++        String value = password.trim();
++        if (value.length() < 8 || value.length() > 64) {
++            throw new ValidationException("password", "Password must be 8 to 64 characters.");
++        }
++        return value;
++    }
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/domain/model/User.java b/services/iam-service/src/main/java/com/carddemo/iam/domain/model/User.java
+new file mode 100644
+index 0000000..52db76b
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/domain/model/User.java
+@@ -0,0 +1,155 @@
++package com.carddemo.iam.domain.model;
++
++import com.carddemo.iam.domain.exception.ValidationException;
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++import jakarta.persistence.Version;
++
++import java.util.Locale;
++import java.util.regex.Pattern;
++
++/**
++ * 用户聚合根。对应遗留安全文件 USRSEC，记录布局见 copybook CSUSR01Y。
++ * <p>
++ * BR-SGN-02：用户号比较前统一 trim + 大写（密码不转换，见 ADR-008）。
++ * BR-SGN-04/05：仅 {@code userType = 'A'} 进入管理员菜单。
++ */
++@Entity
++@Table(name = "sec_user")
++public class User {
++
++    public static final int USER_ID_LENGTH = 8;
++    public static final int NAME_MAX_LENGTH = 20;
++    public static final String TYPE_ADMIN = "A";
++    public static final String TYPE_USER = "U";
++
++    private static final Pattern USER_ID_PATTERN = Pattern.compile("^[A-Z0-9]{8}$");
++
++    @Id
++    @Column(name = "user_id", length = USER_ID_LENGTH, nullable = false, updatable = false)
++    private String userId;
++
++    @Column(name = "first_name", length = NAME_MAX_LENGTH, nullable = false)
++    private String firstName;
++
++    @Column(name = "last_name", length = NAME_MAX_LENGTH, nullable = false)
++    private String lastName;
++
++    @Column(name = "password_hash", length = 200, nullable = false)
++    private String passwordHash;
++
++    @Column(name = "user_type", length = 1, nullable = false)
++    private String userType;
++
++    @Version
++    @Column(name = "version", nullable = false)
++    private long version;
++
++    protected User() {
++        // for JPA
++    }
++
++    public User(String userId, UserDetails details, String passwordHash) {
++        this.userId = requireUserId(userId);
++        if (passwordHash == null || passwordHash.isBlank()) {
++            throw new ValidationException("password", "Password must be supplied.");
++        }
++        this.passwordHash = passwordHash;
++        applyDetails(details);
++        this.version = 0;
++    }
++
++    /**
++     * BR-SGN-02：用户号 trim + 大写，其余字符原样保留。
++     */
++    public static String normalizeUserId(String rawUserId) {
++        return rawUserId == null ? null : rawUserId.trim().toUpperCase(Locale.ROOT);
++    }
++
++    /**
++     * BR-USER-01/04：姓名必填且 1-20 位，用户类型仅 A/U。
++     */
++    public void applyDetails(UserDetails details) {
++        if (details == null) {
++            throw new ValidationException("firstName", "First Name must be supplied.");
++        }
++        this.firstName = requireName(details.firstName(), "firstName", "First Name");
++        this.lastName = requireName(details.lastName(), "lastName", "Last Name");
++        this.userType = requireUserType(details.userType());
++    }
++
++    /**
++     * BR-USER-03：密码只保存 PBKDF2 哈希，从不落明文。
++     */
++    public void changePassword(String passwordHash) {
++        if (passwordHash == null || passwordHash.isBlank()) {
++            throw new ValidationException("password", "Password must be supplied.");
++        }
++        this.passwordHash = passwordHash;
++    }
++
++    public boolean isAdmin() {
++        return TYPE_ADMIN.equals(userType);
++    }
++
++    /**
++     * BR-SGN-04/05：管理员进入 ADMIN 菜单，其余一律按普通用户处理。
++     */
++    public String landingMenu() {
++        return isAdmin() ? "ADMIN" : "USER";
++    }
++
++    private static String requireUserId(String rawUserId) {
++        String normalized = normalizeUserId(rawUserId);
++        if (normalized == null || !USER_ID_PATTERN.matcher(normalized).matches()) {
++            throw new ValidationException("userId", "User ID must be 8 alphanumeric characters.");
++        }
++        return normalized;
++    }
++
++    private static String requireName(String rawValue, String field, String label) {
++        String value = rawValue == null ? "" : rawValue.trim();
++        if (value.isEmpty()) {
++            throw new ValidationException(field, label + " must be supplied.");
++        }
++        if (value.length() > NAME_MAX_LENGTH) {
++            throw new ValidationException(field, label + " must be " + NAME_MAX_LENGTH
++                    + " characters or fewer.");
++        }
++        return value;
++    }
++
++    private static String requireUserType(String rawValue) {
++        String value = rawValue == null ? "" : rawValue.trim().toUpperCase(Locale.ROOT);
++        if (!TYPE_ADMIN.equals(value) && !TYPE_USER.equals(value)) {
++            throw new ValidationException("userType", "User Type must be A or U.");
++        }
++        return value;
++    }
++
++    public String getUserId() {
++        return userId;
++    }
++
++    public String getFirstName() {
++        return firstName;
++    }
++
++    public String getLastName() {
++        return lastName;
++    }
++
++    public String getPasswordHash() {
++        return passwordHash;
++    }
++
++    public String getUserType() {
++        return userType;
++    }
++
++    public long getVersion() {
++        return version;
++    }
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/domain/model/UserDetails.java b/services/iam-service/src/main/java/com/carddemo/iam/domain/model/UserDetails.java
+new file mode 100644
+index 0000000..5500bd5
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/domain/model/UserDetails.java
+@@ -0,0 +1,7 @@
++package com.carddemo.iam.domain.model;
++
++/**
++ * 用户可维护字段集合。对应遗留安全文件 USRSEC（copybook CSUSR01Y）中的姓名与类型部分。
++ */
++public record UserDetails(String firstName, String lastName, String userType) {
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/domain/repository/UserRepository.java b/services/iam-service/src/main/java/com/carddemo/iam/domain/repository/UserRepository.java
+new file mode 100644
+index 0000000..118878c
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/domain/repository/UserRepository.java
+@@ -0,0 +1,29 @@
++package com.carddemo.iam.domain.repository;
++
++import com.carddemo.iam.domain.model.User;
++
++import java.util.List;
++import java.util.Optional;
++
++/**
++ * 用户仓储端口。实现见 infrastructure.persistence.UserJpaRepository。
++ */
++public interface UserRepository {
++
++    Optional<User> findByUserId(String userId);
++
++    boolean existsByUserId(String userId);
++
++    User saveUser(User user);
++
++    /**
++     * BR-USER-05：按用户号升序分页。
++     */
++    List<User> findAllUsers(int page, int size);
++
++    long countUsers();
++
++    long countByUserType(String userType);
++
++    void deleteUser(String userId);
++}
+diff --git a/services/iam-service/src/main/java/com/carddemo/iam/domain/security/PasswordHasher.java b/services/iam-service/src/main/java/com/carddemo/iam/domain/security/PasswordHasher.java
+new file mode 100644
+index 0000000..2254bd3
+--- /dev/null
++++ b/services/iam-service/src/main/java/com/carddemo/iam/domain/security/PasswordHasher.java
+@@ -0,0 +1,11 @@
++package com.carddemo.iam.domain.security;
++
++/**
++ * 密码哈希端口。ADR-008：PBKDF2-HMAC-SHA256，每用户随机盐，只保存编码后的哈希。
++ */
++public interface PasswordHasher {
++
++    String hash(String rawPassword);
++
++    boolean verify(String rawPassword, String encodedPassword);
++}

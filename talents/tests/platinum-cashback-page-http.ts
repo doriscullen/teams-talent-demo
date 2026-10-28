@@ -11,7 +11,7 @@ import { seedState } from '../server/seed.ts';
 import { platinumCashbackPage } from '../../shared/platinum-cashback-page.ts';
 const dir=await mkdtemp(join(tmpdir(),'platinum-talents-http-')),server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=(server.address() as {port:number}).port;await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
 const origin='http://127.0.0.1:'+port,statePath=join(dir,'state/state.json'),shared=join(dir,'shared');
-const initial=seedState();initial.artifacts=initial.artifacts.filter(item=>item.id!==platinumCashbackPage.artifactId);initial.revision=31;initial.tasks.push({id:'existing-user-run',status:'running'});initial.dev.applied['existing-user-application']={version:3};
+const initial=seedState();initial.artifacts=initial.artifacts.filter(item=>item.id!==platinumCashbackPage.artifactId);initial.revision=31;initial.tasks.push({id:'existing-user-run',status:'running'});
 await mkdir(join(dir,'state'),{recursive:true});await writeFile(statePath,JSON.stringify(initial));
 let process_:ChildProcess|undefined,logs='';
 const get=async(path:string)=>{const response=await fetch(origin+path);assert.equal(response.status,200);return response.json();};

@@ -1,6 +1,6 @@
 # These published inputs are identified by their original byte hashes. Some Skill
 # files intentionally contain CRLF; do not normalize either LF or CRLF on checkout.
-/workspace/skills/** -text
+/workspace/.agents/skills/** -text
 /talents/content/four-requirements/** -text
 /shared/seed/talents/files/a-req-2026-*/** -text
 /teams/fixtures/skill-source-files.json -text
