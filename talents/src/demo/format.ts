@@ -5,14 +5,15 @@ export const num = (n: number) => Number(n).toLocaleString('en-US');
 export const tokens = (n: number) => n >= 10000 ? (Math.round(n / 1000) / 10) + ' 万' : num(n);
 
 /** 2026-10-27 14:20, the format the demo data uses everywhere. */
-export function now() {
-  const d = new Date();
+export function now(d = new Date()) {
   const p = (n: number) => (n < 10 ? '0' : '') + n;
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 /** Today's times as "今天 14:20", other days as "10-25 14:20". */
 export function when(s?: string | null) {
   if (!s) return '';
+  // Some data carries ISO timestamps (e.g. 2026-10-27T12:16:47.022Z); show them in local time like the rest.
+  if (/^\d{4}-\d\d-\d\dT/.test(s) && !Number.isNaN(Date.parse(s))) s = now(new Date(s));
   return s.slice(0, 10) === now().slice(0, 10) ? '今天 ' + s.slice(11) : s.slice(5);
 }
 export const versionLabel = (at?: string | null) => at ? when(at) + ' 版本' : '';

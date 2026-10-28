@@ -23,7 +23,12 @@ export class Store {
     let stored: TalentsState | null = null;
     try { stored = JSON.parse(await readFile(this.path, 'utf8')); }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
-    if (stored && stored.schemaVersion === 1 && stored.seedVersion === SEED_VERSION && Number.isInteger(stored.revision) && Array.isArray(stored.artifacts)) { this.state = stored; return; }
+    if (stored && stored.schemaVersion === 1 && stored.seedVersion === SEED_VERSION && Number.isInteger(stored.revision) && Array.isArray(stored.artifacts)) {
+      // Categories and built-in capabilities describe what Talents offers, not demo progress: always take the
+      // current ones. Capabilities imported during the demo are kept.
+      const { categories, capabilities } = seedState();
+      this.state = { ...stored, categories, capabilities: [...capabilities, ...(stored.capabilities ?? []).filter(c => c.custom)] }; return;
+    }
     if (stored) {
       // Demo data from an older seed: keep a copy, then start from the current seed.
       const backup = this.path.replace(/\.json$/, '') + '.seed-' + (stored.seedVersion ?? 'unknown') + '.json';

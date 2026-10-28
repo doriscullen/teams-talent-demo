@@ -25,7 +25,7 @@ export interface Source {
 export interface Session {
   id: string; title: string; updated: string; turns: number; messages: number; tokens: number; files: number;
   owner: string; ownerName?: string; projectId: string; agent?: string; model?: string; cwd?: string; requirementId?: string; summary?: string;
-  /** Teams has collected the session's transcript; only such sessions can be diagnosed. */
+  /** Teams has collected the session's transcript. The demo diagnoses any session: all runs show the same prepared report. */
   transcript?: boolean;
 }
 
@@ -34,14 +34,28 @@ export interface Capability {
   id: string; cat: string; name: string; desc: string;
   input: 'repo' | 'docs' | 'sessions' | 'repo+pr' | 'repo+snippet'; inputLabel: string; output: string;
   update?: string; noUpdate?: string; skill?: boolean; prompt?: string;
+  /** The capability's page: what it reads, what it can do ([name, explanation]) and what it gives back. */
+  detail: { input: string; abilities: [string, string][]; output: string };
+  /** definitionVersion of its engine.yaml (built-ins: content/engines/<id>/engine.yaml). */
+  version?: string;
+  /** Imported from a definition package (src/demo/engine.ts): its engine.yaml, the inputs besides sources, and
+   *  where it writes (an index queried over MCP, or a directory). */
+  custom?: boolean; engine?: string; params?: Param[]; outputPath?: string; mcp?: boolean;
 }
+export interface Param { name: string; type: 'string' | 'number' | 'integer' | 'boolean' | 'array'; required?: boolean }
 
 export type Schedule = { kind: 'now' } | { kind: 'once'; at: string } | { kind: 'daily'; time: string };
-export interface RunPlan { seconds: number; steps: string[]; logs: string[] }
+/** marks: the log line each step starts at, so the shown step follows the log. */
+export interface RunPlan { seconds: number; steps: string[]; logs: string[]; marks?: number[] }
 /** Tasks and artifacts belong to a project, or to the team (projectId null); so do the sources they use. */
 export interface Task {
   id: string; projectId: string | null; name?: string; cap: string; sources: string[]; sessions?: string[]; prs?: number[];
-  created?: string; status: 'idle' | 'running' | 'success' | 'failed';
+  created?: string; status: 'idle' | 'running' | 'success' | 'failed' | 'cancelled';
+  /** A daily task that does not run on its own until resumed; it can still be run by hand. */
+  paused?: boolean;
+  /** Inputs besides the sources (imported capabilities), and a diagnosis's optional supporting material. */
+  params?: Record<string, string | number | boolean | string[]>;
+  context?: { skills: string[]; docs: string[]; note?: string };
   mode?: 'update' | 'build'; input?: { from: string; to: string }; schedule: Schedule; skipUnchanged?: boolean;
   prompt?: string; agent?: string;
   run?: { startedAt: number; plan: RunPlan };

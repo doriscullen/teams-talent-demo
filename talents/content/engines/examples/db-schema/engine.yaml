@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: db-schema
+name: 数据库结构索引
+description: 从 Flyway 迁移脚本和 JPA 实体中还原表、字段、约束与表间关系，供 Agent 查询
+definitionVersion: "0.3.1"
+
+# 一个代码仓；schemas 可限定只索引部分库（每行一个），不填时索引全部。
+input:
+  repositories:
+    type: array
+    items:
+      type: repository
+    required: true
+    minItems: 1
+    maxItems: 1
+  schemas:
+    type: array
+    items:
+      type: string
+
+build:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}", "--full"]
+
+update:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}"]
+
+output:
+  index:
+    relativeTo: repository
+    path: .icode-knowledge/db-schema
+
+applications:
+  - name: 表结构查询
+    type: mcp
+    command: db-schema
+    args: [serve, --mcp]
+
+install:
+  command: python3
+  args: ["-m", "pip", "install", "--user", "db-schema-indexer==0.3.1"]
+
+uninstall:
+  description: 卸载 db-schema-indexer；保留代码仓内的 .icode-knowledge/db-schema 和任务记录。
+  command: python3
+  args: ["-m", "pip", "uninstall", "-y", "db-schema-indexer"]
+
+check:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--check"]

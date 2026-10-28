@@ -48,7 +48,7 @@ export interface Artifact {
   submission?: Submission;
   suggestions?: { id: string; status: string; submission?: Submission; [key: string]: unknown }[];
 }
-export interface Capability { id: string; cat: string; name: string; [key: string]: unknown }
+export interface Capability { id: string; cat: string; name: string; custom?: boolean; [key: string]: unknown }
 /** A new version of a project skill written by applying a trajectory diagnosis suggestion (see src/types.ts). */
 export interface SkillVersion {
   projectId: string; skillId: string; version: string; basedOn: { version: string; sha256?: string }; at: string; note: string;

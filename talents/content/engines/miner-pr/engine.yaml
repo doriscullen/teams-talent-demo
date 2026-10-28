@@ -1,0 +1,37 @@
+schemaVersion: 1
+id: icode-miner-pr
+name: 开发范式挖掘（PR）
+description: 分析代码仓中已合并的 PR 并结合代码仓上下文，总结开发范式，归档到仓库的 .icode-knowledge/miner/
+definitionVersion: "0.1.0"
+
+input:
+  repositories:
+    type: array
+    items:
+      type: repository
+    required: true
+    minItems: 1
+    maxItems: 1
+  pullRequests:
+    type: array
+    items:
+      type: pullRequest
+    required: true
+    minItems: 1
+  scenario:
+    type: string
+  summaryTemplate:
+    type: string
+
+output:
+  miner:
+    relativeTo: repository
+    path: .icode-knowledge/miner
+
+build:
+  skill:
+    name: icode-miner-pr
+    defaultPrompt: |
+      总结代码仓库“${repository.name}”中所选 PR 体现的开发范式。
+
+      运行准备脚本时传入输入文件：${inputFile.path}。脚本会列出本次的全部输入、输出位置和规则，之后按它的输出进行。

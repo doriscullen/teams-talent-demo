@@ -5,6 +5,7 @@ import { forceCollide, forceX, forceY } from 'd3-force-3d';
 import type { GraphSnapshot } from '../../../shared/codegraph.ts';
 import { graphView, type GraphLevel, type ViewNode } from '../codegraph-model.ts';
 import { paintLabel, paintNode, paintSelection, palette, readTheme, rgba } from './codegraph-paint.ts';
+import { InfoTip } from './ui.tsx';
 import './codegraph.css';
 
 type CanvasLink = LinkObject<ViewNode> & { kind: string; count: number; uncertain: boolean };
@@ -75,7 +76,7 @@ export function CodeGraphView() {
         return tip;
       })
       .nodeCanvasObjectMode(() => 'replace')
-      .nodeCanvasObject((n, ctx, scale) => paintNode(ctx, n.x!, n.y!, radius.get(n.id)!, colors.get(n.service)!, !!lit && !lit.has(n.id), scale, theme))
+      .nodeCanvasObject((n, ctx) => paintNode(ctx, n.x!, n.y!, radius.get(n.id)!, colors.get(n.service)!, !!lit && !lit.has(n.id)))
       .linkCurvature(level === 'service' ? .25 : .18)
       // Links stay grey until their node is lit, then take the colour of the service they start from.
       .linkColor(l => linked(l) ? rgba(colors.get(serviceOf.get(idOf(l.source))!)!, .85) : rgba(EDGE, lit ? .06 : baseAlpha))
@@ -160,18 +161,18 @@ export function CodeGraphView() {
         {!view.nodes.length && <p className="cg-empty">当前筛选范围没有节点，请调整筛选条件。</p>}
         <div className="cg-legend">
           {services.filter(s => !service || s === service).map(s => <span key={s}><i style={{ background: colors.get(s) }} />{s}</span>)}
-          <p>拖动节点调整布局，滚轮缩放，悬停高亮关联节点，点击查看详情。箭头和流动光点由 source 指向 target；同类型连线按原始边数量聚合。</p>
+          <InfoTip>拖动节点调整布局，滚轮缩放，悬停高亮关联节点，点击查看详情。箭头和流动光点由 source 指向 target；同类型连线按原始边数量聚合。</InfoTip>
         </div>
       </section>
       <aside className="cg-detail">
-        {!selectedGroup ? <><h3>探索代码关系</h3><p>点击节点或搜索结果，查看符号、源码位置和关联关系。</p><p className="caption">服务和文件节点按路径分组；符号视图保留 CodeGraph 原始 ID。</p></> : <>
+        {!selectedGroup ? <p className="cg-placeholder">选择节点查看详情</p> : <>
           <Tag>{selectedGroup.kind}</Tag><h3>{selectedGroup.name}</h3><p className="path">{selectedGroup.id}</p><p>{selectedGroup.members.length} 个原始符号</p>
           {level === 'service' ? <Button onClick={() => { setService(selectedGroup.id); setLevel('file'); reset(); }}>浏览服务文件</Button> : level === 'file' ? <Button onClick={() => {
             const seed = graph.nodes.find(n => n.filePath === selectedGroup.id && ['class', 'interface', 'function'].includes(n.kind));
             setLevel('symbol'); setKinds([]); setSelected(seed?.id ?? ''); setFocus(seed?.id ?? '');
           }}>展开符号邻域</Button> : <Space wrap><Button onClick={() => setFocus(selected)}>聚焦邻域</Button><Button onClick={() => setFocus('')}>显示服务全部符号</Button></Space>}
           {node && level !== 'service' && <><p className="path">{node.filePath}:{node.startLine}–{node.endLine}</p><p>{node.layer}</p>{node.signature && <pre>{node.signature}</pre>}
-            <p className="caption">原始关联 {connections.length} 条。点击关系可进入对端符号。</p>
+            <h4>关联 <span className="section-count">{connections.length}</span></h4>
             <div className="cg-connections">{connections.slice(0, 40).map(e => {
               const incoming = e.target === node.id, other = graph.nodes.find(n => n.id === (incoming ? e.source : e.target));
               return other && <button key={e.id} onClick={() => { setService(''); setTests(tests || other.test); setKinds([]); setRelation(''); setLevel('symbol'); setSelected(other.id); setFocus(other.id); setCrossCalls(crossCalls || (e.crossService && e.kind === 'calls')); }}>
@@ -179,7 +180,7 @@ export function CodeGraphView() {
               </button>;
             })}</div>
             <h4>快照源码{source && ` · L${source.startLine}–${source.endLine}`}</h4>{sourceError ? <Alert type="error" title={sourceError} /> : source ? <pre className="cg-source">{source.content.split('\n').map((line, i) => <span key={i} className={source.startLine + i >= node.startLine && source.startLine + i <= node.endLine ? 'cg-source-selected' : ''}><em>{source.startLine + i}</em>{line}{'\n'}</span>)}</pre> : <Spin />}
-            {source && source.endLine < node.endLine && <p className="caption">源码预览最多 300 行；完整文件见上述 workspace 路径。</p>}</>}
+            {source && source.endLine < node.endLine && <p className="caption">仅预览前 300 行</p>}</>}
         </>}
       </aside>
     </div>

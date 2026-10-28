@@ -1,6 +1,7 @@
-// 产物管理：一个层级（团队或项目）的待审阅、轨迹诊断和已有产物列表，以及知识产物的审阅工作台（内容、与上次版本对比、提交 PR）。
+// 产物管理：一个层级（团队或项目）的产物列表（需要处理的在前，其余按能力分类分组，多的折叠），以及知识产物的审阅工作台（内容、与上次版本对比、提交 PR）。
 import { useState } from 'react';
-import { Button, Segmented, Space } from 'antd';
+import { Button, Segmented, Space, Tag, Tooltip } from 'antd';
+import { BellOutlined } from '@ant-design/icons';
 import { PageHeader } from '../vendor/teams/components/page-layout.tsx';
 import { useTalents } from '../store.tsx';
 import { levelHash } from '../navigation.ts';
@@ -36,37 +37,44 @@ function basisRow(st: TalentsState, a: Artifact, basis: Basis | null | undefined
 // Re-extract opens the task form prefilled from the task that built this artifact; it does not start a run.
 const reExtractHash = (a: Artifact) => levelHash(a.projectId, 'tasks', { new: '1', from: a.id });
 
+/** Groups longer than this show their first cards and fold the rest. */
+const FOLD = 6;
+const sortTime = (a: Artifact) => a.draft?.created ?? a.published?.at ?? '';
+
 export function LevelReview({ pid, toolbar }: { pid: string | null; toolbar: Toolbar }) {
   const { state: st, go } = useTalents();
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const open = (a: Artifact) => go(levelHash(pid, 'review', { id: a.id }));
-  const card = (a: Artifact) => {
-    if (isDiagnosis(a)) return diagnosisCard(a);
-    const cap = capability(st, a.cap), st_ = K.status(a), stale = staleChanges(st, a);
-    const whenText = st_ === 'published' ? (K.isIndex(a) ? '索引更新于 ' : a.submission ? '提交于 ' : '生成于 ') + when(a.published!.at) : '生成于 ' + when(a.draft!.created);
-    return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={cap.name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
-      caption={whenText} actions={<>{stale && <Button size="small" onClick={() => go(reExtractHash(a))}>重新提取</Button>}
-        <Button size="small" type={st_ === 'published' ? 'default' : 'primary'} onClick={() => open(a)}>{st_ === 'published' ? '查看' : '审阅'}</Button></>}>
-      <p className="ui-note">{a.desc}</p>{stale && <StaleNote st={st} a={a} c={stale} />}
+  // Needs the admin: a knowledge draft to review, or a diagnosis with suggestions to submit.
+  const needsAction = (a: Artifact) => isDiagnosis(a) ? pendingCount(a) > 0 : !!a.draft;
+  /** Cards say only what differs: a tag when something needs attention, the version and time in the footer. */
+  const card = (a: Artifact, todo: boolean) => {
+    const cap = capability(st, a.cap), diagnosis = isDiagnosis(a), n = diagnosis ? pendingCount(a) : 0, stale = !diagnosis && staleChanges(st, a);
+    const docs = stale && source(st, a.sources[0])?.type === 'docs';
+    const tag = todo ? (diagnosis ? <Tag color="warning">{n} 条建议待提交</Tag> : <ArtifactStatus a={a} />)
+      : stale ? <Tooltip title={(docs ? versionLabel(stale.from) + ' → ' + versionLabel(stale.to) + '，' : '') + stale.text}><Tag color="warning">{docs ? '文档有变化' : '代码有变化'}</Tag></Tooltip> : null;
+    const footer = (a.published && !a.draft ? 'v' + a.published.version + ' · ' : '') + when(sortTime(a));
+    return <ItemCard key={a.id} icon={<CapIcon cap={cap} />} title={a.name} subtitle={todo ? cap.name : undefined} extra={tag} onClick={() => open(a)} caption={footer}
+      actions={todo ? <Button size="small" type="primary" onClick={() => open(a)}>{diagnosis ? '查看建议' : '审阅'}</Button>
+        : stale ? <Button size="small" onClick={() => go(reExtractHash(a))}>重新提取</Button> : undefined}>
+      {a.desc && <p className="ui-note one-line" title={a.desc}>{a.desc}</p>}
     </ItemCard>;
   };
-  // A diagnosis is not reviewed and published: its card tells how many suggestions wait to be applied.
-  const diagnosisCard = (a: Artifact) => {
-    const n = pendingCount(a);
-    return <ItemCard key={a.id} icon={<CapIcon cap={capability(st, a.cap)} />} title={a.name} subtitle={capability(st, a.cap).name} extra={<ArtifactStatus a={a} />} onClick={() => open(a)}
-      caption={'诊断于 ' + when(a.draft?.created)} actions={<Button size="small" type={n ? 'primary' : 'default'} onClick={() => open(a)}>{n ? '查看建议' : '查看'}</Button>}>
-      <p className="ui-note">{a.desc}</p>
-      {n > 0 && <div className="update-note"><b>{n} 条优化建议待提交</b><span className="caption">提交对项目 Skill 或 AGENTS.md 的改进 PR</span></div>}
-    </ItemCard>;
-  };
-  const mine = st.artifacts.filter(a => a.projectId === pid), knowledge = mine.filter(a => !isDiagnosis(a)), diagnoses = mine.filter(isDiagnosis);
-  const pending = knowledge.filter(a => a.draft), done = knowledge.filter(a => !a.draft);
+  const mine = st.artifacts.filter(a => a.projectId === pid).sort((a, b) => sortTime(a) < sortTime(b) ? 1 : -1);
+  const todo = mine.filter(needsAction), rest = mine.filter(a => !needsAction(a));
+  const groups = st.categories.map(cat => ({ cat, items: rest.filter(a => capability(st, a.cap)?.cat === cat.id) })).filter(g => g.items.length);
+  const toggle = (id: string) => setExpanded(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   return <>
     {toolbar()}
-    <Section title="待审阅" note={pending.length + ' 个'}>{pending.length ? <CardGrid>{pending.map(card)}</CardGrid> : mine.length === 0 && levelSources(st, pid).length === 0
-      ? <EmptyState title="还没有产物">先登记来源，再创建知识任务生成产物。<Button type="link" onClick={() => go(levelHash(pid, 'sources'))}>登记来源</Button></EmptyState>
-      : <EmptyState>没有需要审阅的产物</EmptyState>}</Section>
-    {diagnoses.length > 0 && <Section title="轨迹诊断" note={diagnoses.length + ' 个'}><CardGrid>{diagnoses.map(card)}</CardGrid></Section>}
-    {done.length > 0 && <Section title="已有产物" note={done.length + ' 个'}><CardGrid>{done.map(card)}</CardGrid></Section>}
+    {!mine.length && <EmptyState title="还没有产物">{levelSources(st, pid).length === 0 && <Button type="link" onClick={() => go(levelHash(pid, 'sources'))}>登记来源</Button>}</EmptyState>}
+    {todo.length > 0 && <Section title={<span className="todo-title"><BellOutlined />需要处理</span>}><CardGrid>{todo.map(a => card(a, true))}</CardGrid></Section>}
+    {groups.map(({ cat, items }) => {
+      const all = expanded.has(cat.id), shown = all ? items : items.slice(0, FOLD);
+      return <Section key={cat.id} title={cat.name} note={items.length}>
+        <CardGrid>{shown.map(a => card(a, false))}</CardGrid>
+        {items.length > FOLD && <Button type="link" className="fold-toggle" onClick={() => toggle(cat.id)}>{all ? '收起' : '展开全部 ' + items.length + ' 个'}</Button>}
+      </Section>;
+    })}
   </>;
 }
 
@@ -115,8 +123,6 @@ export function Workbench({ id }: { id: string }) {
         {!a.draft ? <PublishedSide st={st} a={a} /> : <>
           <h3>{a.published ? '新版本待审阅' : '待审阅'}</h3>
           <Fields rows={[['生成于', when(a.draft.created)], basisRow(st, a, a.draft.basis), !!a.published && ['上次版本', 'v' + a.published.version + '，生成于 ' + when(a.published.at)]]} />
-          <p className="ui-note">{K.isIndex(a) ? '索引保留在远端，配置 MCP 后可在线查询。'
-            : '确认内容后自动创建 PR，由开发者审阅并合入代码仓。' + (a.published ? '可以切换到“对比”查看与上次版本的差异。' : '')}</p>
         </>}
       </div></aside>
     </div>
@@ -130,8 +136,6 @@ function PublishedSide({ st, a }: { st: TalentsState; a: Artifact }) {
   return <><h3>{K.isIndex(a) ? '远端索引' : a.submission ? 'PR 已创建' : '已有版本'}</h3>
     <Fields rows={[[ '版本', 'v' + p.version], ['生成于', p.at], basisRow(st, a, p.basis), ['更新说明', p.note]]} />
     {a.submission && <SubmissionLink submission={a.submission} />}
-    <p className="caption">{K.isIndex(a) ? '索引位于远端，可通过 MCP 查询。' : '知识变更通过 PR 提交到代码仓，审阅和合入在代码托管平台完成。'}</p>
-    {stale ? <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go(reExtractHash(a))}>重新提取</Button></div></>
-      : <p className="caption">{K.isIndex(a) ? '对应的知识任务运行后会更新远端索引。' : '重新运行对应的知识任务后，新版本会出现在“待审阅”。'}</p>}
+    {stale && <><StaleNote st={st} a={a} c={stale} /><div className="actions"><Button onClick={() => go(reExtractHash(a))}>重新提取</Button></div></>}
   </>;
 }

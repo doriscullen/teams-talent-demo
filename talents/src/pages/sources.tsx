@@ -29,15 +29,15 @@ export function LevelSources({ pid, toolbar }: { pid: string | null; toolbar: To
   </ItemCard>;
   const section = (type: Source['type'], title: string, empty: ReactNode) => {
     const items = list.filter(s => s.type === type);
-    return <Section title={title} note={items.length + ' 个'}>{items.length ? <CardGrid>{items.map(card)}</CardGrid> : <EmptyState>{empty}</EmptyState>}</Section>;
+    return <Section title={title} note={items.length}>{items.length ? <CardGrid>{items.map(card)}</CardGrid> : <EmptyState>{empty}</EmptyState>}</Section>;
   };
   return <>
     {toolbar(<Button type="primary" icon={<PlusOutlined />} onClick={() => setRegistering(true)}>登记本地文档来源</Button>)}
     {p ? <>
-      {section('repo', '代码仓', <>这个项目还没有本机代码仓。<a href={teamsLink(p.id)}>去 Teams 添加代码仓</a></>)}
-      {section('docs', '文档集', <>还没有文档。可以登记本地文档目录，或<a href={teamsLink(p.id)}>去 Teams 添加设计文档</a>。</>)}
+      {section('repo', '代码仓', <>没有代码仓 <a href={teamsLink(p.id)}>去 Teams 添加</a></>)}
+      {section('docs', '文档集', <>没有文档集 <a href={teamsLink(p.id)}>去 Teams 添加</a></>)}
       <TeamsCollections p={p} sessions={levelSessions(st, p.id)} onOpen={setCollection} />
-    </> : section('docs', '文档集', '还没有团队级的来源。可以登记行内规范等全团队通用的本地文档目录。')}
+    </> : section('docs', '文档集', '没有文档集')}
     {open && source(st, open) && <SourceDrawer id={open} onClose={() => setOpen(null)} />}
     {p && collection === 'sessions' && <SessionsDrawer sessions={levelSessions(st, p.id)} onClose={() => setCollection(null)} />}
     {p && collection === 'skills' && <SkillsDrawer pid={p.id} skills={p.skills} onClose={() => setCollection(null)} />}
@@ -51,15 +51,15 @@ const PAGE = 10;
 const latest = (sessions: Session[]) => sessions.reduce((a, s) => s.updated > a ? s.updated : a, '');
 function TeamsCollections({ p, sessions, onOpen }: { p: { skills: ProjectSkill[] }; sessions: Session[]; onOpen(which: 'sessions' | 'skills'): void }) {
   const members = new Set(sessions.map(s => s.owner)).size, names = p.skills.slice(0, 2).map(s => s.name).join('、');
-  const card = (which: 'sessions' | 'skills', title: string, subtitle: string, rows: [string, ReactNode][]) =>
-    <ItemCard key={which} icon={<SourceIcon type={which} />} title={title} subtitle={subtitle} onClick={() => onOpen(which)}
+  const card = (which: 'sessions' | 'skills', title: string, rows: [string, ReactNode][]) =>
+    <ItemCard key={which} icon={<SourceIcon type={which} />} title={title} onClick={() => onOpen(which)}
       caption={<Tag>iCode Teams</Tag>} actions={<Button type="link" size="small" onClick={() => onOpen(which)}>查看</Button>}><Fields rows={rows} /></ItemCard>;
-  return <Section title="会话与 Skill" note="来自 iCode Teams">
+  return <Section title="会话与 Skill">
     <CardGrid>
-      {card('sessions', '成员共享的会话', '成员在 iCode Teams 中共享的 Agent 会话', sessions.length
-        ? [['会话', sessions.length + ' 个，' + members + ' 位成员'], ['最近更新', when(latest(sessions))]] : [['会话', <span className="ui-note">还没有成员共享会话</span>]])}
-      {card('skills', '项目 Skill', 'iCode Teams 项目可用的 Skill', p.skills.length
-        ? [['Skill', p.skills.length + ' 个'], ['包括', names + (p.skills.length > 2 ? ' 等' : '')]] : [['Skill', <span className="ui-note">还没有项目 Skill</span>]])}
+      {card('sessions', '成员共享的会话', sessions.length
+        ? [['会话', sessions.length + ' 个，' + members + ' 位成员'], ['最近更新', when(latest(sessions))]] : [['会话', '0 个']])}
+      {card('skills', '项目 Skill', p.skills.length
+        ? [['Skill', p.skills.length + ' 个'], ['包括', names + (p.skills.length > 2 ? ' 等' : '')]] : [['Skill', '0 个']])}
     </CardGrid>
   </Section>;
 }
@@ -97,7 +97,6 @@ function SessionsDrawer({ sessions, onClose }: { sessions: Session[]; onClose():
       {s.summary && <p>{s.summary}</p>}
       <Fields rows={[['成员', owner(s)], !!s.agent && ['Agent', s.agent], !!s.model && ['模型', s.model], ['关联需求', s.requirementId ?? <span className="ui-note">无</span>],
         ['对话轮次', s.turns], ['消息', s.messages], ['Token', tokens(s.tokens)], ['最后更新', when(s.updated)], !!s.cwd && ['工作目录', <span className="path">{s.cwd}</span>], ['会话 ID', <code>{s.id}</code>]]} />
-      <p className="caption">会话由成员在 iCode Teams 中共享，在 Talents 中只读。</p>
     </div> })} />;
 }
 
@@ -121,7 +120,6 @@ function SkillDetail({ pid, skill, written }: { pid: string; skill: ProjectSkill
   return <div className="form-body">
     <Fields rows={written ? [['版本', <>{written.version} <Tag color="purple">Talents 改进</Tag></>], ['基于', skill.version], ['说明', skill.description], ['改进', written.note + '，' + when(written.at)],
       ['修改的文件', written.files.map(f => f.path).join('、')]] : [['版本', skill.version], ['说明', skill.description], ['路径', <span className="path">{skill.path}</span>]]} />
-    <p className="caption">{written ? '由会话轨迹诊断的优化建议写入，iCode Teams 读取后成为这个项目 Skill 的新版本。' : '项目 Skill 在 iCode Teams 中管理，在 Talents 中只读。'}</p>
     {error ? <p className="hint">{error}</p> : text === null ? <p className="ui-note">正在读取 SKILL.md…</p> : <article className="markdown"><Markdown text={text} /></article>}
   </div>;
 }
@@ -130,7 +128,6 @@ function SkillDetail({ pid, skill, written }: { pid: string; skill: ProjectSkill
 function projectField(st: TalentsState, s: Source): [string, ReactNode] {
   return ['所属', levelName(st, s.projectId ?? null)];
 }
-const teamsNote = (s: Source) => s.fromTeams && <p className="caption">来自 iCode Teams，在 Talents 中只读；增删或修改请在 iCode Teams 中进行。</p>;
 
 /** Checking a Teams document set compares the documents Teams lists now with the latest recorded version;
  *  a difference is recorded as a new version. Local directories are mock: their check finds no change. */
@@ -172,9 +169,8 @@ function DocsDetail({ st, s, checking, onCheck }: { st: TalentsState; s: Source;
     {s.desc && <p>{s.desc}</p>}
     <Fields rows={[['路径', <span className="path">{s.path}</span>], !!from && ['来自', from], ['文件', s.files + ' 个'],
       ['最近检查', <>{when(s.lastCheck)} <Button type="link" size="small" loading={checking} onClick={onCheck}>检查更新</Button></>],
-      versions.length > 0 && ['版本记录', <><VersionList versions={versions} /><span className="caption">检查发现文件有变化时记录一个版本。</span></>],
+      versions.length > 0 && ['版本记录', <VersionList versions={versions} />],
       projectField(st, s)]} />
-    {teamsNote(s)}
     <div className="field"><span className="label">文件</span>
       <Table size="small" pagination={false} rowKey="key" dataSource={all ? files : files.slice(0, FILE_ROWS)} columns={[
         { title: '文件名', render: (_, f) => <>{f.name}{latest.added?.includes(f.key) ? <FileMark kind="new" /> : latest.modified?.includes(f.key) ? <FileMark kind="mod" /> : null}{titles[f.key] && <div className="caption">{titles[f.key]}</div>}</> },
@@ -212,7 +208,7 @@ function SourceDrawer({ id, onClose }: { id: string; onClose(): void }) {
       <span className="spacer" /><Button onClick={() => { onClose(); go(levelHash(s.projectId ?? null, 'tasks', { new: '1', source: id })); }}>新建知识任务</Button></div>}>
     {s.type === 'repo'
       ? <div className="form-body">{s.desc && <p>{s.desc}</p>}<Fields rows={[['路径', <span className="path">{s.path}</span>], !!s.origin && ['远端', <span className="path">{s.origin}</span>], ['当前分支', s.branch],
-          !!s.commit && ['最近提交', <><code>{s.commit.sha}</code> {s.commit.message}<div className="caption">{s.commit.time}</div></>], projectField(st, s)]} />{teamsNote(s)}</div>
+          !!s.commit && ['最近提交', <><code>{s.commit.sha}</code> {s.commit.message}<div className="caption">{s.commit.time}</div></>], projectField(st, s)]} /></div>
       : <DocsDetail st={st} s={s} checking={checking} onCheck={runCheck} />}
     {editing && <EditSource s={s} onClose={() => setEditing(false)} />}
   </Drawer>;
@@ -228,7 +224,7 @@ function EditSource({ s, onClose }: { s: Source; onClose(): void }) {
   return <Modal open title={<div><div className="caption">本地文档目录</div>编辑来源</div>} okText="保存" cancelText="取消" onOk={() => form.submit()} onCancel={onClose}>
     <Form form={form} layout="vertical" onFinish={save} initialValues={{ name: s.name, desc: s.desc ?? '' }}>
       <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true, message: '请填写名称' }]}><Input /></Form.Item>
-      <Form.Item name="desc" label={<>说明 <span className="caption">可选</span></>}><Input.TextArea rows={2} placeholder="一句话说明这个来源的内容" /></Form.Item>
+      <Form.Item name="desc" label="说明"><Input.TextArea rows={2} placeholder="一句话说明这个来源的内容" /></Form.Item>
     </Form>
   </Modal>;
 }
@@ -263,7 +259,6 @@ function RegisterSource({ pid, onClose }: { pid: string | null; onClose(): void 
   return <Drawer open width={520} title={<div><div className="caption">{levelName(st, pid)}</div>登记本地文档来源</div>} onClose={onClose}
     footer={<div className="drawer-foot"><span className="spacer" /><Button onClick={onClose}>取消</Button><Button type="primary" disabled={!probe} onClick={submit}>登记</Button></div>}>
     <div className="form-body">
-      <p className="caption">{pid ? '代码仓和设计文档来自 iCode Teams 项目。这里登记 Talents 自己读取的本地或共享文档目录，例如会议纪要。' : '登记全团队通用的本地或共享文档目录，例如行内规范。'}</p>
       <div className="field"><span className="label"><span className="step">1</span>目录</span>
         <Space.Compact style={{ width: '100%' }}>
           <AutoComplete style={{ flex: 1 }} value={path} onChange={setPath} options={samples.map(x => ({ value: x.path }))} placeholder="选择或输入本地文档目录" />
@@ -274,7 +269,7 @@ function RegisterSource({ pid, onClose }: { pid: string | null; onClose(): void 
       </div>
       {probe && <>
         <label className="field"><span className="label"><span className="step">2</span>名称</span><Input value={name} onChange={e => setName(e.target.value)} /></label>
-        <label className="field"><span className="label">说明 <span className="caption">可选</span></span><Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="一句话说明这个来源的内容" /></label>
+        <label className="field"><span className="label">说明</span><Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="一句话说明这个来源的内容" /></label>
       </>}
     </div>
   </Drawer>;

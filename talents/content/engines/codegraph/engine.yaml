@@ -1,0 +1,80 @@
+schemaVersion: 1
+id: codegraph
+name: Codegraph
+description: 为代码仓库，或代码仓库集合中的每个子仓，构建可查询的知识索引
+definitionVersion: "0.1.0"
+
+# 来源二选一：任务选一个代码仓库，或选一个代码仓库集合（按子仓逐个执行）。
+# 两种任务的索引都写在仓库内：集合任务写在每个子仓的根目录下，不写在集合根目录。
+input:
+  repositories:
+    type: array
+    items:
+      type: repository
+    minItems: 1
+    maxItems: 1
+  repositorySet:
+    type: repositorySet
+
+build:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}"]
+  platforms:
+    windows:
+      command: py
+      args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}"]
+
+update:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}"]
+  platforms:
+    windows:
+      command: py
+      args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}"]
+
+autoSync:
+  supported: true
+  description: 仅对 MCP 默认项目（由启动目录解析出的仓库）在服务运行期间监听并同步；通过 projectPath 显式查询的其他仓库不自动同步，监听停止后不再持续同步。
+
+output:
+  index:
+    relativeTo: repository
+    path: .codegraph
+
+applications:
+  - name: MCP 查询
+    type: mcp
+    command: codegraph
+    args: [serve, --mcp]
+
+# 安装 codegraph v1.6.0（官方安装脚本，非交互）。安装后需确认 codegraph 所在目录（macOS/Linux 为
+# ~/.local/bin）在 iCode Knowledge 后端进程的 PATH 中，见 README。
+install:
+  platforms:
+    macos:
+      command: sh
+      args: ["-c", "curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | CODEGRAPH_VERSION=v1.6.0 sh"]
+    linux:
+      command: sh
+      args: ["-c", "curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | CODEGRAPH_VERSION=v1.6.0 sh"]
+    windows:
+      command: powershell
+      args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "$env:CODEGRAPH_VERSION = 'v1.6.0'; irm https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.ps1 | iex"]
+
+# 每次构建、更新前的自检：与构建相同的环境检查和 codegraph 查找，再运行 codegraph --version
+uninstall:
+  description: 删除整套 CodeGraph 官方程序安装（包括所有版本和自带运行时）及其命令入口；保留代码仓库内的 .codegraph 产物和 iCode Knowledge 任务记录。其他工具可能共用此安装，请先停止相关使用。
+  command: python3
+  args: ["${package.root}/scripts/uninstall.py"]
+  platforms:
+    windows:
+      command: py
+      args: ["${package.root}/scripts/uninstall.py"]
+
+check:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--check"]
+  platforms:
+    windows:
+      command: py
+      args: ["${package.root}/scripts/run.py", "--check"]

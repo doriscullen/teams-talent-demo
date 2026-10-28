@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: doc-rag
+name: 文档 RAG 检索
+description: 为文档集建立 BM25 + 向量混合检索索引，按问题找到相关段落
+definitionVersion: "0.1.0"
+
+# 文档来源固定为执行前检查得到的快照；更新时输入文件中带上次构建的版本和变化的文件。
+input:
+  documents:
+    type: array
+    items:
+      type: document
+    required: true
+    minItems: 1
+    maxItems: 1
+  embeddingModel:
+    type: string
+
+build:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}", "--rebuild"]
+
+update:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--input-file", "${inputFile.path}"]
+
+output:
+  index:
+    relativeTo: managed
+    path: rag-index
+
+applications:
+  - name: MCP 查询
+    type: mcp
+    command: docs-rag
+    args: [serve, --mcp]
+
+install:
+  command: python3
+  args: ["-m", "pip", "install", "--user", "icode-docs-rag==0.4.2"]
+
+uninstall:
+  description: 卸载 icode-docs-rag；保留已建立的索引和任务记录。
+  command: python3
+  args: ["-m", "pip", "uninstall", "-y", "icode-docs-rag"]
+
+check:
+  command: python3
+  args: ["${package.root}/scripts/run.py", "--check"]

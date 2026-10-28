@@ -17,10 +17,12 @@ import { isDiagnosis, pendingCount } from '../demo/suggestions.ts';
 
 /** The tabs of the level, with the current tab's actions on the right. */
 export type Toolbar = (actions?: ReactNode) => ReactNode;
-/** What waits for the admin in a level: artifacts to review, and diagnosis suggestions to apply. */
+/** What waits for the admin in a level: artifacts to review, and diagnosis suggestions to apply;
+ *  artifacts counts both kinds of artifact once, as the 需要处理 section lists them. */
 function waiting(st: TalentsState, pid: string | null) {
   const mine = st.artifacts.filter(a => a.projectId === pid);
-  return { review: mine.filter(a => a.draft && !isDiagnosis(a)).length, suggestions: mine.reduce((n, a) => n + pendingCount(a), 0) };
+  const review = mine.filter(a => a.draft && !isDiagnosis(a)).length, diagnoses = mine.filter(a => pendingCount(a) > 0).length;
+  return { review, suggestions: mine.reduce((n, a) => n + pendingCount(a), 0), artifacts: review + diagnoses };
 }
 
 export function Team() {
@@ -41,7 +43,7 @@ function Level({ pid }: { pid: string | null }) {
     <div><Button icon={<ArrowLeftOutlined />} onClick={() => go(levelHash(pid, 'review'))}>返回产物管理</Button></div>
     {opened?.kind === 'diagnosis' ? <DiagnosisWorkbench key={opened.id} id={opened.id} /> : <Workbench key={route.params.id} id={route.params.id} />}
   </div>;
-  const p = project(st, pid), w = waiting(st, pid), pending = w.review + w.suggestions;
+  const p = project(st, pid), w = waiting(st, pid), pending = w.artifacts;
   const toolbar: Toolbar = actions => <div className="project-toolbar" role="region" aria-label={(p?.name ?? '团队') + '工具栏'}>
     <Tabs activeKey={tab} onChange={key => go(levelHash(pid, key as LevelTab))}
       items={levelTabs.map(t => ({ key: t.key, label: t.key === 'review' && pending ? <>{t.label} <Badge count={pending} size="small" color="var(--ui-color-primary)" /></> : t.label }))} />
@@ -50,7 +52,7 @@ function Level({ pid }: { pid: string | null }) {
   const Body = { sources: LevelSources, tasks: LevelTasks, review: LevelReview }[tab];
   return <div className="page-stack level-page">
     {p ? <PageHeader title={p.name} />
-      : <PageHeader title="团队" description="全团队通用的来源和知识，例如行内规范。团队知识在每个项目中都可用。" />}
+      : <PageHeader title="团队" />}
     <Body key={tab} pid={pid} toolbar={toolbar} />
   </div>;
 }
@@ -67,8 +69,8 @@ function ProjectList() {
     </ItemCard>;
   };
   return <div className="page-stack">
-    <PageHeader title="项目" description="项目来自 iCode Teams。进入项目，管理它的来源、知识任务和产物。"
+    <PageHeader title="项目"
       actions={<Button href={teamsLink(null)} icon={<ExportOutlined />}>在 iCode Teams 中管理项目</Button>} />
-    {st.projects.length ? <CardGrid>{st.projects.map(card)}</CardGrid> : <EmptyState title="还没有项目">在 iCode Teams 中创建项目后，会出现在这里。</EmptyState>}
+    {st.projects.length ? <CardGrid>{st.projects.map(card)}</CardGrid> : <EmptyState title="还没有项目" />}
   </div>;
 }

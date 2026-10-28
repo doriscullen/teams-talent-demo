@@ -1,0 +1,38 @@
+schemaVersion: 1
+id: doc-knowledge-extract
+name: 业务知识提取
+description: 从需求、设计文档中提取业务规则、统一语言术语和数据字典，每条知识注明出处
+definitionVersion: "0.1.0"
+
+input:
+  documents:
+    type: array
+    items:
+      type: document
+    required: true
+    minItems: 1
+    maxItems: 1
+  focus:
+    type: string
+
+output:
+  knowledge:
+    relativeTo: managed
+    path: doc-knowledge
+
+build:
+  skill:
+    name: doc-knowledge-extract
+    defaultPrompt: |
+      从所选文档集中提取业务规则、统一语言术语和数据字典，每条知识注明出处。
+
+      运行准备脚本时传入输入文件：${inputFile.path}。脚本会列出本次的全部输入、输出位置和规则，之后按它的输出进行。
+
+# 更新时输入文件带上一版产物和文档变化（新增、修改、删除的文件），只修订受影响的条目。
+update:
+  skill:
+    name: doc-knowledge-extract
+    defaultPrompt: |
+      根据文档变化修订已有的业务知识：只改受影响的条目，删除的文档要标出引用它的知识。
+
+      运行准备脚本时传入输入文件：${inputFile.path}。

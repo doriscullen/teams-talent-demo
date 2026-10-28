@@ -73,3 +73,13 @@ test('the store checks the revision and writes every change', async () => {
   assert.equal(store.state.role, 'admin');
   assert.equal(store.state.revision, first + 2);
 });
+
+test('restarting takes the current built-in capabilities and keeps imported ones', async () => {
+  const path = join(await mkdtemp(join(tmpdir(), 'talents-store-')), 'state.json');
+  const first = new Store(path); await first.init();
+  await first.mutate(first.state.revision, s => ({ ...s, capabilities: [...s.capabilities.map(c => ({ ...c, name: '旧名称' })), { id: 'db-schema', cat: 'index', name: '数据库结构索引', custom: true }] }));
+  const again = new Store(path); await again.init();
+  const builtIn = seedState().capabilities;
+  assert.deepEqual(again.state.capabilities.slice(0, builtIn.length).map(c => c.name), builtIn.map(c => c.name));
+  assert.equal(again.state.capabilities.at(-1)!.id, 'db-schema');
+});

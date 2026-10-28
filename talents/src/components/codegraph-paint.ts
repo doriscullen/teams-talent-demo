@@ -10,11 +10,11 @@ export function readTheme(element: Element): Theme {
   return { canvas: value('--ui-color-workspace', '#ffffff'), text: value('--ui-color-text', '#282a35'), primary: value('--ui-color-primary', '#7855ae') };
 }
 
-/** A rim in the canvas colour keeps overlapping nodes apart. */
-export function paintNode(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, dim: boolean, scale: number, theme: Theme) {
+/** A flat disc without a rim. */
+export function paintNode(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, dim: boolean) {
   ctx.globalAlpha = dim ? .15 : 1;
   ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
-  ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = theme.canvas; ctx.lineWidth = 1 / scale; ctx.stroke();
+  ctx.fillStyle = color; ctx.fill();
   ctx.globalAlpha = 1;
 }
 

@@ -31,7 +31,7 @@ function PrRecord({ text }: { text: string }) {
   return <article className="markdown"><h1>PR #{pr.number} {pr.title}</h1>
     <Fields rows={[['状态', '已合并' + (pr.mergedAt ? '，' + String(pr.mergedAt).replace('T', ' ').slice(0, 16) : '')], !!pr.author && ['作者', pr.author], ['链接', <span className="path">{pr.url ?? ''}</span>]]} />
     <Markdown text={pr.body ?? ''} />
-    <p className="caption">diff 未随产物保存，需要时用 <code>git show</code> 或打开 PR 链接查看。</p></article>;
+</article>;
 }
 
 /** Mining metadata of a diff-mode spec (miner/<spec>/meta.json): scenario, repository, engine and snippets. */
@@ -56,7 +56,6 @@ function MinerMeta({ text }: { text: string }) {
     {(meta.snippets ?? []).length > 0 && <>
       <h2>输入代码片段</h2>
       <ul className="file-lines">{meta.snippets!.map((s, i) => <li key={i}><span className="path">{s.archived ?? ''}</span>{s.size ? <span className="caption"> · {s.size.toLocaleString()} 字节</span> : null}</li>)}</ul>
-      <p className="caption">片段为从历史实现按路径提取的 Git diff，保留原始变更；分析时结合代码仓上下文总结范式。</p>
     </>}
   </article>;
 }
@@ -74,7 +73,7 @@ export function FileContent({ st, a, file, text }: { st: TalentsState; a: Artifa
 export function IndexSummary({ a }: { a: Artifact }) {
   if (a.id === 'a-cg-java') return <CodeGraphView />;
   return <div className="index-summary"><div className="stat-row">{(a.stats ?? []).map(([label, value]) => <div className="stat" key={label}><b>{value}</b><span>{label}</span></div>)}</div>
-    <p>{a.desc}</p><p className="ui-note">索引通过在线查询使用，不需要打开阅读。</p></div>;
+    <p>{a.desc}</p></div>;
 }
 
 export function DiffView({ before, after }: { before: string | null; after: string | null }) {

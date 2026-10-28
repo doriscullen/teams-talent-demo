@@ -1,4 +1,4 @@
-// 会话轨迹诊断的工作台。诊断不走审阅发布：左侧是诊断报告和各条优化建议，中间是报告或一条建议的内容，
+// 轨迹洞察的诊断工作台。诊断不走审阅发布：左侧是诊断报告和各条优化建议，中间是报告或一条建议的内容，
 // 右侧逐条提交改进 PR 或暂不采纳。Skill 建议修改项目 Skill 的文件；工具和任务指令建议向 AGENTS.md 补充规则。
 import { useState } from 'react';
 import { Button, Collapse, Input, Modal, Tag } from 'antd';
@@ -26,7 +26,7 @@ export function DiagnosisWorkbench({ id }: { id: string }) {
   if (!a || !r) return <EmptyState>找不到这个诊断。<a href="#/projects">返回项目</a></EmptyState>;
   const picked = r.suggestions.find(s => s.id === item);
   return <div className="wb">
-    <PageHeader title={a.name} description="会话轨迹诊断" actions={<ArtifactStatus a={a} />} />
+    <PageHeader title={a.name} description="轨迹洞察" actions={<ArtifactStatus a={a} />} />
     <div className="wb-body">
       <FileList current={item} onSelect={setItem} groups={[
         { title: '', items: [{ key: REPORT, label: '诊断报告' }] },
@@ -89,7 +89,7 @@ function SuggestionSide({ a, s }: { a: Artifact; s: Suggestion }) {
     <p className="caption">自动创建 PR，由开发者审阅合入。不直接修改当前项目的能力版本。</p>
     {state.status === 'pending' ? <div className="actions">
       <Button type="primary" onClick={() => setSubmitting(true)}>提交改进 PR</Button>
-      <Button onClick={() => setDeclining(true)}>暂不采纳</Button>
+      <Button className="btn-warning" onClick={() => setDeclining(true)}>暂不采纳</Button>
     </div> : state.status === 'submitted' ? <SubmissionLink submission={state.submission!} />
       : state.status === 'declined' ? <><p>暂不采纳：{state.reason ?? '没有填写原因'}</p>
         <Button onClick={() => update(d => reopen(d, a, s.id))}>重新考虑</Button></> : <p>历史处理记录</p>}
@@ -100,7 +100,7 @@ function SuggestionSide({ a, s }: { a: Artifact; s: Suggestion }) {
 
 function DeclineDialog({ onClose, onDone }: { onClose(): void; onDone(reason: string): void }) {
   const [reason, setReason] = useState('');
-  return <Modal open title="暂不采纳这条建议？" okText="暂不采纳" cancelText="取消" onOk={() => onDone(reason)} onCancel={onClose}>
+  return <Modal open title="暂不采纳这条建议？" okText="暂不采纳" okButtonProps={{ className: 'btn-warning' }} cancelText="取消" onOk={() => onDone(reason)} onCancel={onClose}>
     <div className="form-body"><label className="field"><span className="label">原因 <span className="caption">可选</span></span>
       <Input.TextArea rows={2} value={reason} onChange={e => setReason(e.target.value)} placeholder="例如：已有其他方案覆盖" /></label></div>
   </Modal>;
