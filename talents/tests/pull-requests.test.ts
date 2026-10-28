@@ -96,17 +96,17 @@ test('files go under the project directory, and a CRLF skill file keeps its line
   assert.ok(knowledge.files.every(f => f.path.startsWith('workspace/docs/knowledge/a-biz/')));
 });
 
-test('PRs go to a fork of the project repository among the git remotes, otherwise to the repository; always main', async () => {
+test('PRs go to a fork of the project repository among the git remotes, otherwise to the repository; always the project branch', async () => {
   const upstream = 'zhuyuloveai/teams-talent-demo';
   const gh: Github = async (_method, path) => path === 'repos/tester/teams-talent-demo'
     ? { full_name: 'tester/teams-talent-demo', fork: true, parent: { full_name: upstream } }
     : { full_name: path.slice(6), fork: path !== 'repos/' + upstream };
   const withFork = await defaultTarget('carddemo', gh, async () => ['https://github.com/' + upstream + '.git', 'git@github.com:other/unrelated.git', 'git@github.com:tester/teams-talent-demo.git']);
-  assert.deepEqual(withFork, { repository: 'tester/teams-talent-demo', base: 'main', fork: true, directory: 'workspace' });
+  assert.deepEqual(withFork, { repository: 'tester/teams-talent-demo', base: 'develop', fork: true, directory: 'workspace' });
   const withoutFork = await defaultTarget('carddemo', gh, async () => ['https://github.com/' + upstream + '.git', 'https://github.com/other/unrelated']);
-  assert.deepEqual(withoutFork, { repository: upstream, base: 'main', fork: false, directory: 'workspace' });
+  assert.deepEqual(withoutFork, { repository: upstream, base: 'develop', fork: false, directory: 'workspace' });
   assert.deepEqual(await defaultTarget('carddemo', async () => { throw new Error('offline'); }, async () => ['git@github.com:tester/teams-talent-demo.git']),
-    { repository: upstream, base: 'main', fork: false, directory: 'workspace' });
+    { repository: upstream, base: 'develop', fork: false, directory: 'workspace' });
   await assert.rejects(defaultTarget('unknown', gh, async () => []), /还没有关联 GitHub 仓库/);
 });
 

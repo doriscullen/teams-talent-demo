@@ -33,10 +33,10 @@ function safePath(path: string) {
   return path;
 }
 
-/** The GitHub repository each project's code lives in, and the project's directory inside it.
- *  Assumed for the demo: 信用卡营销交付 is the workspace/ directory of teams-talent-demo. */
-export const projectRepositories: Record<string, { upstream: string; directory: string }> = {
-  carddemo: { upstream: 'zhuyuloveai/teams-talent-demo', directory: 'workspace' },
+/** The GitHub repository each project's code lives in, the project's directory inside it, and the branch its data is on.
+ *  Assumed for the demo: 信用卡营销交付 is the workspace/ directory of teams-talent-demo, maintained on develop. */
+export const projectRepositories: Record<string, { upstream: string; directory: string; base: string }> = {
+  carddemo: { upstream: 'zhuyuloveai/teams-talent-demo', directory: 'workspace', base: 'develop' },
 };
 /** The local clone whose remotes decide between the upstream repository and a fork of it. */
 const checkout = process.env.DEMO_PR_CHECKOUT ?? repositoryRoot;
@@ -45,7 +45,7 @@ const gitRemotes = () => new Promise<string[]>(resolve => execFile('git', ['-C',
 const githubRepository = (url: string) => /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url)?.[1] ?? null;
 
 export interface DefaultTarget { repository: string; base: string; fork: boolean; directory: string }
-/** Where a project's PRs go by default: a fork of its repository among the local git remotes, else the repository itself; always main. */
+/** Where a project's PRs go by default: a fork of its repository among the local git remotes, else the repository itself; always the project's branch. */
 export async function defaultTarget(projectId: string | null, gh: Github = github, remotes = gitRemotes): Promise<DefaultTarget> {
   const project = projectId ? projectRepositories[projectId] : undefined;
   if (!project) throw new HttpError('这个项目还没有关联 GitHub 仓库，请手动填写', 404);
@@ -53,9 +53,9 @@ export async function defaultTarget(projectId: string | null, gh: Github = githu
   const candidates = [...new Set((await remotes()).map(githubRepository).filter((r): r is string => !!r && r.toLowerCase() !== upstream))];
   for (const candidate of candidates) {
     const info = await gh('GET', 'repos/' + candidate).catch(() => null);
-    if (info?.fork && [info.parent?.full_name, info.source?.full_name].some(name => name?.toLowerCase() === upstream)) return { repository: info.full_name, base: 'main', fork: true, directory: project.directory };
+    if (info?.fork && [info.parent?.full_name, info.source?.full_name].some(name => name?.toLowerCase() === upstream)) return { repository: info.full_name, base: project.base, fork: true, directory: project.directory };
   }
-  return { repository: project.upstream, base: 'main', fork: false, directory: project.directory };
+  return { repository: project.upstream, base: project.base, fork: false, directory: project.directory };
 }
 
 export function knowledgeFiles(a: Artifact) {

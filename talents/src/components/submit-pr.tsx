@@ -34,7 +34,7 @@ export function SubmitDialog({ a, suggestion, onClose }: { a: Artifact; suggesti
   return <Modal open title={suggestion ? '提交改进 PR' : '提交知识 PR'} okText="提交 PR" cancelText="取消" confirmLoading={busy} onCancel={busy ? undefined : onClose} cancelButtonProps={{ disabled: busy }} onOk={() => form.submit()}>
     {step !== null && <Steps className="submit-steps" size="small" progressDot current={step} status={error ? 'error' : busy ? 'process' : 'finish'} items={STEPS.map((title, i) => ({ title: busy && i === step ? title + '…' : title }))} />}
     {error && <Alert type="error" showIcon title="提交失败" description={error} />}
-    <Form form={form} layout="vertical" initialValues={{ repository: a.submission?.repository ?? '', base: a.submission?.base ?? 'main', note: suggestion?.title ?? a.name, skillDirectory: skillDirectory('') }} onFinish={async values => {
+    <Form form={form} layout="vertical" initialValues={{ repository: a.submission?.repository ?? '', base: a.submission?.base ?? 'develop', note: suggestion?.title ?? a.name, skillDirectory: skillDirectory('') }} onFinish={async values => {
       setBusy(true); setError(''); setStep(0);
       try { await submit({ ...values, artifactId: a.id, suggestionId: suggestion?.id }, setStep); onClose(); toast('PR 已创建'); }
       catch (e) { setError((e as Error).message); }

@@ -48,7 +48,7 @@ try {
   let dialog = page.getByRole('dialog');
   await dialog.locator('input[value="tester/teams-talent-demo"]').waitFor();
   assert.equal(await dialog.getByLabel('GitHub 仓库').inputValue(), 'tester/teams-talent-demo');
-  assert.equal(await dialog.getByLabel('目标分支').inputValue(), 'main');
+  assert.equal(await dialog.getByLabel('目标分支').inputValue(), 'develop');
   await dialog.getByRole('button', { name: '提交 PR', exact: true }).click();
   await dialog.getByText('提交失败', { exact: true }).waitFor();
   assert.equal(await dialog.locator('.submit-steps .ant-steps-item-error').innerText(), '创建 PR');
@@ -77,7 +77,7 @@ try {
   assert.equal(calls.filter(c => c.method === 'POST' && c.path.endsWith('/pulls')).length, 4);
   assert.ok(!calls.some(c => c.path.includes('/merge')));
   const pulls = calls.filter(c => c.method === 'POST' && c.path.endsWith('/pulls'));
-  assert.ok(pulls.every(c => c.path === 'repos/tester/teams-talent-demo/pulls' && c.body.base === 'main'));
+  assert.ok(pulls.every(c => c.path === 'repos/tester/teams-talent-demo/pulls' && c.body.base === 'develop'));
   const trees = calls.filter(c => c.method === 'POST' && c.path.endsWith('/git/trees')).flatMap(c => c.body.tree);
   assert.ok(trees.length && trees.every(f => f.path.startsWith('workspace/')));
   assert.ok(trees.some(f => f.path === 'workspace/AGENTS.md'));

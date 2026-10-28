@@ -12,7 +12,7 @@ let result = { sha: 'test-generated' };
 const fail = message => { process.stderr.write('gh: ' + message); process.exit(1); };
 // The repository itself: anything but the project repository is a fork of it.
 if (method === 'GET' && /^repos\/[^/]+\/[^/]+$/.test(path)) result = { full_name: path.slice(6), fork: path !== 'repos/zhuyuloveai/teams-talent-demo', parent: { full_name: 'zhuyuloveai/teams-talent-demo' } };
-else if (path.endsWith('/git/ref/heads/main')) result = { object: { sha: 'test-base' } };
+else if (path.endsWith('/git/ref/heads/develop')) result = { object: { sha: 'test-base' } };
 else if (path.endsWith('/git/commits/test-base')) result = { sha: 'test-base', tree: { sha: 'test-tree' } };
 else if (path.includes('/contents/')) {
   const file = decodeURIComponent(path.split('/contents/')[1].split('?')[0]);
