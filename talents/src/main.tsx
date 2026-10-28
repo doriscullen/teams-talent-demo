@@ -56,7 +56,7 @@ function Shell({ mode, onToggleTheme }: { mode: UiThemeMode; onToggleTheme(): vo
           <div className="topbar-right">
             <span className="caption">{person('admin')} · 管理员</span>
             <Popconfirm title="重置数据？" description="新登记的本地文档来源、任务、修订和提交记录会被清除，恢复到初始状态。团队、成员和项目来自 iCode Teams，不受影响。" okText="重置" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={resetDemo}>
-              <Button type="text" danger size="small" aria-label="重置数据" title="重置数据" icon={<ReloadOutlined />}><span className="compact-action-label">重置数据</span></Button>
+              <Button type="text" size="small" aria-label="重置数据" title="重置数据" icon={<ReloadOutlined />}><span className="compact-action-label">重置数据</span></Button>
             </Popconfirm>
           </div>
         </header>
