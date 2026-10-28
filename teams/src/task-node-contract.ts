@@ -101,7 +101,9 @@ export function taskNodeView(state:DemoState,task:DeliveryRequirement,node:Requi
  if(acquisition&&acquisition.status!=='ready'&&!task.nodeInputSnapshots?.[node])inputs.splice(0,inputs.length,{id:'requirement',label:'原始需求',status:'ready',references:[requirement]});
  // Earlier verification reports stay in history, but cannot satisfy a new round.
  const superseded=new Set((taskAutomation(state,{projectId:task.projectId,taskId:task.id})?.nodeKnowledgeHistory??[]).filter(round=>round.nodeId===node).flatMap(round=>round.resultEventIds));
- const currentResults=(state.workspace.collaboration?.events??[]).filter(event=>event.projectId===task.projectId&&event.taskId===task.id&&event.nodeId===node&&event.phase==='result'&&!superseded.has(event.id));
+ const events=state.workspace.collaboration?.events??[];
+ const reopenedAt=events.reduce((last,event,index)=>event.projectId===task.projectId&&event.taskId===task.id&&event.nodeId===node&&event.reopen===true?index:last,-1);
+ const currentResults=events.filter((event,index)=>index>reopenedAt&&event.projectId===task.projectId&&event.taskId===task.id&&event.nodeId===node&&event.phase==='result'&&!superseded.has(event.id));
  const currentReferenceIds=new Set(currentResults.flatMap(event=>event.evidence.map((_,index)=>'artifact:'+event.id+':'+index)));
  const own=latest.filter(item=>item.sourceNode===node&&currentReferenceIds.has(item.id));
  if(node==='accept'&&(task.stage==='accepted'||task.stage==='returned'))own.push({...ref('owner-decision:'+task.projectId+':'+task.id+':'+(task.acceptedAt??task.nodes.accept.updatedAt),task.stage==='accepted'?'Owner 验收通过':'Owner 退回',task.nodes.accept.summary,task.acceptedAt??task.nodes.accept.updatedAt,'Owner 任务确认记录'),artifact:'owner-decision',source:'owner',sourceNode:'accept'});

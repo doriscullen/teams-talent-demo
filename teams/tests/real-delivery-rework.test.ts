@@ -37,7 +37,58 @@ async function firstRound(store:Store,failed=true){
  const verificationAdoption=await adopt(store,'verify');await submit(store,'verify',verificationAdoption,'sha-v1',failed);
  return{preparer,developmentAdoption,verificationAdoption};
 }
-function reopenDevelopment(store:Store,adoptionId:string){return collaborationWrite(store,data,{kind:'progress.add',role:'member',operationId:randomUUID(),input:{...scope,nodeId:'develop',runId,sessionId,expectedRevision:store.state.revision,adoptionId,phase:'started',summary:'处理本轮验证问题',evidence:[]}});}
+function reopenDevelopment(store:Store,adoptionId:string){return collaborationWrite(store,data,{kind:'progress.add',role:'member',operationId:randomUUID(),input:{...scope,nodeId:'develop',runId,sessionId,expectedRevision:store.state.revision,adoptionId,phase:'started',...(task(store).nodes.develop.status==='complete'?{reopen:true}:{}),summary:'处理本轮验证问题',evidence:[]}});}
+
+test('completed development rejects stale writes atomically; explicit rework starts a fresh result round',()=>fixture(async(store,path)=>{
+ const {developmentAdoption}=await firstRound(store),before=await readFile(path),previous=structuredClone(task(store).nodes.prepare);
+ for(const phase of ['started','progress','blocked'] as const){
+  await assert.rejects(collaborationWrite(store,data,{kind:'progress.add',role:'member',operationId:randomUUID(),input:{...scope,nodeId:'develop',runId,sessionId,expectedRevision:store.state.revision,adoptionId:developmentAdoption,phase,summary:'stale development',evidence:[],...(phase==='blocked'?{blocker:'fixture'}:{})}}),/功能开发已完成.*nodeId=verify/);
+  assert.deepEqual(await readFile(path),before);
+ }
+ await assert.rejects(submit(store,'develop',developmentAdoption,'sha-v2'),/功能开发已完成/);assert.deepEqual(await readFile(path),before);
+ assert.equal((await context(store,'develop')).rework?.allowed,true);await reopenDevelopment(store,developmentAdoption);
+ assert.equal(task(store).stage,'developing');assert.equal(task(store).nodes.develop.status,'running');assert.deepEqual(task(store).nodes.prepare,previous);assert.deepEqual(task(store).verificationCheckIds,[]);
+ assert.equal(store.state.workspace.collaboration!.events.at(-1)!.reopen,true);
+ const round=taskNodeView(store.state,task(store),'develop',data);assert.ok(round.deliverables.every(item=>item.references.length===0));assert.ok(round.criteria.every(item=>item.status==='pending'));
+ const reloaded=new Store(path);await reloaded.init();assert.equal(task(reloaded).nodes.develop.status,'running');
+}));
+
+test('development rework cannot interrupt running verification',()=>fixture(async(store,path)=>{
+ const {developmentAdoption,verificationAdoption}=await firstRound(store);
+ await collaborationWrite(store,data,{kind:'progress.add',role:'member',operationId:randomUUID(),input:{...scope,nodeId:'verify',runId,sessionId,expectedRevision:store.state.revision,adoptionId:verificationAdoption,phase:'started',summary:'verification running',evidence:[]}});
+ const before=await readFile(path);assert.equal((await context(store,'develop')).rework?.allowed,false);
+ await assert.rejects(reopenDevelopment(store,developmentAdoption),/reopen=true/);assert.deepEqual(await readFile(path),before);
+}));
+
+test('explicit blocked verification rework keeps history, clears current checks and still waits for human acceptance',()=>fixture(async(store,path)=>{
+ const {verificationAdoption}=await firstRound(store),history=structuredClone(task(store).checks),priorDevelop=structuredClone(task(store).nodes.develop);
+ assert.equal((await context(store,'verify')).rework?.allowed,true);
+ const payload={kind:'progress.add',role:'member',operationId:randomUUID(),input:{...scope,nodeId:'verify',runId,sessionId,expectedRevision:store.state.revision,adoptionId:verificationAdoption,phase:'started',reopen:true,summary:'explicit verification retry',evidence:[]}};
+ await collaborationWrite(store,data,payload);assert.deepEqual(task(store).verificationCheckIds,[]);assert.deepEqual(task(store).nodes.develop,priorDevelop);
+ const round=taskNodeView(store.state,task(store),'verify',data);assert.ok(round.deliverables.every(item=>item.references.length===0));assert.ok(round.criteria.every(item=>item.status==='pending'));
+ await assert.rejects(collaborationWrite(store,data,{kind:'result.submit',role:'member',operationId:randomUUID(),input:{...scope,nodeId:'verify',runId,sessionId,expectedRevision:store.state.revision,adoptionId:verificationAdoption,summary:'missing fresh checks',...nodeResultFixture('verify'),checks:undefined}}),/检查|来源/);
+ await submit(store,'verify',verificationAdoption);
+ assert.equal(task(store).stage,'awaiting-acceptance');assert.equal(task(store).nodes.accept.status,'waiting-owner');assert.equal(task(store).acceptedAt,undefined);assert.deepEqual(task(store).checks.slice(0,history.length),history);
+ const before=await readFile(path);assert.equal((await collaborationWrite(store,data,payload)).replayed,true);assert.deepEqual(await readFile(path),before);
+}));
+
+test('CLI cannot accept, return or change waiting/accepted tasks, even when the assignee is Owner',()=>fixture(async(store,path)=>{
+ await firstRound(store,false);
+ await store.transact(state=>{const next=structuredClone(state);deliveryRequirement(next,scope.projectId,scope.taskId)!.assigneeId='owner';return next;});
+ for(const stage of ['awaiting-acceptance','accepted'] as const){
+  assert.equal(task(store).stage,stage);const before=await readFile(path);
+  for(const nodeId of ['prepare','develop','verify','accept'] as const){
+   const ctx=await context(store,nodeId);assert.deepEqual(ctx.availableActions,['context.get']);assert.equal(ctx.rework?.allowed,false);
+   for(const kind of ['inputs.adopt','progress.add','result.submit']){
+    await assert.rejects(collaborationWrite(store,data,{kind,role:'owner',operationId:randomUUID(),input:{...scope,nodeId,runId,sessionId,expectedRevision:store.state.revision,basisDigest:ctx.basisDigest,readReferences:[],adoptionId:'unused',phase:'started',summary:'must not mutate acceptance'}}),/验收/);
+    assert.deepEqual(await readFile(path),before);
+   }
+  }
+  for(const kind of ['accept','return','acceptance.submit'])await assert.rejects(collaborationWrite(store,data,{kind,role:'owner',operationId:randomUUID(),input:{...scope,nodeId:'accept'}}),/不支持/);
+  assert.deepEqual(await readFile(path),before);
+  if(stage==='awaiting-acceptance')await store.transact(state=>{const next=structuredClone(state);acceptDeliveryRequirement(next,'owner',deliveryRequirement(next,scope.projectId,scope.taskId)!,new Date().toISOString());return next;});
+ }
+}));
 
 for(const reason of ['failed-checks','owner-return'] as const)test(`${reason}: new development SHA starts an explicit verification round, retaining old evidence and requiring fresh adoption`,()=>fixture(async(store,path)=>{
  const {preparer,developmentAdoption,verificationAdoption}=await firstRound(store,reason==='failed-checks');

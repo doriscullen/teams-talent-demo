@@ -4,6 +4,10 @@
 
 `progress add`：phase 为 started / progress / blocked；summary 写实际进展；阻塞时必须有 blocker；evidence 是引用数组，可为空。解除阻塞时回传 progress 并说明依据，不按计时高频刷状态。
 
+已完成节点不接受普通 started / progress / blocked / result 将其重开或覆盖。明确返工时先读 context.rework.allowed，重新读取并采用本节点输入，再用 phase=started、reopen=true 开始新一轮：需求澄清仅在开发尚未采用输入前；功能开发仅在验证待开始或阻塞时；阻塞的测试验证可以显式重开并提交本轮新检查。上一轮产物与事件保留为历史，不计入新一轮交付物。Owner 页面已退回的开发节点已重开，按普通进度继续即可。reopen 不是节点切换，进入开发用 nodeId=develop、测试用 nodeId=verify。
+
+提交验收后，所有 CLI 写入均禁止，即使 --role owner 也不能验收、退回或重开。需要返工由 Owner 在页面手工退回；再次开发提交后重新获取验证输入、重新采用并提交新检查。模型最终停在待 Owner 验收，不能调用页面 API 绕过 CLI 限制。
+
 开始回执必须先于实际业务编辑和测试：读当前依据 → `inputs adopt` 成功 → 用返回的新 revision 写 `progress add` / started 成功 → 开始业务工作。CLI 的 scope/context/request/receipt 临时文件不属于业务产物，可先写；PRD、设计、源代码与测试不是临时请求文件。新 run/节点重新取当前身份和采用依据，不能用旧成功回执掩盖本轮未采用；失败或超时按幂等规则核对，不能在工作结束后补一条 started 伪造时序。
 
 `result submit`：summary、evidence（至少一条）、completedCriteria。artifact 与 completedCriteria ID 从当前 `context.nodeContract` 读取，不凭记忆套别的节点合同。

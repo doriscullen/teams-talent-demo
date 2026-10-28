@@ -9,10 +9,13 @@ context get | inputs adopt | progress add | result submit | operation get
 --endpoint http://127.0.0.1:45970 (或 DEMO_ORIGIN)
 --input '{"projectId":"…","taskId":"…","nodeId":"…"}' 或 --input-file FILE
 context get 可用 --project / --task / --node；默认 --view model 去重上下文，--view full 查看完整响应。
+context.currentNodeId 是任务当前阶段；切换业务环节须显式改 nodeId，重新读取并采用该节点输入。
 --output FILE 保存所选上下文，stdout 只返回保存回执；不带 --output 才打印上下文。
 写操作：--operation-id ID；input 包含 expectedRevision、runId、sessionId（未知时 null）。
 inputs adopt：basisDigest、readReferences（实际阅读的引用 ID）。
 progress add：adoptionId、phase=started|progress|blocked、summary、blocker（阻塞时）、evidence[]。
+明确返工：context.rework.allowed 为 true 时，在对应节点的 started 载荷中指定 reopen=true；普通进度不重开已完成节点。
+需求澄清在开发采用前、开发在验证待开始/阻塞时可重开；阻塞验证可显式开启新一轮。待验收/已验收不能由CLI修改，须Owner页面手工处理。
 result submit：adoptionId、summary、completedCriteria[]、evidence[{kind:reference|local-file,value,description,artifact,version,codeVersion?,source:actual|preset}]。
 context.nodeContract 返回本节点输入、交付物类型与标准ID；上游引用ID/版本原样采用。prepare采用不代表澄清完成，需提交PRD。verify checks按artifact关联功能/Review/安全报告，同批失败不能放行。
 成果报告只记录交付人的贡献；Owner 本人交付也必须经过人工验收和质量门槛。

@@ -4,7 +4,7 @@ import { importedNodeStages, importedTaskNodeView } from '../src/imported-delive
 import { taskArtifactKinds, taskNodeContractVersion, taskNodeDefinitions, taskNodeView, nodeResultErrors, unitTestExecutionShapeErrors } from '../src/task-node-contract.js';
 import { projectMembers } from '../src/teams-domain.js';
 const projectMemberName=(state:DemoState,projectId:string,id:string)=>projectMembers(state,projectId).find(member=>member.id===id)?.name ?? id;
-import { deliveryRequirement, requireDeliveryMember, applyRequirementProgress, type RequirementNode } from '../src/delivery-requirements.js';
+import { deliveryRequirement, requirementNode, canReopenRequirementNode, requireDeliveryMember, applyRequirementProgress, type RequirementNode } from '../src/delivery-requirements.js';
 import type { TalentTaskInputs } from '../src/talent-contract.js';
 import { mainTask, taskAutomation, taskNodeKnowledge, queueNextNodeKnowledge } from '../src/task-automation.js';
 import { requireCurrentTaskMember, taskAssigneeId, taskAssigneeName } from '../src/task-assignment.js';
@@ -100,14 +100,15 @@ export async function collaborationContext(state: DemoState, data: Presentation,
   const basisDigest = hash({...stableBasis,nodeContract:nodeContract?{version:taskNodeContractVersion,definition:nodeContract.definition,inputs:nodeContract.inputs.map(({id,label,references})=>({id,label,references}))}:null});
   const acquisition = scope.taskId && scopedNode && scopedNode!=='accept' ? taskNodeKnowledge(taskAutomation(state,{projectId:scope.projectId,taskId:scope.taskId}),scopedNode) : undefined;
   const preparationReady = !live || !taskAutomation(state,{projectId:live.projectId,taskId:live.id})?.preparation || taskAutomation(state,{projectId:live.projectId,taskId:live.id})!.preparation!.status==='ready';
-  return { contract: 'teams-demo-collaboration-v1', revision: state.revision, basisDigest, ...basis,
+  return { contract: 'teams-demo-collaboration-v1', revision: state.revision, basisDigest, ...basis, currentNodeId:live?requirementNode(live):scope.nodeId??null,
     talentInputs, nodeInputs, nodeContract:nodeContract?{version:live?.nodeContractVersion??taskNodeContractVersion,...nodeContract}:null,
     automaticPreparation: scope.taskId && scope.nodeId!=='accept' ? taskNodeKnowledge(taskAutomation(state, {projectId:scope.projectId,taskId:scope.taskId}),scope.nodeId==='develop'||scope.nodeId==='verify'?scope.nodeId:'prepare') ?? null : null,
     inputSources: scopedNode ? {knowledge:nodeInputs?.selection.basis==='historical-subset'?'当前节点相关历史采用知识':'Teams 当前节点知识与 Talents 共享产物',skills:'Teams 当前节点所选登记包',talentSkillLoading:nodeInputs?'shared-inputs':'unavailable'} : { knowledge: frozen?'历史冻结的 Talent 知识版本':'Talent 项目知识', skills: live&&!frozen ? 'Talent 登记资产（Teams 源包）' : 'Teams 项目与固定订阅版本', talentSkillLoading: live&&!frozen ? 'connected' : 'not-connected' },
     stage: live ? live.stage : card ? state.stage : task?.status ?? 'no-task',
     adoptedBasis: (state.workspace.collaboration?.adoptions ?? []).filter(a => a.projectId === scope.projectId && a.taskId === scope.taskId && a.nodeId === scope.nodeId),
     events: (state.workspace.collaboration?.events ?? []).filter(e => e.projectId === scope.projectId && (!scope.taskId || e.taskId === scope.taskId) && (!scope.nodeId || e.nodeId === scope.nodeId)),
-    availableActions: live && scope.nodeId && scope.nodeId !== 'accept' && preparationReady && (!acquisition || acquisition.status==='ready' || live.nodeInputSnapshots?.[scope.nodeId as RequirementNode]) ? ['inputs.adopt', 'progress.add', 'result.submit'] : ['context.get'],
+    availableActions: live && !['awaiting-acceptance','accepted'].includes(live.stage) && scope.nodeId && scope.nodeId !== 'accept' && preparationReady && (!acquisition || acquisition.status==='ready' || live.nodeInputSnapshots?.[scope.nodeId as RequirementNode]) ? ['inputs.adopt', 'progress.add', 'result.submit'] : ['context.get'],
+    rework: live&&scopedNode?{allowed:canReopenRequirementNode(live,scopedNode),requiresExplicitStart:true,acceptance:'manual-owner-only'}:null,
     safety: { security: 'unverified', contextReadIsAdoption: false, resultIsAcceptance: false }, skillPath: collaborationSkillPath };
 }
 export function collaborationOperation(state: DemoState, operationId: string) {
@@ -129,10 +130,11 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
   const requestDigest = hash({ role: body.role, kind: body.kind, input: p, operationId });
   const existing = store.state.workspace.collaboration?.operations.find(r => r.operationId === operationId);
   if (existing) { need(existing.requestDigest === requestDigest, '同一 operationId 的载荷不同', 409); return { ok: true, replayed: true, receipt: existing }; }
+  if(p.reopen!==undefined)need(p.reopen===true&&body.kind==='progress.add'&&p.phase==='started'&&['prepare','develop','verify'].includes(scope.nodeId!),'reopen=true 仅用于明确返工的 progress add / started，不能用于验收');
   const context = await collaborationContext(store.state, data, scope);
   need(scope.nodeId !== 'accept', '验收节点不可通过 CLI 提交或确认', 403);
   const live=deliveryRequirement(store.state,scope.projectId,scope.taskId);
-  if(live){requireDeliveryMember(store.state,live,body.role);const preparation=taskAutomation(store.state,scope as {projectId:string;taskId:string})?.preparation;if(preparation&&preparation.status!=='ready')throw new DomainError('当前需求的知识与会话准备尚未完成',409);const acquisition=taskNodeKnowledge(taskAutomation(store.state,scope as {projectId:string;taskId:string}),scope.nodeId as 'prepare'|'develop'|'verify');if(acquisition&&acquisition.status!=='ready'&&!live.nodeInputSnapshots?.[scope.nodeId as RequirementNode])throw new DomainError('当前节点知识尚未获取完成，请等待或重试后重新读取上下文',409);need(scope.nodeId==='prepare'||live.preparedAt,'请先在准备节点采用输入',409);need(!['awaiting-acceptance','accepted'].includes(live.stage),'需求已进入Owner验收',409);need(sessionId,'实际工作回传必须携带原生会话标识');}
+  if(live){requireDeliveryMember(store.state,live,body.role);const preparation=taskAutomation(store.state,scope as {projectId:string;taskId:string})?.preparation;if(preparation&&preparation.status!=='ready')throw new DomainError('当前需求的知识与会话准备尚未完成',409);const acquisition=taskNodeKnowledge(taskAutomation(store.state,scope as {projectId:string;taskId:string}),scope.nodeId as 'prepare'|'develop'|'verify');if(acquisition&&acquisition.status!=='ready'&&!live.nodeInputSnapshots?.[scope.nodeId as RequirementNode])throw new DomainError('当前节点知识尚未获取完成，请等待或重试后重新读取上下文',409);need(scope.nodeId==='prepare'||live.preparedAt,'请先在准备节点采用输入',409);need(!['awaiting-acceptance','accepted'].includes(live.stage),'需求已进入Owner验收；CLI不能修改，返工须由Owner在页面手工退回',409);need(sessionId,'实际工作回传必须携带原生会话标识');}
   else throw new DomainError('所选任务未纳入本地交付；导入快照保持只读',403);
   const at = new Date(receivedAt).toISOString(); let replayed = false;
   const state = await store.transact(current => {
@@ -142,6 +144,9 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
     need(current.workspace.foundation.progressEnabled, '团队协作进度同步未启用', 409);
     const next = structuredClone(current), ledger = next.workspace.collaboration ??= { adoptions: [], events: [], operations: [] };
     const revision = next.revision + 1;
+    const writable=deliveryRequirement(next,scope.projectId,scope.taskId)!;
+    if(scope.nodeId==='develop'&&writable.nodeContractVersion)need(writable.nodes.prepare.status==='complete','请先提交需求澄清的PRD与完成标准',409);
+    if(scope.nodeId==='verify')need(writable.nodes.develop.status==='complete','请先提交开发成果',409);
     let adoptionId: string, eventId: string | undefined;
     if (body.kind === 'inputs.adopt') {
       need(p.basisDigest === context.basisDigest, '采用依据已变化，请读取当前上下文', 409);
@@ -172,8 +177,9 @@ export async function collaborationWrite(store: Store, data: Presentation, body:
       eventId = randomUUID();
       const selected=deliveryRequirement(next,scope.projectId,scope.taskId);
       if(selected?.nodeContractVersion&&phase==='result'){const errors=nodeResultErrors(next,selected,scope.nodeId as RequirementNode,evidence,completedCriteria,p.checks);need(!errors.length,errors.join('；'),409);}
-      if(selected)applyRequirementProgress(selected,{nodeId:scope.nodeId as RequirementNode,phase,summary,sessionId,checks:p.checks,evidence},at);
-      ledger.events.push({ ...scope, id: eventId, operationId, role: body.role, runId, sessionId, adoptionId, phase, summary, blocker, evidence, completedCriteria, at, revision });
+      if(selected)applyRequirementProgress(selected,{nodeId:scope.nodeId as RequirementNode,phase,summary,sessionId,checks:p.checks,evidence,...(p.reopen!==undefined?{reopen:p.reopen}:{})},at);
+      if(p.reopen===true&&scope.nodeId==='prepare'){const automation=taskAutomation(next,scope as {projectId:string;taskId:string});if(automation?.nodeKnowledge)delete automation.nodeKnowledge.develop;}
+      ledger.events.push({ ...scope, id: eventId, operationId, role: body.role, runId, sessionId, adoptionId, phase, summary, blocker, evidence, completedCriteria, at, revision,...(p.reopen===true?{reopen:true as const}:{}) });
       if(phase==='result'&&selected)queueNextNodeKnowledge(next,{projectId:scope.projectId,taskId:scope.taskId!},scope.nodeId!,at);
     }
     const receipt: CollaborationReceipt = { ...scope, operationId, requestDigest, revision, kind: body.kind, adoptionId, ...(eventId ? { eventId } : {}), at, status: 'saved' };

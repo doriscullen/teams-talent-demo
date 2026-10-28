@@ -15,6 +15,8 @@ description: 在 Teams 已提供项目、任务、节点和原生会话入口时
 
 对已实际读过且版本未变的材料直接复用，不每轮全文重读。开发者明确切换节点、输入版本变化或服务报告依据冲突时，再获取该节点的上下文；保持项目、任务、角色、run/session 身份，不复用初始 scope 的旧 nodeId。
 
+开发者说“进行功能开发”时，将 scope.nodeId 改为 develop；说“开始测试验证”时改为 verify，然后重新 context get、阅读本节点输入、inputs adopt，再 progress add。context.currentNodeId 给出任务当前阶段；页面切换或同一会话继续聊天不会自动改写你保存的 scope 文件。PRD 提交成功后，不得再以 prepare 回传开发进度。已完成节点普通回传不能重开；明确返工先读 context.rework.allowed，再按[返工规则](references/reporting.md)显式 started + reopen=true。待验收后必须由 Owner 页面手工退回，禁止用 CLI 或页面 API 代验收/退回。
+
 每次业务工作轮严格先读当前节点上下文与所需材料，再 `inputs adopt`，收到成功回执后 `progress add`（phase=started）；两次写入成功后才可编辑业务文档/代码或执行测试，不能先做后补。采用使用刚读取的 revision、basisDigest、完整 scope（含 tab）、真实 readReferences 并保存 adoptionId；开始进度使用采用后的 revision。失败先核对并解决或回传阻塞，不继续业务修改。读取、Hook 提醒或会话就绪不等于采用；各节点/run 不能借用旧 adoptionId。
 
 ## 回传与交接

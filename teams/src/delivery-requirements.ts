@@ -74,9 +74,19 @@ export function returnDeliveryRequirement(role:Role,task:DeliveryRequirement,rea
  task.stage='returned';task.updatedAt=at;task.verificationCheckIds=[];
  task.nodes.accept={status:'pending',updatedAt:at,summary:reason};task.nodes.develop={status:'running',updatedAt:at,summary:reason};task.nodes.verify={status:'pending',updatedAt:at,summary:'等待重新验证'};
 }
-export function applyRequirementProgress(task:DeliveryRequirement,input:{nodeId:RequirementNode;phase:'started'|'progress'|'blocked'|'result';summary:string;sessionId:string|null;checks?:unknown;evidence?:CollaborationEvidence[]},at:string){
+/** Rework is explicit and stops at the manual Owner acceptance boundary. */
+export function canReopenRequirementNode(task:DeliveryRequirement,nodeId:RequirementNode){
+ if(nodeId==='prepare')return task.nodes.prepare.status==='complete'&&task.stage==='developing'&&task.nodes.develop.status==='pending'&&!task.nodeInputSnapshots?.develop;
+ if(nodeId==='develop')return task.nodes.develop.status==='complete'&&task.stage==='verifying'&&['pending','blocked'].includes(task.nodes.verify.status);
+ if(nodeId==='verify')return task.stage==='verifying'&&task.nodes.develop.status==='complete'&&task.nodes.verify.status==='blocked';
+ return false;
+}
+export function applyRequirementProgress(task:DeliveryRequirement,input:{nodeId:RequirementNode;phase:'started'|'progress'|'blocked'|'result';summary:string;sessionId:string|null;checks?:unknown;evidence?:CollaborationEvidence[];reopen?:boolean},at:string){
  const {nodeId,phase,summary}=input;if(nodeId==='accept')throw new DomainError('CLI不能替代Owner验收',403);
- if(task.stage==='accepted'||task.stage==='awaiting-acceptance')throw new DomainError('需求已提交验收，不能继续修改执行状态');
+ if(task.stage==='accepted'||task.stage==='awaiting-acceptance')throw new DomainError('需求已提交验收，CLI不能修改；返工须由Owner在页面手工退回',409);
+ const reopening=input.reopen===true&&phase==='started'&&canReopenRequirementNode(task,nodeId);
+ if(input.reopen!==undefined&&(input.reopen!==true||!reopening))throw new DomainError('reopen=true 仅用于明确返工：需求澄清须在功能开发尚未采用输入时，开发须在验证待开始或阻塞时，验证须在本轮阻塞时；验收只能由Owner在页面处理',409);
+ if((task.nodes[nodeId].status==='complete'||nodeId==='prepare'&&task.stage!=='preparing')&&!reopening)throw new DomainError(`${nodeId==='prepare'?'需求澄清':nodeId==='develop'?'功能开发':'测试验证'}已完成，不能用旧 nodeId=${nodeId} 回传当前工作；当前阶段为${requirementStageLabels[task.stage]}。请以 nodeId=${requirementNode(task)} 重新 context get、inputs adopt，再回传进度；明确返工时使用 started 与 reopen=true`,409);
  if(nodeId!=='prepare'&&!task.preparedAt)throw new DomainError('请先在需求澄清节点明确采用本次输入');
  if(nodeId==='develop'&&task.nodeContractVersion&&task.nodes.prepare.status!=='complete')throw new DomainError('请先提交需求澄清的PRD与完成标准');
  if(nodeId==='verify'&&task.nodes.develop.status!=='complete')throw new DomainError('请先提交开发成果');
@@ -88,6 +98,7 @@ export function applyRequirementProgress(task:DeliveryRequirement,input:{nodeId:
  const checks=verificationChecks(task);
  if(nodeId==='verify'&&phase==='result'&&!checks.length)throw new DomainError('验证成果需要本轮新的检查结果及来源');
  const failed=nodeId==='verify'&&checks.some(check=>check.status==='failed');
+ if(reopening&&nodeId==='prepare')task.stage='preparing';
  task.nodes[nodeId]={status:phase==='blocked'||failed?'blocked':phase==='result'?'complete':'running',updatedAt:at,summary};task.updatedAt=at;
  if(nodeId==='prepare'&&phase==='result')task.stage='developing';
  if(nodeId==='develop')task.stage=phase==='result'?'verifying':'developing';
