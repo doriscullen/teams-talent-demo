@@ -14,6 +14,13 @@ export async function atomicText(path: string, value: string) {
 }
 export async function atomicJson(path: string, value: unknown) { await atomicText(path, JSON.stringify(value, null, 2) + '\n'); }
 
+/** Seed artifacts whose names changed after demo data was stored: index artifacts are named for what they are. */
+const RENAMED: Record<string, [string, string]> = {
+  'a-cg-java': ['carddemo-java-1025 CodeGraph', 'carddemo-java-1025 代码图谱'],
+  'a-docidx': ['信用卡营销交付文档 RAG 检索', '信用卡营销交付文档检索索引'],
+};
+const renamed = (a: TalentsState['artifacts'][number]) => RENAMED[a.id]?.[0] === a.name ? { ...a, name: RENAMED[a.id][1] } : a;
+
 /** Talents-owned state in <state dir>/state.json. Every change is revision-checked and written atomically. */
 export class Store {
   state!: TalentsState;
@@ -27,7 +34,7 @@ export class Store {
       // Categories and built-in capabilities describe what Talents offers, not demo progress: always take the
       // current ones. Capabilities imported during the demo are kept.
       const { categories, capabilities } = seedState();
-      this.state = { ...stored, categories, capabilities: [...capabilities, ...(stored.capabilities ?? []).filter(c => c.custom)] }; return;
+      this.state = { ...stored, categories, capabilities: [...capabilities, ...(stored.capabilities ?? []).filter(c => c.custom)], artifacts: stored.artifacts.map(renamed) }; return;
     }
     if (stored) {
       // Demo data from an older seed: keep a copy, then start from the current seed.
