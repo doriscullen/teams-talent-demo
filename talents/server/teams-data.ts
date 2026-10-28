@@ -63,7 +63,7 @@ function docSet(project: SharedProject, meta: Record<string, SourceMeta>, export
   if (!project.documents.length) return [];
   const id = docSetId(project.id), m = meta[id] ?? {};
   const paths = project.documents.map(doc => doc.path);
-  return [{ id, type: 'docs', name: project.name + '文档', path: commonDir(paths) || 'iCode Teams 已对接的 ' + paths.length + ' 份设计文档', fromTeams: true, projectId: project.id,
+  return [{ id, type: 'docs', name: '设计文档', path: commonDir(paths) || 'iCode Teams 已对接的 ' + paths.length + ' 份设计文档', fromTeams: true, projectId: project.id,
     desc: project.documents.map(doc => doc.title).join('、'),
     files: paths.length, tree: tree(paths), titles: Object.fromEntries(project.documents.map(doc => [doc.path, doc.title])),
     from: { kind: 'teams', project: project.name },

@@ -29,7 +29,7 @@ test('maps the project documents into one document set named after the project',
   assert.equal(docs.length, 1);
   const set = docs[0];
   assert.equal(set.id, DOCSET_ID);
-  assert.equal(set.name, '信用卡营销交付文档');
+  assert.equal(set.name, '设计文档');
   assert.equal(set.path, 'iCode Teams 已对接的 3 份设计文档');
   assert.equal(set.files, 3);
   assert.deepEqual(set.tree, [{ dir: 'teams/docs', files: ['cashback-contract.md'] }, { dir: 'workspace/carddemo-java-1025/docs/design/adr', files: ['ADR-009-marketing-integration.md', 'ADR-007-authentication-scope.md'] }]);

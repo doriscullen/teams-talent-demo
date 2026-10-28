@@ -91,4 +91,7 @@ test('restarting renames the index artifacts stored under their old names, and n
   const again = new Store(path); await again.init();
   assert.equal(again.state.artifacts.find(a => a.id === 'a-cg-java')!.name, 'carddemo-java-1025 代码图谱');
   assert.equal(again.state.artifacts.find(a => a.id === 'a-docidx')!.name, '自定义名称');
+  await again.mutate(again.state.revision, s => ({ ...s, artifacts: s.artifacts.map(a => a.id === 'a-docidx' ? { ...a, name: '信用卡营销交付文档检索索引' } : a) }));
+  const last = new Store(path); await last.init();
+  assert.equal(last.state.artifacts.find(a => a.id === 'a-docidx')!.name, '设计文档检索索引');
 });

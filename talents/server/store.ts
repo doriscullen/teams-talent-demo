@@ -14,12 +14,16 @@ export async function atomicText(path: string, value: string) {
 }
 export async function atomicJson(path: string, value: unknown) { await atomicText(path, JSON.stringify(value, null, 2) + '\n'); }
 
-/** Seed artifacts whose names changed after demo data was stored: index artifacts are named for what they are. */
-const RENAMED: Record<string, [string, string]> = {
-  'a-cg-java': ['carddemo-java-1025 CodeGraph', 'carddemo-java-1025 代码图谱'],
-  'a-docidx': ['信用卡营销交付文档 RAG 检索', '信用卡营销交付文档检索索引'],
+/** Seed artifacts renamed after demo data was stored: index artifacts are named for what they are, and the project
+ *  document set is 设计文档 as in Teams. An artifact still carrying an old seed name takes the current name and description. */
+const RENAMED: Record<string, { from: string[]; name: string; desc: string }> = {
+  'a-cg-java': { from: ['carddemo-java-1025 CodeGraph'], name: 'carddemo-java-1025 代码图谱', desc: '查询 carddemo-java-1025 中类、方法的定义与调用关系。' },
+  'a-docidx': { from: ['信用卡营销交付文档 RAG 检索', '信用卡营销交付文档检索索引'], name: '设计文档检索索引', desc: '按问题检索设计文档中的相关段落。' },
 };
-const renamed = (a: TalentsState['artifacts'][number]) => RENAMED[a.id]?.[0] === a.name ? { ...a, name: RENAMED[a.id][1] } : a;
+const renamed = (a: TalentsState['artifacts'][number]) => {
+  const r = RENAMED[a.id];
+  return r?.from.includes(a.name) ? { ...a, name: r.name, desc: r.desc } : a;
+};
 
 /** Talents-owned state in <state dir>/state.json. Every change is revision-checked and written atomically. */
 export class Store {
