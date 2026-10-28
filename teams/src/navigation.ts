@@ -6,6 +6,7 @@ const common: PageDefinition[] = [
   { id: 'agent', route: 'agent', title: 'Agent 管理', groupId: 'personal', icon: 'agent' },
   { id: 'projects', route: 'projects', title: '项目', groupId: 'team', icon: 'projects' },
   { id: 'team', route: 'team', title: '团队', groupId: 'team', icon: 'members' },
+  { id: 'team-work', route: 'team-work', title: '任务追溯', groupId: 'team', icon: 'insights' },
   { id: 'resources', route: 'resources', title: '资源市场', groupId: 'shared', icon: 'appstore' },
   { id: 'subscriptions', route: 'subscriptions', title: '我的订阅', groupId: 'shared', icon: 'subscriptions' },
   { id: 'publications', route: 'publications', title: '我的发布', groupId: 'shared', icon: 'publications' },
@@ -14,8 +15,6 @@ const common: PageDefinition[] = [
 export function teamsPages(role: Role): PageDefinition[] {
   return role === 'member' ? common : [...common.slice(0, 4),
     { id: 'connections', route: 'connections', title: '企业连接', groupId: 'team', icon: 'appstore' },
-    { id: 'team-work', route: 'team-work', title: '团队作业与追溯', groupId: 'team', icon: 'insights' },
-    { id: 'trace-monitor', route: 'trace-monitor', title: '开发会话轨迹', groupId: 'team', icon: 'insights' },
     ...common.slice(4)];
 }
-export const isOwnerPage = (path: string) => ['connections', 'organization', 'team-work', 'trace-monitor'].includes(path);
+export const isOwnerPage = (path: string) => ['connections', 'organization', 'trace-monitor'].includes(path);

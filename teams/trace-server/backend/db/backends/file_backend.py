@@ -5,7 +5,7 @@
   trace 列表只从路径拆出 {id, sessionId, projectId}，不展示摘要、不排序、
   不做 agent/status 过滤（前端列表页不展示这些信息）。
 - 详情：优先按 <pid>/<sid>/<trace_id>.jsonl 直拼路径 O(1) 定位（session_id
-  未提供/未命中时回退全盘 glob 兜底）；真实 LLM 请求按 event_id
+  未提供/未命中时回退项目内按范围 glob 兜底）；真实 LLM 请求按 event_id
   直达读 llm_request/<event_id>.json。真实 LLM 请求是 *.json，天然被
   `*.jsonl` 过滤，不参与 trace 索引。
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+from glob import escape
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -110,16 +111,18 @@ class FileBackend(StorageBackend):
             pass
         return events
 
-    def _find_trace_file(self, trace_id: str) -> Path | None:
-        """按文件名定位 trace_id 对应的 jsonl 文件（全盘 glob，兜底用）。
+    def _find_trace_file(self, trace_id: str, project_id: str, session_id: str | None) -> Path | None:
+        """在指定项目内回退定位；提供会话时同时限制会话目录。
 
-        SDK 写盘路由 <data_dir>/<pid>/<sid>/<trace_id>.jsonl（或 _no_session/），
-        文件名即 <trace_id>.jsonl，用 glob 匹配文件名即可，无需逐个 open 全盘 jsonl。
+        项目内的嵌套历史目录仍可读取，但不能因直拼路径未命中而读取其他项目；
+        显式 session_id 不匹配时也不能回退到同项目的其他会话。
         """
-        if not self._data_dir.is_dir():
+        root = self._data_dir / project_id
+        if not project_id or not root.is_dir():
             return None
-        # 优先文件名直配：**/<trace_id>.jsonl（glob 按文件名匹配，命中即返回）
-        for f in self._data_dir.glob(f"**/{trace_id}.jsonl"):
+        trace_pattern = escape(trace_id) + ".jsonl"
+        pattern = f"**/{escape(session_id)}/{trace_pattern}" if session_id else f"**/{trace_pattern}"
+        for f in root.glob(pattern):
             return f
         return None
 
@@ -129,7 +132,7 @@ class FileBackend(StorageBackend):
         """按 <pid>/<sid>/<trace_id>.jsonl 直拼路径定位（O(1)，不遍历）。
 
         session_id 为空时落 _no_session 目录。找到即返回，否则 None（调用方
-        回退到 _find_trace_file 全盘兜底，兼容历史目录/手动挪动等场景）。
+        回退到 _find_trace_file 在项目内按范围兜底，兼容历史目录/手动挪动等场景）。
         """
         sid = session_id if session_id else "_no_session"
         p = self._data_dir / project_id / sid / f"{trace_id}.jsonl"
@@ -228,12 +231,12 @@ class FileBackend(StorageBackend):
     ) -> TraceData | None:
         # 惰性读单文件：每次读盘拿到最新（新追加的 span/obs 也在）。
         # 带 session_id 时按 <pid>/<sid>/<trace_id>.jsonl 直拼路径定位（O(1)），
-        # 未命中（历史目录/手动挪动）再回退全盘 glob 兜底。
+        # 未命中（历史目录/手动挪动）再回退项目内按范围 glob 兜底。
         path: Path | None = None
         if project_id:
             path = self._trace_file_at(project_id, session_id, trace_id)
         if path is None:
-            path = self._find_trace_file(trace_id)
+            path = self._find_trace_file(trace_id, project_id, session_id)
         if path is None:
             return None
         events = self._read_trace_file(path)
@@ -294,14 +297,14 @@ class FileBackend(StorageBackend):
         """还原下载：file 模式无需「还原」，磁盘上的 <trace_id>.jsonl 就是原文。
 
         按 project_id + session_id + trace_id 直拼 <pid>/<sid>/<trace_id>.jsonl
-        O(1) 定位（session_id 为空落 _no_session），未命中再回退全盘 glob 兜底，
+        O(1) 定位（session_id 为空落 _no_session），未命中再回退项目内按范围 glob 兜底，
         定位到文件后原样回吐全文（database 模式才需要从库表重拼行）。
         """
         path: Path | None = None
         if project_id:
             path = self._trace_file_at(project_id, session_id, trace_id)
         if path is None:
-            path = self._find_trace_file(trace_id)
+            path = self._find_trace_file(trace_id, project_id, session_id)
         if path is None:
             return None
         try:

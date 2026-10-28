@@ -96,7 +96,11 @@ test('sessions have isolated cursors and no client-controlled filesystem access'
   const first=await observe(f.state,'owner',{...f.query,sessionId:f.sessionId});assert.equal(first.sessions.length,2);
   await assert.rejects(observe(f.state,'owner',{...f.query,sessionId:second.sessionId,cursor:first.cursor!}),/游标/);assert.deepEqual((await observe(f.state,'owner',{...f.query,sessionId:second.sessionId})).turns,[]);
   await assert.rejects(observe(f.state,'owner',{...f.query,sessionId:'../../secret'}),/不属于/);
-  const document=join(f.sessionDir,'session.json');await rm(document);await symlink(join(second.sessionDir,'session.json'),document);await assert.rejects(observe(f.state,'owner',{...f.query,sessionId:f.sessionId}),/路径校验/);
+  const document=join(f.sessionDir,'session.json');
+  // Windows 文件符号链接需要额外权限；目录联接无需提权，同样覆盖 realpath 越界防护。
+  if(process.platform==='win32'){await rm(f.sessionDir,{recursive:true,force:true});await symlink(second.sessionDir,f.sessionDir,'junction');}
+  else{await rm(document);await symlink(join(second.sessionDir,'session.json'),document);}
+  await assert.rejects(observe(f.state,'owner',{...f.query,sessionId:f.sessionId}),/路径校验/);
  }finally{await f.cleanup();await second.cleanup();}
 });
 

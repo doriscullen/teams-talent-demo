@@ -73,6 +73,23 @@ try {
     layouts.push({ role, theme, width, expandedWidth, collapsedWidth: width > 760 ? 72 : 0, routePreserved: page.url() === route });
     await context.close();
   }
+  const workContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const workPage = await workContext.newPage(); workPage.setDefaultTimeout(10000);
+  workPage.on('request', request => { if (request.method() === 'POST') posts.push(request.url()); });
+  workPage.on('pageerror', error => errors.push(error.message));
+  await workPage.goto(teams + '/teams?demo-role=owner#/trace-monitor');
+  await workPage.waitForURL(url => url.hash === '#/team-work?tab=sessions&view=traces');
+  await workPage.frameLocator('.trace-monitor-frame').locator('.tm-page').first().waitFor();
+  assert.equal(await workPage.getByRole('link', { name: '开发会话轨迹', exact: true }).count(), 0);
+  assert.equal(await workPage.getByRole('tab', { name: '会话与轨迹', exact: true }).getAttribute('aria-selected'), 'true');
+  await workPage.locator('.ant-segmented').getByText('任务会话', { exact: true }).click();
+  await workPage.waitForURL(url => url.hash === '#/team-work?tab=sessions&view=conversations');
+  await workPage.locator('.team-work-conversation-view').waitFor({ state: 'visible' });
+  await workPage.getByRole('tab', { name: '任务作业', exact: true }).click();
+  await workPage.waitForURL(url => url.hash === '#/team-work');
+  await workPage.reload(); await workPage.locator('.team-work-page').waitFor();
+  assert.equal(await workPage.getByRole('tab', { name: '任务作业', exact: true }).getAttribute('aria-selected'), 'true');
+  await workContext.close();
   const talentContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await talentContext.newPage();
   await page.route(talent + '/**', route => route.fulfill({ contentType: 'text/html', body: '<p>Independent app navigation transport fixture</p>' }));
@@ -83,8 +100,8 @@ try {
   await talentContext.close();
   assert.deepEqual(posts, []); assert.deepEqual(errors, []);
   for (const [index, file] of stateFiles.entries()) assert.deepEqual(await readFile(file), before[index]);
-  await writeFile('test-results/shell-navigation/result.json', JSON.stringify({ passed: true, layouts, keyboardToggle: true, resizeAndRefreshPreference: true, independentTalentsNavigation: true, posts, errors, stateBytesUnchanged: true, nativeInvocations: 0 }, null, 2));
-  console.log('PASS shell collapse/expand: 200px default, retained resize, eight role/theme/viewport layouts, 0 POST');
+  await writeFile('test-results/shell-navigation/result.json', JSON.stringify({ passed: true, layouts, keyboardToggle: true, resizeAndRefreshPreference: true, independentTalentsNavigation: true, traceRouteMerged: true, posts, errors, stateBytesUnchanged: true, nativeInvocations: 0 }, null, 2));
+  console.log('PASS shell collapse/expand: eight layouts, unified team-work trace route, 0 POST');
 } finally {
   await browser?.close();
   await Promise.all(processes.map(process => process.exitCode === null ? new Promise<void>(resolve => { process.once('exit', () => resolve()); process.kill('SIGTERM'); }) : undefined));

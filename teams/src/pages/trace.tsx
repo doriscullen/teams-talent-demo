@@ -39,7 +39,7 @@ export function Trace({ initial }: { initial?: string }) {
   const evidence = data.evidence.find(item => item.id === selected);
   const selectEvidence = (id: string) => { setSelected(id); setTab('history'); };
   return <div className="page-stack trace-page" data-trace-task={task.id}>
-    <TeamsPageIntro actions={role === 'owner' ? <Space wrap><Button href="#/team-work">返回团队作业</Button><Button href={talentLink('sessions')}>分析交付记录 <ArrowRightOutlined /></Button></Space> : <Button href={'#/' + entry!.route}>返回我的交付</Button>}>{displayRequirementId(task.id)} · {task.title}</TeamsPageIntro>
+    <TeamsPageIntro actions={role === 'owner' ? <Space wrap><Button href="#/team-work">返回任务追溯</Button><Button href={talentLink('sessions')}>分析交付记录 <ArrowRightOutlined /></Button></Space> : <Button href={'#/' + entry!.route}>返回我的交付</Button>}>{displayRequirementId(task.id)} · {task.title}</TeamsPageIntro>
     <FrameworkCard title="本次交付关联" action={<Tag color={requirementStageLabels[task.stage].includes('待') ? 'gold' : 'green'}>{requirementStageLabels[task.stage]}</Tag>}>
       <Descriptions size="small" column={2} items={[
         { key: 'project', label: '项目', children: projectId === 'carddemo' ? state.workspace.project.name : state.workspace.projects?.find(project => project.id === projectId)?.name ?? projectId }, { key: 'task', label: '需求 / 交付', children: displayRequirementId(task.id) },

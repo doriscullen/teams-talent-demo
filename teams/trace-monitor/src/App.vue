@@ -38,4 +38,9 @@ onMounted(() => {
   overflow: auto;
   padding: 16px 24px 24px;
 }
+@media (max-width: 600px) {
+  .tm-embed-content {
+    padding: 12px;
+  }
+}
 </style>

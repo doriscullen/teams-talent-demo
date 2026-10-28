@@ -1,19 +1,15 @@
-import { deliveryRequirement } from '../delivery-requirements.js';
 import { useState } from 'react';
 import { Button, Empty, Form, Input, List, Modal, Select, Tag } from 'antd';
 import { useDemo } from '../context.js';
 import { FrameworkCard } from '../vendor/teams/components/page-layout.js';
-import { collectTaskSessions, mainTask, taskAutomation } from '../task-automation.js';
-import { taskAssigneeId } from '../task-assignment.js';
+import { canLinkTaskSession, collectTaskSessions, mainTask, taskAutomation } from '../task-automation.js';
 import { projectDeliveryTasks } from '../project-delivery-tasks.js';
-import { taskExecutableBy } from '../task-visibility.js';
 export function TaskSessions({ node, readonly = false,scope=mainTask }: { node?: 'develop' | 'verify'; readonly?: boolean; scope?:typeof mainTask }) {
   const { state, role, busy, update } = useDemo();
   const [open,setOpen]=useState(false);const [form]=Form.useForm();
   if (role === 'member' && !projectDeliveryTasks(state, scope.projectId, role).some(task => task.id === scope.taskId)) return null;
   const sessions=collectTaskSessions(state,scope).filter(session=>!node||session.nodeIds.includes(node)),collection=taskAutomation(state,scope)?.collection;
-  const task=deliveryRequirement(state,scope.projectId,scope.taskId);
-  const canLink=!readonly && !!node && (task?taskExecutableBy(role,task.assigneeId)&&!!task.preparedAt&&!['awaiting-acceptance','accepted'].includes(task.stage):taskExecutableBy(role,taskAssigneeId(state)) && !!state.context && !['submitted','accepted'].includes(state.stage));
+  const canLink=!readonly && !!node && canLinkTaskSession(state,role,scope,node);
   return <FrameworkCard title="任务关联会话" action={<Tag>{sessions.length} 个会话</Tag>}>
     <List size="small" dataSource={sessions} locale={{emptyText:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未关联本任务会话"/>}} renderItem={item=><List.Item><div><strong>{item.tool} · {item.sessionId}</strong><p className="muted">{item.nodeIds.map(node=>node==='develop'?'功能开发':'测试验证').join(' / ')} · {item.sources.join('、')}</p></div></List.Item>}/>
     {canLink && <Button aria-label="关联工作会话" onClick={()=>{form.resetFields();setOpen(true);}}>关联会话</Button>}

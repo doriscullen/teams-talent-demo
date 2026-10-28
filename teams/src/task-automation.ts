@@ -1,9 +1,10 @@
 import { deliveryRequirement, requireDeliveryMember, type RequirementNodeState } from './delivery-requirements.js';
 import type { TalentTaskSessionReceipt } from './talent-contract.js';
+import { requireCurrentTaskMember, taskAssigneeId } from './task-assignment.js';
+import { taskExecutableBy } from './task-visibility.js';
 import type { TalentNodeInputs } from './talent-node-inputs.js';
 import type { NativePreparationReceipt } from './native-preparation.js';
 import { latestTaskArtifacts, type TaskNodeReference } from './task-node-contract.js';
-import { requireCurrentTaskMember } from './task-assignment.js';
 import type { DemoState, Role } from './domain.js';
 import { DomainError } from './domain.js';
 
@@ -104,6 +105,12 @@ export function queueNextNodeKnowledge(state:DemoState,scope:TaskScope,completed
 }
 export function requireWritableTask(scope: TaskScope,state?:DemoState) {
   if (!sameTask(scope, mainTask) && !(state&&deliveryRequirement(state,scope.projectId,scope.taskId))) throw new DomainError('所选任务不支持写入自动步骤；导入项目记录保持只读', 403);
+}
+export function canLinkTaskSession(state: DemoState, role: Role, scope: TaskScope, nodeId: string) {
+  if (!['develop', 'verify'].includes(nodeId)) return false;
+  const task = deliveryRequirement(state, scope.projectId, scope.taskId);
+  return task ? taskExecutableBy(role, task.assigneeId) && !!task.preparedAt && !['awaiting-acceptance', 'accepted'].includes(task.stage)
+    : sameTask(scope, mainTask) && role === 'member' && taskExecutableBy(role, taskAssigneeId(state)) && state.assigned && !!state.context && !['submitted', 'accepted'].includes(state.stage);
 }
 export function linkTaskSession(state: DemoState, role: Role, input: Record<string, unknown>, at: string) {
   const scope = { projectId: String(input.projectId ?? ''), taskId: String(input.taskId ?? '') }; requireWritableTask(scope,state);

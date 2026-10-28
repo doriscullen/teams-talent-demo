@@ -13,10 +13,11 @@ const nodeLabels = { prepare: '需求澄清', develop: '功能开发', verify: '
 const time = (value?: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('zh-CN') : '时间未提供';
 
 /** Read-only conversation polling never advances business task progress. */
-export function TaskSessionActivity({ projectId, taskId, nodeId, readonlySource = false }: { projectId: string; taskId: string; nodeId: RequirementNode; readonlySource?: boolean }) {
+export function TaskSessionActivity({ projectId, taskId, nodeId, sessionId, showSessionSelector = true, readonlySource = false }: { projectId: string; taskId: string; nodeId: RequirementNode; sessionId?: string; showSessionSelector?: boolean; readonlySource?: boolean }) {
   const { role } = useDemo(), scopeKey = [role, projectId, taskId, nodeId].join(':');
   const [chosen, setChosen] = useState<{ scope: string; id: string }>();
-  const selection = chosen?.scope === scopeKey ? chosen.id : undefined;
+  const selection = chosen?.scope === scopeKey ? chosen.id : sessionId;
+  useEffect(() => { setChosen(sessionId ? { scope: scopeKey, id: sessionId } : undefined); }, [sessionId, scopeKey]);
   const [stream, setStream] = useState<Stream>();
   const [turns, setTurns] = useState<Turn[]>([]), [error, setError] = useState(''), [pending, setPending] = useState(true), [hasNew, setHasNew] = useState(false);
   const viewport = useRef<HTMLDivElement>(null), following = useRef(true), [retry, setRetry] = useState(0);
@@ -52,7 +53,7 @@ export function TaskSessionActivity({ projectId, taskId, nodeId, readonlySource 
   const bottom = () => { following.current = true; setHasNew(false); if (viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight; };
   return <section className="task-session-activity" aria-label="会话过程" data-stream-task={taskId} data-stream-node={nodeId}>
     <div className="task-session-activity-heading"><h3>会话过程</h3><Space size={6} wrap><Tag>{error ? '连接中断' : pending ? '连接中' : '已连接'}</Tag>{selected && <Tag>{statusLabels[selected.status]}</Tag>}</Space></div>
-    {stream?.sessions.length ? <Select className="task-session-selector" aria-label="选择任务会话" value={stream.selectedSessionId ?? undefined} options={stream.sessions.map(item => ({ value: item.id, label: item.title + ' · ' + statusLabels[item.status] }))} onChange={id => { setStream(undefined); setTurns([]); setPending(true); setHasNew(false); setChosen({ scope: scopeKey, id }); }} /> : null}
+    {showSessionSelector && stream?.sessions.length ? <Select className="task-session-selector" aria-label="选择任务会话" value={stream.selectedSessionId ?? undefined} options={stream.sessions.map(item => ({ value: item.id, label: item.title + ' · ' + statusLabels[item.status] }))} onChange={id => { setStream(undefined); setTurns([]); setPending(true); setHasNew(false); setChosen({ scope: scopeKey, id }); }} /> : null}
     {error && <Alert type="warning" showIcon title="会话过程读取未完成" description={error} action={<Button size="small" onClick={() => setRetry(value => value + 1)}>重试</Button>} />}
     {stream?.note && <p className="muted task-session-note">{stream.note}</p>}
     {selected?.note && <p className="muted task-session-note">{selected.note}</p>}
