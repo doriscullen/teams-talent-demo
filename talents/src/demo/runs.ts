@@ -300,7 +300,9 @@ export function produce(st: TalentsState, t: Task): Artifact | null {
     a.stats = cap.id === 'db-schema' ? DB_SCHEMA_STATS : [['产物目录', cap.outputPath ?? '']];
     a.mcpName = engineOf(cap)?.applications?.[0]?.command ?? cap.id;
   } else if (cap.cat === 'index') {
-    a.name = src.name + (cap.id === 'codegraph' ? ' CodeGraph' : ' RAG 检索');
+    // Named for what the index is, not the engine that builds it; a space only after a Latin name (carddemo-java-1025 代码图谱).
+    const what = cap.id === 'codegraph' ? '代码图谱' : '检索索引';
+    a.name = src.name + (/[\x21-\x7e]$/.test(src.name) ? ' ' : '') + what;
     a.desc = cap.id === 'codegraph' ? '查询 ' + src.name + ' 中的代码定义与调用关系。' : '按问题检索 ' + src.name + ' 中的相关段落。';
     a.kind = 'index';
     a.stats = cap.id === 'codegraph' ? [] : [['文档', String(src.files || 30)], ['片段', '1,402'], ['向量维度', '1,024']];

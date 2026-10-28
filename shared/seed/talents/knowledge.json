@@ -454,7 +454,7 @@
     {
       "id": "a-cg-java",
       "projectId": "carddemo",
-      "name": "carddemo-java-1025 CodeGraph",
+      "name": "carddemo-java-1025 代码图谱",
       "description": "查询 carddemo-java-1025 中类、方法的定义与调用关系。",
       "capability": "codegraph",
       "capabilityName": "CodeGraph",
@@ -486,7 +486,7 @@
     {
       "id": "a-docidx",
       "projectId": "carddemo",
-      "name": "信用卡营销交付文档 RAG 检索",
+      "name": "信用卡营销交付文档检索索引",
       "description": "按问题检索信用卡营销交付文档中的相关段落。",
       "capability": "doc-index",
       "capabilityName": "文档 RAG 检索",
