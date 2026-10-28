@@ -1,38 +1,65 @@
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import inventory from '../fixtures/skill-inventory.json';
+import sourceFiles from '../fixtures/skill-source-files.json';
 import { projectSkillIds, resourcePublicationHistory, resourceSubscriptions, type SkillCatalogEntry } from '../src/resource-sharing.js';
 import type { DemoState, Role } from '../src/domain.js';
 import { DomainError } from '../src/domain.js';
 import { workspace, runtimeDir } from './config.js';
 import { atomicJson } from './store.js';
-import { sha256, skillPackageDigest, validateSkillPackage, type NativeSkillPackage, type SkillPackageFile } from './skill-installation.js';
+import { sha256, skillPackageDigest, validateSkillPackage, portableSkillPath, type NativeSkillPackage, type SkillPackageFile } from './skill-installation.js';
+
+export interface SkillSourceFiles {
+  version: number;
+  sourceRoot: string;
+  packages: Record<string, { files: Array<{ path: string; executable: boolean; sha256: string }> }>;
+}
+const sourceMaintenance = '；如为有意更新，请先更新 Skill 版本并将源文件加入 Git 索引，再从仓库根目录运行 node teams/scripts/generate-skill-source-manifest.mjs，核对后显式发布新版本（不修改历史 provenance）';
+function declaredFiles(id: string, declaration: SkillSourceFiles) {
+  const entries = declaration.packages?.[id]?.files;
+  if (declaration.version !== 1 || declaration.sourceRoot !== 'workspace/skills' || !Array.isArray(entries) || !entries.length || entries.length > 1024) throw new Error('Skill 源包文件声明缺失或无效：' + id + sourceMaintenance);
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (!entry || typeof entry.path !== 'string' || !portableSkillPath(entry.path) || names.has(entry.path.toLowerCase()) || typeof entry.executable !== 'boolean' || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw new Error('Skill 源包文件声明无效：' + id);
+    names.add(entry.path.toLowerCase());
+  }
+  return new Map(entries.map(entry => [entry.path, entry]));
+}
 
 function item(id: string) {
   const found=inventory.find(skill=>skill.name===id);
   if(!found) throw new DomainError('Skill 不在已登记的资源目录：'+id,404);
   return found;
 }
-async function files(root:string,prefix=''):Promise<SkillPackageFile[]> {
+async function files(root:string,declared:ReturnType<typeof declaredFiles>,prefix=''):Promise<SkillPackageFile[]> {
   const result:SkillPackageFile[]=[];
   for(const name of (await readdir(join(root,prefix))).sort()) {
     // Python bytecode is generated locally and is not part of a published Skill source package.
     if(name==='__pycache__'||/\.py[co]$/.test(name))continue;
     const path=prefix?prefix+'/'+name:name,absolute=join(root,path),stat=await lstat(absolute);
     if(stat.isSymbolicLink())throw new Error('Skill 来源包包含符号链接：'+path);
-    if(stat.isDirectory())result.push(...await files(root,path));
-    else if(stat.isFile()){const bytes=await readFile(absolute);result.push({path,sha256:sha256(bytes),executable:!!(stat.mode&0o111),bytes});}
+    if(stat.isDirectory())result.push(...await files(root,declared,path));
+    else if(stat.isFile()){
+      const entry=declared.get(path);if(!entry)throw new Error('Skill 来源包含未声明文件：'+path+sourceMaintenance);
+      const bytes=await readFile(absolute),digest=sha256(bytes);
+      if(digest!==entry.sha256)throw new Error('Skill 源文件内容与声明摘要不一致：'+path+sourceMaintenance);
+      result.push({path,sha256:digest,executable:entry.executable,bytes});
+    }
     else throw new Error('Skill 来源包含非普通文件：'+path);
   }
   return result.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
 }
-export async function loadSourceSkillPackage(id:string,sourceDirectory=join(workspace,'skills')):Promise<NativeSkillPackage> {
+export async function loadSourceSkillPackage(id:string,sourceDirectory=join(workspace,'skills'),declaration:SkillSourceFiles=sourceFiles):Promise<NativeSkillPackage> {
   const metadata=item(id),path=join(sourceDirectory,id),stat=await lstat(path);
   if(!stat.isDirectory()||stat.isSymbolicLink())throw new Error('Skill 来源必须是实际目录：'+id);
-  const entries=await files(path),body=entries.find(file=>file.path==='SKILL.md')?.bytes.toString('utf8');
+  // Source-package identity uses committed Git modes, never host chmod or ZIP modes.
+  // Explicit test/source directories must satisfy the same declared file/byte set.
+  const declared=declaredFiles(id,declaration),entries=await files(path,declared);
+  if(entries.length!==declared.size)throw new Error('Skill 来源缺少已声明文件：'+id+sourceMaintenance);
+  const body=entries.find(file=>file.path==='SKILL.md')?.bytes.toString('utf8');
   if(!body)throw new Error('Skill 正文缺失：'+id);
-  const declared=body.match(/^\|\s*version\s*\|\s*([^|\s]+)\s*\|/m)?.[1]??body.match(/^version:\s*["']?([^\s"']+)/m)?.[1];
-  if(declared!==metadata.version)throw new Error(`Skill 元数据与正文版本不一致：${id} (${metadata.version} / ${declared??'未声明'})`);
+  const declaredVersion=body.match(/^\|\s*version\s*\|\s*([^|\s]+)\s*\|/m)?.[1]??body.match(/^version:\s*["']?([^\s"']+)/m)?.[1];
+  if(declaredVersion!==metadata.version)throw new Error(`Skill 元数据与正文版本不一致：${id} (${metadata.version} / ${declaredVersion??'未声明'})`);
   const pkg={id,name:id,version:metadata.version,sha256:skillPackageDigest(entries),files:entries};validateSkillPackage(pkg);return pkg;
 }
 function entry(pkg:NativeSkillPackage):SkillCatalogEntry {

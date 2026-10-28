@@ -61,7 +61,7 @@ export const updateWorkspace = (state: DemoState, role: Role, kind: WorkspaceAct
 export const reset = (state: DemoState, role: Role) => tracedJson<DemoState>('teams', '/api/reset', { method: 'POST', body: JSON.stringify({ revision: state.revision, role }) });
 export const native = <T = any>(role: Role, action: string, data: Record<string, unknown> = {}) => tracedJson<T>('teams', '/api/native/' + action, { method: 'POST', body: JSON.stringify({ role, ...data }) });
 export const getTalentsKnowledge = (projectId: string) => tracedJson<{ talentsOrigin: string; artifacts: PublishedArtifact[] }>('teams', '/api/talents/knowledge?project=' + encodeURIComponent(projectId));
-export const getTalentsFile = (artifact: PublishedArtifact, path: string) => tracedJson<PublishedFile & { content: string }>('teams', '/api/talents/file?' + new URLSearchParams({ artifact: artifact.id, version: String(artifact.version), path }));
+export const getTalentsFile = (artifact: Pick<PublishedArtifact, 'id' | 'version'>, path: string) => tracedJson<PublishedFile & { content: string }>('teams', '/api/talents/file?' + new URLSearchParams({ artifact: artifact.id, version: String(artifact.version), path }));
 
 export const getProjectWork = (role: Role, target: import('./project-work.js').ProjectWorkSelection) => tracedJson<import('./project-work.js').ProjectWorkPlan>('teams', '/api/project-work?' + new URLSearchParams({ role, ...target }).toString());
 export const bindProjectWork = (role: Role, target: import('./project-work.js').ProjectWorkSelection, directory: string) => native<import('./project-work.js').ProjectWorkPlan>(role, 'work-bind', { target, directory });

@@ -1,3 +1,4 @@
+import { TaskKnowledgeSources } from './task-knowledge-sources.js';
 import { TaskPreparationProgress, preparationHint, preparationStatusLabel, preparationReady } from './task-preparation-progress.js';
 import {useTaskNodeInputs} from './use-task-node-inputs.js';
 import {taskExecutableBy} from '../task-visibility.js';
@@ -67,6 +68,7 @@ export function LiveTaskDelivery({ task, node, sidebarItems }: { task: DeliveryR
     <p className="muted">{inputsRead.value?.selection.note??'尚未读取节点输入。'}</p>
     <List size="small" header="知识与 Skill 版本" dataSource={[...knowledge.map(item => ({ ...item, kind: '知识' })), ...skills.map(item => ({ ...item, kind: 'Skill' }))]} locale={{ emptyText: '尚无已读取的版本记录' }} renderItem={(item) => <List.Item><span>{item.kind} · {item.title}</span><Tag title={item.version}>{item.version}</Tag></List.Item>} />
     {inputsRead.value?.skills.length ? <Space wrap>{inputsRead.value.skills.map(skill => <Button size="small" key={skill.id} onClick={() => detail(skill.name + ' · ' + skill.version, skill.content)}>阅读 {skill.name}</Button>)}</Space> : null}
+    <TaskKnowledgeSources key={task.projectId+':'+task.id+':'+node+':'+role} assets={inputsRead.value?.knowledge.assets??[]} />
     {upNodes.map(id => <div key={id}><strong>{deliveryNodeLabels[id]} · {statusLabels[task.nodes[id].status]}</strong><p className="task-node-fulltext">{task.nodes[id].summary || '尚无上游结果。'}</p></div>)}
   </div>;
   return <TaskDeliveryLayout projectId={task.projectId} taskId={task.id} title={task.title} owner={member?.name ?? '待分配'} node={node} nodeOwner={node === 'accept' ? '确认人 · 林悦' : '交付人 · ' + (member?.name ?? '待分配')} contentKey={task.projectId + ':' + task.id + ':' + node + ':' + role}

@@ -33,6 +33,28 @@ Python 不是 `python3`（Windows 为 `python`）时，用 `DEMO_TRACE_PYTHON` �
 
 服务仅监听本机。Teams 的配置见 [快速启动](teams/docs/quick-start.md)，Talents 见 [talents/README.md](talents/README.md)。
 
+## 四需求预置资料
+
+新 checkout 执行 `npm run setup`、`npm start`（或前台 `npm run dev`）后，Talents 的 Credit Card 项目产物列表和 Teams 的「项目知识」可查看以下四份模拟需求的 v1、v2 发布资料。每版包含完整原文、测试口径、业务规则、差异、实现约束、验收定义和来源摘要；Teams 按节点加载仓内真实 Skill 包。原始需求与本地测试口径是演示输入，不是生产政策签字，也不代表任何业务功能或测试已经完成。
+
+| 业务编号 | 新建需求标题（精确匹配） |
+|---|---|
+| REQ-2026-001 | 信用卡账单/消费分期 |
+| REQ-2026-002 | 信用卡挂失与补卡 |
+| REQ-2026-003 | 信用卡额度调整申请与审批 |
+| REQ-2026-004 | 交易争议在线申请与处理 |
+
+只填写标题不会选择专用资料。服务启动后，可执行以下只读预览，复制对应 `title` 到标题、完整 `creationDescription` 到描述，在 Teams 的 Credit Card 项目手动新建需求。描述包含业务编号、原文 SHA256，以及 v2 口径版本和 SHA256，不能删掉这些标记；运行时任务 ID 由 Teams 创建。
+
+```sh
+cd talents
+node --import tsx tools/register-four-requirements.ts --endpoint http://127.0.0.1:45980 --version 2
+```
+
+上述命令不带 `--apply`，仅显示资料和可复制描述，不创建任务或调用模型。新环境已自动登记两版，无需再次注册。已有有效 Talents 状态保持原样；需要增量补入资料时，先分别预览 `--version 1`、`--version 2`，核对后对相应命令追加 `--apply`。只追加缺少的来源，同 ID 内容冲突会明确拒绝。显式重置 Talents 后也包含两版预置资料；重置仍会清除 Talents 用户状态，不用于升级已有数据。
+
+Teams 单独启动时可读取已提交的 `shared/seed/talents/`；Talents 启动后发布到 `shared/data/talents/`。这两处都保留 v1、v2，已采用的节点快照不会自动升级。正常启动只初始化资料；分配需求或确认准备会触发既有知识获取与原生会话流程，实际执行仍需本机 iCode、模型配置和工作目录。源码 ZIP 的资料读取不依赖 Git；验证 provenance 历史源码的测试需要包含来源提交的 Git clone。
+
 ## CardDemo 开发初始化
 
 实际业务开发前，核对 **JDK 21、Maven 3.9+、Node.js 24、Git 和 Teams 实际使用的 iCode**。平台继续在 `main` 运行；使用 `npm run carddemo:workspace -- …` 为 CardDemo 建立 `develop` 和需求 worktree，先预览再执行，需求 PR 提交到 `develop`。旧目录未提交代码和已有会话保留，新工作区只取明确的 Git 基线。

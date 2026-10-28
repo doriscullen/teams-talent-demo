@@ -1,0 +1,1967 @@
+{
+  "version": 1,
+  "sourceRoot": "workspace/skills",
+  "packages": {
+    "arch-adr-writing": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "cf296a778e31f80852b6c66e016163cfd44b7b47f8aadaae9e7fab209544bc9c"
+        },
+        {
+          "path": "references/adr-guide.md",
+          "executable": true,
+          "sha256": "3d434b3791c2a2d5c1732d262be72c32c2bf1b255f52bce2fa0285198264ab70"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "4c2829e0fd569f41cb707d462d4c0166240f7109ef10f6a963b921bc1a5aeebc"
+        },
+        {
+          "path": "scripts/adr_lint.py",
+          "executable": true,
+          "sha256": "ca69de8252f04caf2f7658d929428ce2c8ae86c3e2869ea42e110b80514bc22d"
+        },
+        {
+          "path": "templates/adr-index.md",
+          "executable": true,
+          "sha256": "43026fe191864f3e8e312281ca777df3a7195b5a2a416ab47a8a8848c0e24dc6"
+        },
+        {
+          "path": "templates/adr-template.md",
+          "executable": true,
+          "sha256": "7322ddd1d563b9d9feb888ed739775e3a435013833973388049d008ce0971738"
+        }
+      ]
+    },
+    "arch-impact-analysis": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "572a784afcbd402ce1f07f395f80a1e5208e8e309427ee3fb7b2870aedf903fa"
+        },
+        {
+          "path": "references/impact-dimensions.md",
+          "executable": true,
+          "sha256": "5084d9c6b85384e361cf00704b421bdb8911036c482de11e806ed42b2191b245"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "20026fb4bda96f071bf1180df2500b200d8ab455ab2a09de3359eb0584d31f2f"
+        },
+        {
+          "path": "scripts/impact_scan.py",
+          "executable": true,
+          "sha256": "4848e76dfc422d0086122f7d113beaf2ca8ffdd7f55480bdf9aa127bbf22f06b"
+        },
+        {
+          "path": "templates/impact-analysis-template.md",
+          "executable": true,
+          "sha256": "f364bf0bba36adc25eef2c0356eaa6ea65a5056c3db24f0befbd9dab949d7681"
+        },
+        {
+          "path": "templates/impact-item-checklist.md",
+          "executable": true,
+          "sha256": "cfb9986bf178871ab80b1a21c7fbbe2af3f982a6ee4777d81a7c92ecad5b0154"
+        }
+      ]
+    },
+    "arch-nfr-design": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "ace296bdec9e04d2d311154246bc768c35ecac01f228beb8f858316d94cb8de8"
+        },
+        {
+          "path": "references/nfr-dimensions.md",
+          "executable": true,
+          "sha256": "0b50d9ffa584a0996b20a1b6c1a7748e49e4ef9a3c09140bf7a61767a4e1ff79"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "cc8beb020438d81d78da6eb9d42c65c08d753bcbf40699f9af27c8ee55cc04e9"
+        },
+        {
+          "path": "scripts/nfr_checklist.py",
+          "executable": true,
+          "sha256": "749ea67f29d87bbcba4991adb0e8cfe4b6dc9ea8c67439fb20c116aacee80436"
+        },
+        {
+          "path": "templates/nfr-spec-template.md",
+          "executable": true,
+          "sha256": "d928dda42da174584cfe7f5c9c543781d36fd4c995e4aea6e322055b3155b55a"
+        }
+      ]
+    },
+    "arch-solution-design": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "98c9e2e25e435eaf8968713f206fc65b4dc53a9c669b4189f3b6864706c03c25"
+        },
+        {
+          "path": "references/architecture-standards.md",
+          "executable": true,
+          "sha256": "d68a45ba0d56b7eb0b0da1b4e7499d1e66dfc44def767929eeebe7beb3d43f44"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "09079ac147571b785f228364f2243dc8b8cf5632024b604278c260df9c1f4cd0"
+        },
+        {
+          "path": "scripts/design_coverage.py",
+          "executable": true,
+          "sha256": "9fa635c6686a09ed61648638d27fad6c7f463a82838024587c5abc4e69d4117a"
+        },
+        {
+          "path": "templates/adr-template.md",
+          "executable": true,
+          "sha256": "8fd42b0867ea5e222bd117d1facc7a83d835df822a27ea0ac0dd2a599e588f85"
+        },
+        {
+          "path": "templates/nfr-response-table.md",
+          "executable": true,
+          "sha256": "2c2e7f58e9aeada03c5c8f7c51f900589ca1cb9d909f43c8208a420848a7458e"
+        },
+        {
+          "path": "templates/solution-design-template.md",
+          "executable": true,
+          "sha256": "0ab91c66f4544bbf421963585ea6042714b6b51a4aa1320e7b66cfb1ecd29718"
+        }
+      ]
+    },
+    "audit-evidence": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "fd24e7e06bc7a58fb6b02889516dca1519a924e11f41f88d191b215c39460fdd"
+        },
+        {
+          "path": "references/evidence-standards.md",
+          "executable": true,
+          "sha256": "5dd9563820e785b63756169c9b6751be2c731829e4d7342c1da28ca2a066a4ca"
+        },
+        {
+          "path": "references/id-conventions.md",
+          "executable": true,
+          "sha256": "77e7a7bff437ffb47baf21a3926425ef1e2b42e54c3df8c2777e857a3f303edb"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "5e24b0a30a157c4652dfa3c19cbf0924e35926ecc8cd56295d39ba4fff8a200e"
+        },
+        {
+          "path": "scripts/trace_check.py",
+          "executable": true,
+          "sha256": "5a8f9b4e31f751e9508a0ba72821ee63708bed41fb18fe777f01bd6975880553"
+        },
+        {
+          "path": "templates/evidence-pack.md",
+          "executable": true,
+          "sha256": "f99a3a17a2d15083999693048225ebf27fa42209c40281934180583a7b99ea67"
+        }
+      ]
+    },
+    "ba-acceptance-criteria": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "f70a1e6209873d4181a0a7af81a729fd6155012a468dd59ab4dd508b7dd3c6cd"
+        },
+        {
+          "path": "references/acceptance-criteria-examples.md",
+          "executable": true,
+          "sha256": "dcdfe12390306e9ba8690bb5930c913657118b42a0da0a97ce4c2ad18838c387"
+        },
+        {
+          "path": "references/user-story-writing-guide.md",
+          "executable": true,
+          "sha256": "868a9616f6e9d0f15d870db5a00486f9e948b39b3fd3a23d9c310b001ef465a6"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "10a4c7064fc4859226311bf42ababfad88cada79df8f4160ed32d738db556ee8"
+        },
+        {
+          "path": "scripts/rtm_check.py",
+          "executable": true,
+          "sha256": "1a1206c5667a316deeca12f6da17bb715bec942f4994bbfe63ce9c00da897583"
+        },
+        {
+          "path": "templates/acceptance-criteria-template.md",
+          "executable": true,
+          "sha256": "187617086f6eb42691ff076654b76a12a231d51cfa519915181c10e56f04e05b"
+        },
+        {
+          "path": "templates/user-story-template.md",
+          "executable": true,
+          "sha256": "05b8ed960e16bc644b1d81cde3b453b4ba712de48104617c71af7089770dbbcc"
+        }
+      ]
+    },
+    "ba-change-impact": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "dba27bbdb3344481f4ff2eeac0391def46d95c35f97ccd6e921bc5a474bf9e02"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "1cc6d627b1e5de04236b6a0d655e55723daa65cce45457ea3e6d8a058d0164a3"
+        },
+        {
+          "path": "scripts/diff_compare.py",
+          "executable": true,
+          "sha256": "f604c43a36f5dce1089deb7eef6a3e268d7db49060a333c84ced18ca8b8dae9a"
+        },
+        {
+          "path": "templates/change-impact-assessment.md",
+          "executable": true,
+          "sha256": "2a5e31a9d398beda077e4100cca7b1a627eb3f2f648fc21a70359521cf4d94bd"
+        }
+      ]
+    },
+    "ba-requirement-analysis": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "015dacbfe6421cff210cbf8093f2ea55bb802a97de611ebc271379f117240571"
+        },
+        {
+          "path": "references/bank-domain-glossary.md",
+          "executable": true,
+          "sha256": "bb7401489ddc44aa2672d1dac390a623de3fa2c65fa8c7fd56a427fb53ba10b2"
+        },
+        {
+          "path": "references/regulatory-mapping.md",
+          "executable": true,
+          "sha256": "b89c497ce74536ebdace1d01d401a48ea85e653076bd5041b8332e3d57b4f55a"
+        },
+        {
+          "path": "references/requirement-writing-guide.md",
+          "executable": true,
+          "sha256": "678fd46a243039bed6fa74e95fe95dc48b7e72840f73a350be99bd7710df6052"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "0a9d08dcc182096b7a6ce4735bcc11047e1fe4f6f82f74b219c11feb89c3e682"
+        },
+        {
+          "path": "scripts/ambiguity_check.py",
+          "executable": true,
+          "sha256": "cad2cdfc32fb0d64f832e04e4b37005c3d8c3bc0bf581276fb75c91cbba4f800"
+        },
+        {
+          "path": "scripts/spec_completeness.py",
+          "executable": true,
+          "sha256": "be633703cfdaf96f415e0c32b4482fcaa225cb9811c298a82acde423bf3a751f"
+        },
+        {
+          "path": "templates/clarification-questions.md",
+          "executable": true,
+          "sha256": "4768db2eaf40903adfd24eaad3a56352883b7dce4f8bdd1e4483ae7b30a70f9d"
+        },
+        {
+          "path": "templates/impact-checklist.md",
+          "executable": true,
+          "sha256": "c0ea5f8df37c15c18a18c10a3764f258080cba4a9992b2fb4cd91875c7783a4e"
+        },
+        {
+          "path": "templates/requirement-spec-template.md",
+          "executable": true,
+          "sha256": "b1c117fa7578cec0ca2be4ff25c836aebf9dc87c291857638b4b511cfedc28b7"
+        }
+      ]
+    },
+    "ba-requirement-tracing": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "3f1cd91d0c6639995597dac4bccc9c0980ea71130501f3b7d265d5a193081a4e"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "8dcad43d3f5ef268469cba9c6754964afe9eb02da9ed04eae62257415d43d94e"
+        },
+        {
+          "path": "scripts/rtm_check.py",
+          "executable": true,
+          "sha256": "1a1206c5667a316deeca12f6da17bb715bec942f4994bbfe63ce9c00da897583"
+        },
+        {
+          "path": "templates/rtm-template.md",
+          "executable": true,
+          "sha256": "3b76bc4649517b0604e68e6f204541125288306e5f6faddecbe24d517f063d7d"
+        }
+      ]
+    },
+    "bank-domain-payments": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "c20c598707aea7b56c795f23662f5cdf47cb01d88ec01545c344a886a7c579ef"
+        },
+        {
+          "path": "references/iso20022-reference.md",
+          "executable": true,
+          "sha256": "43957f2c0fb88713e5ef0bd1a46a9ab18f387e1e5b3ff2ddc59baa2d1bfaf01e"
+        },
+        {
+          "path": "references/payments-basics.md",
+          "executable": true,
+          "sha256": "aaec2c84aebecc9c266fce7ad637143dd2df2c52ffdb59ac4c48966bc6884aa3"
+        },
+        {
+          "path": "references/regulatory-requirements.md",
+          "executable": true,
+          "sha256": "0aaaea7941803df0b92cee26f36f346f473a050ca6dddf009bfe70100495e547"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "a7662ff728169ae7622a41a5235b4bb1588c0831268e25c31365ef5b220bd2f3"
+        },
+        {
+          "path": "scripts/term_check.py",
+          "executable": true,
+          "sha256": "bb68e4fabe3334f915ba806f5820edea4d83f0de33239dc7f775bd00f74f3292"
+        },
+        {
+          "path": "templates/glossary.md",
+          "executable": true,
+          "sha256": "d0f129c145d03bdb1f872ed5b00acffca55eac7c15d1c01bbf2a3920f2c02369"
+        },
+        {
+          "path": "templates/process-map.md",
+          "executable": true,
+          "sha256": "75532c81b493b9fdaae9ceea9391d4e8d313e78042f55428737194b7422aa964"
+        }
+      ]
+    },
+    "change-cab-prep": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "fe1d5deb58044a3c0a9bc5dfb7daf4fedc814bb4a9ea90405aa0d0e693a64663"
+        },
+        {
+          "path": "references/cab-standards.md",
+          "executable": true,
+          "sha256": "5ad9d3c1ba92fde83ddb25a7420ca2ed583f63e707985e4438a716cd16a88e75"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "90773fc7302e3e46e94785c2fe7ddc91dea23396104c7f47a1c737c1807c25b7"
+        },
+        {
+          "path": "scripts/cab_material_check.py",
+          "executable": true,
+          "sha256": "dfdf215c23fc196d4d59ce21246ae9f5696b263adacb8956fb50be04fff321f6"
+        },
+        {
+          "path": "templates/cab-package-template.md",
+          "executable": true,
+          "sha256": "508b28acc4b0f5978dde5fe22769543809312a5aae510ef6d488f4a95c2604b1"
+        },
+        {
+          "path": "templates/material-checklist.md",
+          "executable": true,
+          "sha256": "84f997a77de97c2d3a19d6d8e67251304c94ddb6a26ad0edfb5a751bef41fcf4"
+        }
+      ]
+    },
+    "change-rfc": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "b12bdf958bbbc14c99d30b9c045cafa7180338087657368247a9e4190daa2ba5"
+        },
+        {
+          "path": "references/rfc-fields.md",
+          "executable": true,
+          "sha256": "6d4ce02440598a16bb30de5907f4af2e156fb4195e21e06291f62ba6b96cbc3f"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "f067deeda494353e5cc027a36739f61eb5506e8602b33dad401bde72fa9803ee"
+        },
+        {
+          "path": "scripts/rfc_validate.py",
+          "executable": true,
+          "sha256": "20049e25c486cd588802b3d0235cd632781019d4453eaae4d6a9cbf4b0323cc0"
+        },
+        {
+          "path": "templates/rfc-template.md",
+          "executable": true,
+          "sha256": "f46be98698eff33cf4c595094c6c4eef0d2d0ff36b8e695421ec53317f38ddd5"
+        }
+      ]
+    },
+    "change-risk-assessment": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "00e8d590993cb894afbe4cd25db1cf266f2e86ff0665752b4249084449fd833e"
+        },
+        {
+          "path": "references/risk-matrix.md",
+          "executable": true,
+          "sha256": "5fe938ea6ff088fff6725d8c7fd4651eda2932271704edeb48dfb5d57f33ffec"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "efdaa99991cd877492430d7d3043ce9fa44085e333861a3aedbbe8db3a1ecbdd"
+        },
+        {
+          "path": "scripts/risk_classifier.py",
+          "executable": true,
+          "sha256": "0fc9bad3664d429312eb54a72acbf5ea588472db9a1dec3b2859ccbb7e6e8255"
+        },
+        {
+          "path": "templates/risk-assessment-template.md",
+          "executable": true,
+          "sha256": "20ea9617855fd56b0a94c762185834e7722f84f61e4d0e71911afb01acf6e14f"
+        }
+      ]
+    },
+    "change-window-scheduling": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "5b8491fb5d568c5552e1b4d6870d872144296594c61720adaf139f9e1c329064"
+        },
+        {
+          "path": "references/window-rules.md",
+          "executable": true,
+          "sha256": "7e6c0510827c5273f905eabf475027fdde6d7409c64d17365aeb510fc8eb5a8f"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "4f5ea88420e4d46d15ea6be6a309efe55160e8f765850bbf5d6d15e5265925d3"
+        },
+        {
+          "path": "scripts/window_scheduler.py",
+          "executable": true,
+          "sha256": "1ef0e4d42e37b20ae4aa1b0c745390f93055ea0368655f1af18337a985111b95"
+        },
+        {
+          "path": "templates/change-window-proposal.md",
+          "executable": true,
+          "sha256": "8db556cf56f39cd655cd20650cae9c6de62b2d225603a4a8d4fc6a1cb230330b"
+        },
+        {
+          "path": "templates/window-conflict-report.md",
+          "executable": true,
+          "sha256": "26c90f7f4be19b142992e1cfe5fe8d179bd210dd8b5d1bc778b5d239f0652832"
+        }
+      ]
+    },
+    "cobol-legacy-knowledge": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "2e6c8458adf1fedb645229eea1b61203381ab9fba1fa6c33c82be97bbcadfcf6"
+        },
+        {
+          "path": "references/adaptation-map.md",
+          "executable": true,
+          "sha256": "5f31fb41688c20881de82b8c7bb8f3d46f67d6acab9370c22f1fb64e2c0bc085"
+        },
+        {
+          "path": "references/five-level-model.md",
+          "executable": true,
+          "sha256": "9ee0b0dc4282c694c6f8084e98f1e51cf9f5b9b93a075e0e7f84df1a808bc06e"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "430d80d8a71f08cddcd373e064c9c59f946f5552e705d41d826d2064682f4ddb"
+        },
+        {
+          "path": "scripts/legacy_adapter.py",
+          "executable": true,
+          "sha256": "47348f506f26a3b271113c5a6ef297150b91a3fc6647bfe6049aa6f292a2ec49"
+        },
+        {
+          "path": "scripts/scan_as400_codebase.py",
+          "executable": true,
+          "sha256": "477e03a74afdef973b1a4cd2b1c93c1c21b65ffb9143094f742730cdd0aee834"
+        },
+        {
+          "path": "templates/five-level-model.md",
+          "executable": true,
+          "sha256": "6bcad0d1b54b0600f41d17ec916682af138b7169bea1ee47dc759c38c5046723"
+        },
+        {
+          "path": "templates/output-schema.json",
+          "executable": true,
+          "sha256": "94fcea429c46f5bb0945927e442d952c989292ebe661e758177558c8ab287928"
+        }
+      ]
+    },
+    "dev-api-integration": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "a9bbc4328364a8541afc27a6c03bb049ac5b56771fc63dfad2f6eb020149186f"
+        },
+        {
+          "path": "references/integration-standards.md",
+          "executable": true,
+          "sha256": "9a9d541fced7b89e9d823dc1b50adc50fcd22dfbc39bf95a6b285b9a0305d70c"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "da84bcdaac89f0f5dc5f78b2e06a6e52dc734c77c7335db52f5e49172798e4c5"
+        },
+        {
+          "path": "scripts/contract_validate.py",
+          "executable": true,
+          "sha256": "a078c24db523fa38a6e14c5386172547b66f0ae403596d9e173335145d81b28c"
+        },
+        {
+          "path": "scripts/idempotency_test.py",
+          "executable": true,
+          "sha256": "4aecd0dd5ed347d16c013b1a559422ebdc8aaaf26caa5ec46476fcba936bbd1e"
+        },
+        {
+          "path": "scripts/mock_server.py",
+          "executable": true,
+          "sha256": "990a8647f5c0a0ac281334b2823c5037b4d662bdd105d14fbd85bd1e36828513"
+        },
+        {
+          "path": "templates/api-contract-template.md",
+          "executable": true,
+          "sha256": "10c421ab9de13b4088081554177a93c53026cd88a6fe4884ef56da48272abf55"
+        },
+        {
+          "path": "templates/integration-test-report.md",
+          "executable": true,
+          "sha256": "6a1813be0e80b5f3c206db9888a7aad5564cb1eb31ce12abb86ad1eda0a6090c"
+        }
+      ]
+    },
+    "dev-backend-service": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "3bb2a87b0a70257ca24e72959f04f62b93df22d9f7433f4ec570581ad0df3d9c"
+        },
+        {
+          "path": "references/backend-standards.md",
+          "executable": true,
+          "sha256": "88e79b926c474c347e49187346cd56250aba89618446409bf989013ee5fb7bf4"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "9d2824c43ef9ba9e55dcab6a0f0ce50a3f3a1dd921005e15afdf9518c32d1a29"
+        },
+        {
+          "path": "scripts/circular_dep_check.py",
+          "executable": true,
+          "sha256": "ac90b5e2ecdd6359eb2172eb22c79f9b7e3cd07a93ce638c4fc47e1c50ae661a"
+        },
+        {
+          "path": "scripts/layer_check.py",
+          "executable": true,
+          "sha256": "9a657e551c1ce12b55e9c131130a85df3d3a3d99406a11521c0fcd64db487132"
+        },
+        {
+          "path": "templates/backend-service-template.md",
+          "executable": true,
+          "sha256": "e0607c1c6e538a76dd6c8877160ba0f1405022ba275d3cc33ba852cc8c54b7db"
+        },
+        {
+          "path": "templates/error-code-mapping.md",
+          "executable": true,
+          "sha256": "201d4e258c74593eb720d4a5f02d0173a2e40ec59aadf34aaabf38862b47fb97"
+        }
+      ]
+    },
+    "dev-bank-coding-standards": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "545c8066f1fd98cc9d3cfdc4b5ad2edba8831c70b2305c0a0f85766485f865c3"
+        },
+        {
+          "path": "references/rule-mapping.md",
+          "executable": true,
+          "sha256": "e4e823d74dc032475d7ada9a1dc7383e302fd60311fb97a641cb110767edec97"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "ed5b78f5440e1ea1c5053a3c898960cf840cf6a2a7194349537b6366c12d4a4c"
+        },
+        {
+          "path": "scripts/check_standards.py",
+          "executable": true,
+          "sha256": "18f1f36db51fa0705fda1580c846bc4ad277729b725ca82e1041f3ef535fae5e"
+        },
+        {
+          "path": "templates/coding-standards.md",
+          "executable": true,
+          "sha256": "4f5be448972a5c94b5e7294b83fad55777249563a3294e9ed84f58026dd0fd3f"
+        },
+        {
+          "path": "templates/review-checklist.md",
+          "executable": true,
+          "sha256": "4dc1792600b7261d1f680a77bc6e920a4ae8d9f552ba130eba2ef11d5fb01800"
+        }
+      ]
+    },
+    "dev-code-reviewer": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "146c22f9465777f6737633ae388833174d2967d37a56b60a414d771769a987ad"
+        },
+        {
+          "path": "references/review-focus.md",
+          "executable": true,
+          "sha256": "4d1fb91f6c6e101a288a4890dab06b4bb4e6377faa5712ed6008d23facd119d9"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "de6339142e7989fa97e5eabb055a28f36fa395fea98bc6fb1afcf4d3558cbe6f"
+        },
+        {
+          "path": "scripts/review_analyzer.py",
+          "executable": true,
+          "sha256": "e4ea72cfdd3b33e8518ef163b77c692bb2fc4a4f6c8a1f71a35ec31eca83a7e6"
+        },
+        {
+          "path": "templates/code-review-checklist.md",
+          "executable": true,
+          "sha256": "8abddd9c86f9a8ccefc35195c15f8183373dae41a6a3dad459c608caf4b3ef49"
+        },
+        {
+          "path": "templates/review-comments-template.md",
+          "executable": true,
+          "sha256": "f6748d3cab50d582d3196ad228bf00acc97f6261f863dd612db2a09f68d6889b"
+        }
+      ]
+    },
+    "dev-data-sql": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "28addb931c37858b65a2c2a0c35c31d369f01af84b55b0038fb5e793347fb4fd"
+        },
+        {
+          "path": "references/data-standards.md",
+          "executable": true,
+          "sha256": "16685dfee5244402b28ffa20d37bbfa16912b75c76cc988018502af3b3d22799"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "517d5ef113634de694e8f54241c47382214fd64aa62b30c7e2ceca1a489f648d"
+        },
+        {
+          "path": "scripts/data_diff.py",
+          "executable": true,
+          "sha256": "7a4972a52c57f173739fe40dae58f3f7f3df5fec07b694fba8df26aa5e15e794"
+        },
+        {
+          "path": "scripts/migration_verify.py",
+          "executable": true,
+          "sha256": "53befc1b8b49716762debcb5eb8dfd183d400b9d0da213fd6b2d6ff86b05d02f"
+        },
+        {
+          "path": "scripts/sql_lint.py",
+          "executable": true,
+          "sha256": "9d35c636b91158a892430ecaccffe7f53e8a64bdfd772b0dc8cabea704eb0f8a"
+        },
+        {
+          "path": "templates/ddl-template.sql",
+          "executable": true,
+          "sha256": "4194b08a9892a463b6fdc37792fc62244ee31db041758f7eb55c387e6e643a9b"
+        },
+        {
+          "path": "templates/migration-template.sql",
+          "executable": true,
+          "sha256": "98e8526134cb58dc09708475beadc0a14c1ea338a12e1f6ead516d81986c75c1"
+        }
+      ]
+    },
+    "dev-frontend-ui": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "320ce4d6edf32bfccf52c34270c02ff892e38e11540914f76b309d881c4ef419"
+        },
+        {
+          "path": "references/frontend-standards.md",
+          "executable": true,
+          "sha256": "d0e095439551abd06b73ce957d799886b803831b77399138087805a059462d9d"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "39051313540ea31ca0a64090d60892b1717459ea2d92a6092f147550ddac286f"
+        },
+        {
+          "path": "scripts/a11y_check.py",
+          "executable": true,
+          "sha256": "72db149f2ac116251b3400e6cab4f45a42d6fd44a91aeaeb6558620cccc3cfc4"
+        },
+        {
+          "path": "scripts/bundle_analyze.py",
+          "executable": true,
+          "sha256": "51c5c6c75f9cca461c1c26a31d352bd7d7addaa3a2d1545777ec18a25dd51ac8"
+        },
+        {
+          "path": "scripts/ui_lint.py",
+          "executable": true,
+          "sha256": "d139d48b009eda6ee49fb22c76fb3c941c517b7b710ad7bc54ca731757ea7acb"
+        },
+        {
+          "path": "templates/component-template.md",
+          "executable": true,
+          "sha256": "fb8c98195bc14cd9c9d46368091ec3f290087725c04b6a3798b04072ba0e8d0a"
+        },
+        {
+          "path": "templates/page-template.md",
+          "executable": true,
+          "sha256": "021c76b34e6adb9bbb35002346974f2a79e98614ea64855930aea7b67e6c2a73"
+        }
+      ]
+    },
+    "dev-perf-optimization": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "3ce6b9feceed3e53874769da0b56f8aab2e397005963eefeb0fe6fdbf7f92b7e"
+        },
+        {
+          "path": "references/perf-guide.md",
+          "executable": true,
+          "sha256": "c591a66620b33ec8ae8f670678889f560a9e9a21f10cb3d621e950e797e5aada"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "7f7800ec50745785918480e32288e01c1bce6e8a2853130e80b269898aab982f"
+        },
+        {
+          "path": "scripts/perf_compare.py",
+          "executable": true,
+          "sha256": "69971120701ea3a5a4841ee1ea2cb649ffbfe38395ac72689001066059e8e460"
+        },
+        {
+          "path": "scripts/slow_query_analyzer.py",
+          "executable": true,
+          "sha256": "6da4230733cdc398eb56cb00a05b8630e6baf95a8d9f736258716e453208b105"
+        },
+        {
+          "path": "templates/perf-benchmark-result.md",
+          "executable": true,
+          "sha256": "fee3459ad85afcb218ed4ac5dceceb0c4f5bb9b2559bfbf7726dc2a7141780ed"
+        },
+        {
+          "path": "templates/perf-optimization-plan.md",
+          "executable": true,
+          "sha256": "8eabd42f41d094399d82df9e9d942fa2f173bcfa905aa09e015743a7acfadf85"
+        }
+      ]
+    },
+    "dev-refactoring": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "97865f872ae6642382c9e7c7917a714a25eb94c56b5f2e8ef50cd78e93551fcb"
+        },
+        {
+          "path": "references/refactoring-rules.md",
+          "executable": true,
+          "sha256": "0ae50b596a9e5b3d3037b77f99c583b1f0f01a55d2b8e4ab99e483993d501243"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "810c40657427aacf77d9bc88852307e33574e45ed3bf2a2911f934611e2df297"
+        },
+        {
+          "path": "scripts/debt_scanner.py",
+          "executable": true,
+          "sha256": "c1d40567842f591e98cce0cbcb29d5bdac45aa2567cfae0ff20930e8ed7dcd7c"
+        },
+        {
+          "path": "templates/refactoring-plan.md",
+          "executable": true,
+          "sha256": "46d161baf01c97fb0241ee4abbcef99030602e69c1aa5540f0bbb1866ee215ab"
+        },
+        {
+          "path": "templates/tech-debt-assessment.md",
+          "executable": true,
+          "sha256": "5bd7182e14cce9b2a88f308516d13ad1850788badc11f6e43e7bbc79cbbfbf8a"
+        }
+      ]
+    },
+    "dev-unit-test": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "bd39c84706b597982c679d40744bd3bf08794bfc0993d29bb52198b7075273ea"
+        },
+        {
+          "path": "references/coverage-thresholds.md",
+          "executable": true,
+          "sha256": "dc89de75e808456422230b248ebe6a2d94ba00981bb3d6fbf623d4be7b2becf1"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "8f8fa71e7c0ac8dce2666070f754c33e41e3b568ad3f22e7562de52e2a62c8f4"
+        },
+        {
+          "path": "scripts/coverage_report.py",
+          "executable": true,
+          "sha256": "2144826415b5d146fd423b7a39583696e36c693e17a458e5e8ce4229b940a880"
+        },
+        {
+          "path": "templates/test-naming-convention.md",
+          "executable": true,
+          "sha256": "77c0d3ace66607feff3571694356c729d6a103f77082db596c8a1107aa454777"
+        },
+        {
+          "path": "templates/unit-test-template.md",
+          "executable": true,
+          "sha256": "547312dc1dfdd0280af1a4d74a54f58f12af54a9b13eb7a6e86e771337822a82"
+        }
+      ]
+    },
+    "dev-unit-test-extended": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "db111dfbcf9620247a1e73d306677f1d6dff65c6d4414e5dffd17c8e22e820bd"
+        },
+        {
+          "path": "references/extended-ut-guide.md",
+          "executable": true,
+          "sha256": "9947ec11c3d7dbdb158dd694531f0ed28109861c228cc8e12a24c40bc47603cf"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "016d86e8545c43d99f744d756a81ec561ed573d2f5f2ba5f812ecdb7bad488f4"
+        },
+        {
+          "path": "scripts/coverage_analyzer.py",
+          "executable": true,
+          "sha256": "7d042e4d098ef0b5733a3a8e268da08cd2744a9f0f38430ff76ab1495442061d"
+        },
+        {
+          "path": "scripts/test_smell_detector.py",
+          "executable": true,
+          "sha256": "3cfb2bf69efad4cf2b514f2a70b85f83a4f6d49c71e187507723009917446c72"
+        },
+        {
+          "path": "templates/mock-patterns.md",
+          "executable": true,
+          "sha256": "bcb8ff4a78660c83cfe0c47753eb2f8c803b6496093f18e1dfbc3a5e5fde8592"
+        },
+        {
+          "path": "templates/unit-test-pyramid-template.md",
+          "executable": true,
+          "sha256": "0e36c031706d67e012edecb20cd3477d926331f44992a7aa8884a3c17906ce82"
+        }
+      ]
+    },
+    "g1-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "57bb7d8aef63e530a453d101365b56e06bbdd915d029b08724ebb173912e8fc8"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "87e10b84ecd21419ed4a5c2c47a9a4d3b6a3634872bc601807fd930bc34f278c"
+        },
+        {
+          "path": "scripts/run_g1_gate.py",
+          "executable": true,
+          "sha256": "a3e146a61ed5471bc187bba0f7f22f86bf2b00f57ac3978eb24fb28cb63d7399"
+        }
+      ]
+    },
+    "g2-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "7e0d1b0f8ee89b0c34a54005310f328099fd6397120740c87e25e2fea7606f1a"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "0de5e8109594f86c4c5163e3fc1cffcf4a0f6d1fbe94c469152401ce90352ae6"
+        },
+        {
+          "path": "scripts/run_g2_gate.py",
+          "executable": true,
+          "sha256": "54ee4f3c5914d5ee0a1800ade63d48c76c952857379a3c3756602c03b03758f6"
+        }
+      ]
+    },
+    "g3-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "ea0b83c0e18973cf26dee5cd2e5f7d94da3fc50beaf6145682691746a5a6f649"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "45ae76843c297945b5a9154d791b4c60e510bac142b6d6b1a9ce751330edd7d2"
+        },
+        {
+          "path": "scripts/run_g3_gate.py",
+          "executable": true,
+          "sha256": "ab3688471ca1a5696a9a06182ad93250a345ab8116f6e58bfd9d91abf1c08d6e"
+        }
+      ]
+    },
+    "g4-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "003311690730f935d7dd615c1377c425c474b5e90ad683db8396674f9ffd5da8"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "aa9f09d6769d3a33bfb7b235bd206c9439942f9f14aa4d3bba1c69d9400a8496"
+        },
+        {
+          "path": "scripts/run_g4_gate.py",
+          "executable": true,
+          "sha256": "9fd76a282a055e8678c98cc900e9c87629115842b32f6559a41631c89f393e7c"
+        }
+      ]
+    },
+    "g5-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "6b96cdf4ca161cfb54ce33e2ebbf703d8c1fe500ea0b74810928df3b0c34580b"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "93acc7aba475666ca6c48d0a8e24c8147179b504c41400dbfc389dea3081a436"
+        },
+        {
+          "path": "scripts/run_g5_gate.py",
+          "executable": true,
+          "sha256": "2c0770b9f4ce21472de96b071ca0d73a447e0556f45e3352ba3ba97e5b42a2e0"
+        }
+      ]
+    },
+    "g6-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "f9b443e1e4265a90352cc89f2b5a9f2b89be53468f986a4cdde470b0027aac9e"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "bb5710aaffd7032f140a69571c472c42ad5a42614a0a557babdf720af5ac8a78"
+        },
+        {
+          "path": "scripts/run_g6_gate.py",
+          "executable": true,
+          "sha256": "e58a6c1336061724b924243a5c3d0934abeb72fd7174535a30331f54aa075813"
+        }
+      ]
+    },
+    "g7-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "6271e38c3c985a1266036fdd2ed634ea3b236112dd242b7b0ecfd5871b16673c"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "7350932a34bda3db5a5b105f8be0d248fa2d1d9e7a671e8e3dea7a064c7949ca"
+        },
+        {
+          "path": "scripts/run_g7_gate.py",
+          "executable": true,
+          "sha256": "54125b3ba6af32dc2a6e8c738d81b467b76748f40fe222b919a33e0de9e73982"
+        }
+      ]
+    },
+    "g8-gate-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "e71a42fedad3b83f6533991f18770d00d4852c8f1eae7312faf54d753535c2dc"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "203550bd8532440fbf0a901a9a5253a795886694e7e7de38f6270f4af979bd8f"
+        },
+        {
+          "path": "scripts/run_g8_gate.py",
+          "executable": true,
+          "sha256": "2a3a55d978cfef3e7ca090b5533cefcfc7c42914473f9b1dab864261a7fee6b5"
+        }
+      ]
+    },
+    "output-sanitization": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "e2cef5619a7f23e45269e2fb1579ae76e195acb764a35f436e01f4092cf02173"
+        },
+        {
+          "path": "references/data-classification.md",
+          "executable": true,
+          "sha256": "7f78a19455244687adb2142df97ae2b0220dccfcc9f05bc17f706222858e3b18"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "a58ad5de08204995bc8879e181d0f97208707cd95c1fbde727f205c6ef343d0c"
+        },
+        {
+          "path": "scripts/pii_scanner.py",
+          "executable": true,
+          "sha256": "349d20b5ac108a41e892f2dc8511793e9694be1cfbd51fb9cf9b5b900494c3fa"
+        },
+        {
+          "path": "scripts/sanitize.py",
+          "executable": true,
+          "sha256": "b422547f3cb9d3872b981f0a021e842a6de3011f44ffea476b5cdbca4bc1641a"
+        },
+        {
+          "path": "templates/sanitization-report.md",
+          "executable": true,
+          "sha256": "e5ce0e0885ee8cb4bad3f411755e58c68611187d7dd1739b22b751c1868a664c"
+        },
+        {
+          "path": "templates/sensitive-data-patterns.md",
+          "executable": true,
+          "sha256": "2a507a142a69fe1d48ac4cca889b156c69f4f55b547e723bc3ed2b49ec0842a4"
+        }
+      ]
+    },
+    "pm-gate-checklist": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "abee05ccd3d951b772885db8cbaa2aa86f9bd65950960eee72b6c831e712e643"
+        },
+        {
+          "path": "references/gate-definitions.md",
+          "executable": true,
+          "sha256": "7680361ed4b599c77f28bb2b684524e2c647776cb732620fe03165a6ada52f94"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "51ac6984b860d86d2b3ea33acd09f3c0e95ccd148b71a3dd5141cf261491dbe4"
+        },
+        {
+          "path": "scripts/gate_collect.py",
+          "executable": true,
+          "sha256": "ed0bd27fd5bf1cb6109ffcd948dd5d3080dc8756398dc883d670f8aa415c6217"
+        },
+        {
+          "path": "templates/gate-checklist-template.md",
+          "executable": true,
+          "sha256": "a97ede1aea064830348cd3280af38ecf2c7744dbfd0e3693055671d0024df846"
+        }
+      ]
+    },
+    "pm-risk-register": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "7e7e3477bae6eda337f1174b3b3180224c46011fe1e3eb90c7c5584f568a0a0a"
+        },
+        {
+          "path": "references/risk-categories.md",
+          "executable": true,
+          "sha256": "ac2d9dd08fc0f5056df29a129ec7da0841c4f8c902dc18c33a6a06b131ae5895"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "72b491ec258d373f7143815fb57da6802b87db7ed628d805e4e1d0656e709811"
+        },
+        {
+          "path": "scripts/risk_scorer.py",
+          "executable": true,
+          "sha256": "18cc03181fc06f4788c5adba7c5a0dd0abf915c8f1b642f4824b1909afcb984a"
+        },
+        {
+          "path": "templates/risk-register-template.md",
+          "executable": true,
+          "sha256": "a5dffa92c33e3548fec38373359818522f04c813e31519cc8fb65026e9b7b6f5"
+        },
+        {
+          "path": "templates/risk-report.md",
+          "executable": true,
+          "sha256": "252903a066afd188b6570eca4850b0009f8cf4db99479040e713d64a3aa3d774"
+        }
+      ]
+    },
+    "pm-status-reporting": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "9e29dc513463a11f0c4ed43d316327416a149be8fb20e2e4c10a52bffa619482"
+        },
+        {
+          "path": "references/report-standards.md",
+          "executable": true,
+          "sha256": "daafb73b2d3c4c6baaf3be43a6529882bb883259c6ddbf431e2c0ecd01a262b5"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "1d873f40898865f34832df48d92d770f7c6d2f0d4b4b2d3fa7d2e906dc10fb2e"
+        },
+        {
+          "path": "scripts/status_aggregator.py",
+          "executable": true,
+          "sha256": "4b55916d1920ffadee6ecde4645dda26202041cc14f024d7eca66fcd3b37e850"
+        },
+        {
+          "path": "templates/milestone-report.md",
+          "executable": true,
+          "sha256": "a4344cae7961af69232e8135b92c4fc146460e63a4fa26a79b1604e3422a6ede"
+        },
+        {
+          "path": "templates/weekly-status-report.md",
+          "executable": true,
+          "sha256": "c18336c63389f09a95db07dfd42990dae1b43d0aed1d3bff7d8da2f143e977a6"
+        }
+      ]
+    },
+    "qa-defect-management": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "28b60403009175785594ca704ef4094ecadd89631c328a054d2026e30d12221a"
+        },
+        {
+          "path": "references/severity-matrix.md",
+          "executable": true,
+          "sha256": "e38c876857bc5d9f5b7a844c9f0a837768bec7369f34909ea673df6892f89732"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "96e912c8ee826b573252dbb28d19785f2c0f4775703bc74d55e5a06d752f619d"
+        },
+        {
+          "path": "scripts/defect_classifier.py",
+          "executable": true,
+          "sha256": "df45d7b46f99ad48413837f8b933cadfee87f726d591194a2aeec1cf13656b95"
+        },
+        {
+          "path": "templates/defect-report-template.md",
+          "executable": true,
+          "sha256": "b75810fd7dd458e02e8ab163385151b33c71a3158dfd1f00d41bd6a1909bbba1"
+        },
+        {
+          "path": "templates/defect-trend-report.md",
+          "executable": true,
+          "sha256": "51fc4fb7c25da5f536d9b6ac0e908d8c71d73581af62929c2c6bb0382cede061"
+        }
+      ]
+    },
+    "qa-integration-test": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "4e8a6017d3af0a15935f65921d71610b9de3aecec8862745eea42ea33d311386"
+        },
+        {
+          "path": "references/sit-guide.md",
+          "executable": true,
+          "sha256": "7e6b6e67adf3645561a95da889de7f1bd1451923865f4f7d58e836b22236c0c5"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "a7e33872920a6dea9708fcc77a165d2589f3ab144c2bf11d23deae3a2a61b40c"
+        },
+        {
+          "path": "scripts/data_flow_verify.py",
+          "executable": true,
+          "sha256": "8538e56b5f64a6084116520716162e7c4eab5863c6640471dd942dedff3ff55e"
+        },
+        {
+          "path": "scripts/interface_contract_test.py",
+          "executable": true,
+          "sha256": "d49cae947e30f99a4c1b9ee1031e58bf799457c28394ffae8ab33f292059461b"
+        },
+        {
+          "path": "templates/interface-testcase-template.md",
+          "executable": true,
+          "sha256": "020dad8e4260ed39fdf3532e47c705fadb456e769511481c1315b0e04054cd35"
+        },
+        {
+          "path": "templates/sit-plan-template.md",
+          "executable": true,
+          "sha256": "f181e89784dd4371ffc04dac41598105cc6595dd0c2779e432a4d1c35f789e8a"
+        }
+      ]
+    },
+    "qa-performance-test": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "8c84113cef9d6e6ec30b9b49e2b70a5027c1fc3c880dc9306e515d7454ec9378"
+        },
+        {
+          "path": "references/perf-test-guide.md",
+          "executable": true,
+          "sha256": "5811dbee72b938db64ad7b3f3721b31ef89f1e5c3e65b00f76f3f5d4d8ffd910"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "57da0445df0a2f1cda8f80166acc236ebb9551804559c9955393ed3d4d51102e"
+        },
+        {
+          "path": "scripts/load_model_gen.py",
+          "executable": true,
+          "sha256": "404fd254c06aad22e475ce16a71622ccb0e82c516222cda50e97855d8c8cb89f"
+        },
+        {
+          "path": "scripts/perf_result_analyzer.py",
+          "executable": true,
+          "sha256": "749a3831eefdaa6afe19f1e42c45b48e3b23cf004d75dcd53e75d6186cb8ca4a"
+        },
+        {
+          "path": "templates/perf-test-plan-template.md",
+          "executable": true,
+          "sha256": "bfc859bcbea9ad0a7d9c329af006a38637c5db97db96255701fa0b3612d6cb55"
+        },
+        {
+          "path": "templates/perf-test-report-template.md",
+          "executable": true,
+          "sha256": "020ac67ea52ef31d2c0f179c1ac01d4ef44f0d019fe234377339069ed22066c7"
+        }
+      ]
+    },
+    "qa-regression-selection": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "7e6086bcd0e9395247cc3baa81bb906f97b0649fd8b28c907c7b91d380d09891"
+        },
+        {
+          "path": "references/regression-strategy.md",
+          "executable": true,
+          "sha256": "dc7428633c13e7299af8c96f1a1ed4d2bde687fb93b06c14a3c61e375728c8ee"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "90400c1f93472ab6a93d0e4006587c7e5d43c8221a6271891cb6b64386b0658e"
+        },
+        {
+          "path": "scripts/impact_analyzer.py",
+          "executable": true,
+          "sha256": "91d0143bc50462fab0609b710fad473ad19b3e2c9fedc258ac39900f63ac45e8"
+        },
+        {
+          "path": "scripts/testcase_selector.py",
+          "executable": true,
+          "sha256": "bf396b0c3c0bb4467899417e46db74107ed856d964cbbfb805dc47a8c34c6451"
+        },
+        {
+          "path": "templates/regression-plan-template.md",
+          "executable": true,
+          "sha256": "b4ecb847ac78fbe6d1442b516753d69ac7ced58b10c0e48f0773317a2ac9ab31"
+        },
+        {
+          "path": "templates/regression-report-template.md",
+          "executable": true,
+          "sha256": "6aa1e19ef83e043e518a6e972fd8c8a8b99df6fd7538289854818e6daf793c33"
+        }
+      ]
+    },
+    "qa-system-test-design": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "35c8f440c7e584182d935f705731a8d17dcbf24d8bae13022997a352b0d53f31"
+        },
+        {
+          "path": "references/st-design-guide.md",
+          "executable": true,
+          "sha256": "a7c2d6887296f2553defa5cc2613a08ed25580fa3c71d91cc732d760bce8d602"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "61b2c2bf15bbb14bb93a87ec971de5b72f7fb8034eb35b2c93ada8223f983e4b"
+        },
+        {
+          "path": "scripts/req_coverage_check.py",
+          "executable": true,
+          "sha256": "305835877520783bdadadb33e960e51a864c610e25aa768e583368f8d837db4e"
+        },
+        {
+          "path": "scripts/testcase_dedup.py",
+          "executable": true,
+          "sha256": "aa3848909341ea97bc094dfe36ce887362fbce3f36c1a466c3d5eb26271f860c"
+        },
+        {
+          "path": "templates/req-coverage-matrix.md",
+          "executable": true,
+          "sha256": "0f38c583f65c456fac9a5fe7b3dcf63958befcc760f4201a452a7f0d096013b6"
+        },
+        {
+          "path": "templates/st-testcase-template.md",
+          "executable": true,
+          "sha256": "f2ff728cacfa4cc645977e7ceb5a3a76fa1861b3c3dc81b94aaff9b92db24b32"
+        }
+      ]
+    },
+    "qa-test-case-design": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "2c6899967c3745741edc87df4e069b67d0056d027091e6327033cbc06a86d893"
+        },
+        {
+          "path": "references/design-techniques.md",
+          "executable": true,
+          "sha256": "b384685619c128cfa27d4f213647d64264192471462f1f20d6370bff8c61c985"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "9bb66c634047aeedc2b9336bf65823807dbebd93563476bdd65239ceedaa5da4"
+        },
+        {
+          "path": "scripts/rtm_check.py",
+          "executable": true,
+          "sha256": "1a1206c5667a316deeca12f6da17bb715bec942f4994bbfe63ce9c00da897583"
+        },
+        {
+          "path": "templates/regression-scope-template.md",
+          "executable": true,
+          "sha256": "eef86859c14320f7a55b33867370a87e07114476edc2d4353ad70c330e88a699"
+        },
+        {
+          "path": "templates/test-case-template.md",
+          "executable": true,
+          "sha256": "072363ad5c43e68ba8e8d81e7f1234afd91510f28c7628d97e507c9ed9804368"
+        }
+      ]
+    },
+    "qa-test-execution": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "87b5dfd3a759204a58268e067ebf3c96aee9319b2e8bd7769de459aa7745a464"
+        },
+        {
+          "path": "references/execution-status.md",
+          "executable": true,
+          "sha256": "eba317e987cb028c171ac9fafc0b452f009efc181e030bdd081a6eaa837bcd94"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "f70cf7cd5c909a72e501ab102e19755274899c41858472f41836d18915a682c3"
+        },
+        {
+          "path": "scripts/test_progress_tracker.py",
+          "executable": true,
+          "sha256": "5fc6b39a189976e3c771b1ad4dfbb65cd00739d3a5fb1aebeaab654b5388a062"
+        },
+        {
+          "path": "templates/test-daily-report.md",
+          "executable": true,
+          "sha256": "c084dee104a76393fed7a735a711e5bd8a20094e5baf4c285dcdc006d4ad160b"
+        },
+        {
+          "path": "templates/test-execution-plan.md",
+          "executable": true,
+          "sha256": "f7faff8d98ddd83954126e1c70ea58f50cb5da83f37bb0f6e4c4c517ec06497b"
+        }
+      ]
+    },
+    "qa-test-strategy": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "206134cd355fb10341b512f4fcd3259821b13e542b442c7d0cb282872d568315"
+        },
+        {
+          "path": "references/test-baseline.md",
+          "executable": true,
+          "sha256": "40262d13bcd4567b3d6c991ce3316d4cd63f6dca451d7b93e3d4805e4e7de03b"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "6f3b59a489ca46c655829145cb85725364071276d84b543569b7d6318e39465b"
+        },
+        {
+          "path": "templates/exit-criteria-template.md",
+          "executable": true,
+          "sha256": "8b662558e53474a45c5f2fbe83abf9b426ef19472f162f8718a0ee8cb9b45a95"
+        },
+        {
+          "path": "templates/test-strategy-template.md",
+          "executable": true,
+          "sha256": "2b4e9b2190c0d375e40b0d8b39f073e7d640624bad90f710d7e24b77ae38d92a"
+        }
+      ]
+    },
+    "qa-uat-support": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "dd9f686f55a899ad670eddd69e72a6ce4d35605974b9caf4659d7e8b301eafee"
+        },
+        {
+          "path": "references/uat-guide.md",
+          "executable": true,
+          "sha256": "80d169ffca6db5b3106c84f3233b3509af97fd87eb4a315cb40b318cdd9ffe2a"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "1e026663229b3bfa77164bee4c74ac14f0d094b4ddca11146654c883cef24a2e"
+        },
+        {
+          "path": "scripts/uat_defect_classifier.py",
+          "executable": true,
+          "sha256": "8d1e8ed661fa010b55c9f181e22835d7cc8a131f235df04a1f0fc05c40817005"
+        },
+        {
+          "path": "scripts/uat_progress_tracker.py",
+          "executable": true,
+          "sha256": "171f227a1bc1ada92551975ca2716a7f3d049f69a7cfc487422ff67002839f3d"
+        },
+        {
+          "path": "templates/uat-plan-template.md",
+          "executable": true,
+          "sha256": "2209a4f806e018b7a1c732453cb579b51b225e2e191b636b2ddb36ea69129e57"
+        },
+        {
+          "path": "templates/uat-report-template.md",
+          "executable": true,
+          "sha256": "3a7a446324e36ba7204352ee513e9111c6cf907be0da7c66ba3047a3eeba18a7"
+        }
+      ]
+    },
+    "qa-unit-test-strategy": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "39f664d01c2d38c2052ea7cbed93203b1ab9bbbb6c70abdbaae2b00a2e69b1d8"
+        },
+        {
+          "path": "references/ut-review-guide.md",
+          "executable": true,
+          "sha256": "de7c98c7dff62a41cb3df93d14c397e28c9dee411f4697bf6c4d2d047bef1f89"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "310ccd7b43818cf23a4d4464e0d1cbb00e895a98b6728d16afee8f85c5ac589b"
+        },
+        {
+          "path": "scripts/coverage_review.py",
+          "executable": true,
+          "sha256": "d8bbd755da87b945dda581f98b84956a3bd15bad0760132cd6e3db7acefa2b35"
+        },
+        {
+          "path": "scripts/ut_quality_score.py",
+          "executable": true,
+          "sha256": "de9f7534d6520dba6ca259b76dc26dc73a82dd6ad29d5b61076c93b91b6147e3"
+        },
+        {
+          "path": "templates/ut-review-checklist.md",
+          "executable": true,
+          "sha256": "c210562fa2f825c03a5f905223d4e3102945054d502583bc8ea9157151f5db8b"
+        },
+        {
+          "path": "templates/ut-strategy-template.md",
+          "executable": true,
+          "sha256": "92772577008b6ddfa06333fbd5a1a3989ec24dba3c09c5abbd3f7dbe34a74eee"
+        }
+      ]
+    },
+    "release-deployment-runbook": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "3799d303b77d65a9a2666f860eeb2daf961d0f127c8e86bbff9af783104c60fa"
+        },
+        {
+          "path": "references/runbook-standards.md",
+          "executable": true,
+          "sha256": "e7e66492e99d82e033f64a9ed4a2243b6c42666af0482113b8b546c79942755d"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "ce0b9c4ba69f219a318d9dcb2685a1f6079aa1f20471d31e72c2467828cd4c22"
+        },
+        {
+          "path": "scripts/runbook_validator.py",
+          "executable": true,
+          "sha256": "80f9896499e6d0a9826beaf6dc43278f711706f4ad376314e26094a422f45c3a"
+        },
+        {
+          "path": "templates/deployment-runbook-template.md",
+          "executable": true,
+          "sha256": "d90db0d08c6a50ac4fe3b111ebc41706433a66b5ba6ccb7a5702d7a3a0f83f51"
+        },
+        {
+          "path": "templates/pre-flight-checklist.md",
+          "executable": true,
+          "sha256": "475889e8acb4eb8ca5ef0efd3d855f73c907b83b422a3d25c1cd817ddfa93f6a"
+        }
+      ]
+    },
+    "release-environment-mgmt": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "103ff7e5db2a549862106e68662f894f2fa832e85b7ab2c731996b66498e1c57"
+        },
+        {
+          "path": "references/env-policy.md",
+          "executable": true,
+          "sha256": "bbd772f168763ef4af55e9ae8e4b0249e3b6ded86bc50f29a88983d2eb7b6f84"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "f80ffdb6965d6dca95d01e573f621fae6ade72a9ea11a0c1d9630a8f8096645d"
+        },
+        {
+          "path": "scripts/env_diff.py",
+          "executable": true,
+          "sha256": "eaca20b3f6d56b33048c8b20dc2615721211ff949f67fb9ef89d8dc438ca26e2"
+        },
+        {
+          "path": "templates/config-diff-report.md",
+          "executable": true,
+          "sha256": "57a55da5b03116650d9d24276a5762be2786d4081b45569f66cd1b88cc5cd8fd"
+        },
+        {
+          "path": "templates/environment-inventory.md",
+          "executable": true,
+          "sha256": "700bb916078ebfc8b994c83845d41e615789eceab0dfc8589066e5f1bd38273b"
+        }
+      ]
+    },
+    "release-plan": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "e7241ed7c4a3fbe785dde9044c27b21fb56ce5f3e5930134eafe835ac6b43ae9"
+        },
+        {
+          "path": "references/gray-release-strategy.md",
+          "executable": true,
+          "sha256": "4b00c12aed3590b600d24b1ee450b584f8947353cdfce1a078b55d5232858082"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "6d5ff0fcccefd913e881209a01d6cf7ce88ff2044f9b0f634164685cbf9ff2d8"
+        },
+        {
+          "path": "scripts/build_verify.py",
+          "executable": true,
+          "sha256": "8b495b9d05d8b246fef3ac68a84e34d279df50d418d956b652ab9bd24c684637"
+        },
+        {
+          "path": "templates/go-live-checklist.md",
+          "executable": true,
+          "sha256": "55601ca9f556e590418b8ae8af3e48e67ba8f16a79203c8777af4240e55048f7"
+        },
+        {
+          "path": "templates/release-plan-template.md",
+          "executable": true,
+          "sha256": "8d233660840c9f963fbba00148815b3ece55932767ef6efee307e1a591c32ce9"
+        }
+      ]
+    },
+    "rollback-runbook": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "cad35ec86c4fc5b686db389056ae270cbdd399dbb14069b25d87973323437d21"
+        },
+        {
+          "path": "references/rollback-patterns.md",
+          "executable": true,
+          "sha256": "d6939e5b34249e20ce2b176987d3dd4062831ff1daad60744eb68b49d58db909"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "eb216e68a3dd14c370b69dc10ff8da0e528cb3e2918215d86cce0db4d5a1ce38"
+        },
+        {
+          "path": "scripts/rollback_check.py",
+          "executable": true,
+          "sha256": "2eabd73e6e5718d3301c92b1bacba235f5d537e524bebb7b0c48e8a791fc47d2"
+        },
+        {
+          "path": "templates/rollback-template.md",
+          "executable": true,
+          "sha256": "0944546f0d55cfb97df33e342f9164b284a409371ef20468ef38a06e4bab878c"
+        }
+      ]
+    },
+    "sdlc-context-bus": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "18220e712483489e843dad03c918e6a57e6056d128096aed951e120a0f991d07"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "fd3e950334536fac50959fe12d9d48fe0614ef17a0249a8af4cbd9d94b139654"
+        },
+        {
+          "path": "scripts/callback_manager.py",
+          "executable": true,
+          "sha256": "fc4b971b6be166f66a1b46008705ce4c1a88ca5e241e735fb9ab7b10fccd280a"
+        },
+        {
+          "path": "scripts/context_bus.py",
+          "executable": true,
+          "sha256": "24fa99eab14a9586f6d5a57e70ccf2c3c7af5d2a60348a65f670028e68c0874d"
+        },
+        {
+          "path": "scripts/parallel_scheduler.py",
+          "executable": true,
+          "sha256": "fde2d87a52fa49f25ada421c7c67dbff7603e287981f3ef73e672765042c023f"
+        },
+        {
+          "path": "templates/context-bus-template.json",
+          "executable": true,
+          "sha256": "9b9d5e430211d9a583574635a17b703e1c6415b6413a7da977151b5eb0d35ac0"
+        }
+      ]
+    },
+    "sdlc-metrics": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "f607e9edf1d922196bcb681d1efded81f221f5ca5b3f42b974d49cdf7a30c586"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "222a6b35245388d0a60db53eaa9ea4f258cc92f253fceb0558da3acce3d681f2"
+        },
+        {
+          "path": "scripts/collect_metrics.py",
+          "executable": true,
+          "sha256": "591cf5d7c0a75482e720584a7733f9fb4ea49f45c7201a0bfcf3f57698d561c0"
+        },
+        {
+          "path": "scripts/generate_dashboard.py",
+          "executable": true,
+          "sha256": "62f66ebedaf7396a121bee2777d271b9f7a30a63d426293ccb0cb34a0b42e579"
+        },
+        {
+          "path": "scripts/validate_metrics.py",
+          "executable": true,
+          "sha256": "b85bfafc8c01e0dd0df96fb58e7fef4d861be15c24c0a5946ee6e7e234d903f3"
+        },
+        {
+          "path": "templates/metrics-report-template.json",
+          "executable": true,
+          "sha256": "796b168a86e5b2f2f440b8377c1f42e8a404ee5051d7655a982bbfe10d728afb"
+        }
+      ]
+    },
+    "sdlc-ux-enhancer": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "ac6375bd855ca72bc9c33c2c1995e27db0f8e74e1e051d76a2a2ab10df88b8ae"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "d3a7e8051827b0c74259c73d68f31a483dbe526afe1a1cb688c478f9cc80644c"
+        },
+        {
+          "path": "scripts/agent_recommender.py",
+          "executable": true,
+          "sha256": "501286a180f41e1c25b196b4949ce59223af1303115b2b571cec92714f3c26c3"
+        },
+        {
+          "path": "scripts/bypass_manager.py",
+          "executable": true,
+          "sha256": "6acb3e0a8ce6859ba66d5f3ea48958412282cd0cb6f1ff388f0a6133cdf28992"
+        },
+        {
+          "path": "scripts/generate_board.py",
+          "executable": true,
+          "sha256": "657456621477fbd0fd524176466968022564151ab1952400ee7a87b326475eb9"
+        },
+        {
+          "path": "scripts/notify_sender.py",
+          "executable": true,
+          "sha256": "7a339c40ec20ad2cbc19e2a5889fcbb09545036a285e7819056889fed37f25be"
+        },
+        {
+          "path": "templates/bypass-record-template.json",
+          "executable": true,
+          "sha256": "a1ee7ca72f53ad2f124bc2ea872706edbab05cb24fbef6e80ed7d078efb708f3"
+        }
+      ]
+    },
+    "sec-scan-review": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "73943dc70bb95fb3545f145aa54c2037ce13dc792645e0c78e277c7c480f54ae"
+        },
+        {
+          "path": "references/cvss-levels.md",
+          "executable": true,
+          "sha256": "5626f0aba11e6d07bf8bb6e98682f7a286180266402da799de35eb29007dbd22"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "f6a1d7363048585d326f43b98faa0df920c3938905722e774925035d9b952f63"
+        },
+        {
+          "path": "scripts/triage_vulns.py",
+          "executable": true,
+          "sha256": "6faa289db6a025ce12845bdc71b1232c68c25a05ff052cf89d153e64321de275"
+        },
+        {
+          "path": "templates/vuln-review-template.md",
+          "executable": true,
+          "sha256": "62361bcbf51bee920a1402d9904abe17007f129d30bd1010326259668158b06b"
+        },
+        {
+          "path": "templates/waiver-template.md",
+          "executable": true,
+          "sha256": "5bb6e973d20b2916187105273e494b4e2f422d31146eca06ff189d10f403de29"
+        }
+      ]
+    },
+    "sec-secure-coding-guide": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "38abd349162565d5613cad8e6cc84c5a83c7e01283416e3898bb634910c277e6"
+        },
+        {
+          "path": "references/owasp-bank-map.md",
+          "executable": true,
+          "sha256": "e690745947dd41eefd9844b85402eeca15782a9b07a5fbe6b89d52a9f39109d1"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "9e89f2e1b3fea3b86a3cd07ec47934cfd11fc6e3041173d21813aa0070a6d733"
+        },
+        {
+          "path": "scripts/secure_code_scan.py",
+          "executable": true,
+          "sha256": "416964c9a9a940f1eb1ec1cf02e4c3109ab636a3f405305120afb4fca9164479"
+        },
+        {
+          "path": "templates/secure-coding-checklist.md",
+          "executable": true,
+          "sha256": "fcc5dadac14215474d8379b5bfcb2f80e96396573f0bfa366e1ba7b457f9dcb3"
+        }
+      ]
+    },
+    "sec-threat-model": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "0905709f215bad35273240fd61966a47ebf0caa738c97137038d6b782102e751"
+        },
+        {
+          "path": "references/stride-guide.md",
+          "executable": true,
+          "sha256": "2e7999f8a8d8bb5c3007cdfdadd68c4a89e4ba1c1debbd258a870f7aba19e0a7"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "f5069c0ad0a5477d00f6f9928512062cd3cfafd7c577a728d617810813a6dd4d"
+        },
+        {
+          "path": "templates/stride-checklist.md",
+          "executable": true,
+          "sha256": "2b6c7d0c4b13f83c1f3bce58344f7f12983b7c76bb46b3d7d4e6a15f139b5f2f"
+        },
+        {
+          "path": "templates/threat-model-template.md",
+          "executable": true,
+          "sha256": "263de81533121a472270f673e301c4f6a303d0ca60d62ab6b413ddcca2bd6844"
+        }
+      ]
+    },
+    "sec-vulnerability-mgmt": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "500c54184ec32c1125eb66d1e55637e511672da24d343d70e51793d3494ab9a7"
+        },
+        {
+          "path": "references/sla-policy.md",
+          "executable": true,
+          "sha256": "1c8c7d5250fe46811c3a41cd27678c9bd62074094ed1a67ff1b18d1c2f8fb6d6"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "bcd0754bade8913f86f4e2ad87ab1f4e34106b86dec57af0eb79f031c41ceb27"
+        },
+        {
+          "path": "scripts/vuln_triage.py",
+          "executable": true,
+          "sha256": "32cf02274aab126ac0c4481b20935c30c01d428b8bf52668b204b12e37d64086"
+        },
+        {
+          "path": "templates/vuln-tracking-dashboard.md",
+          "executable": true,
+          "sha256": "25a24dac150fe8eb54d8da91cda5523a4d855f6333bf9c516a4db40a7f924951"
+        },
+        {
+          "path": "templates/vulnerability-report.md",
+          "executable": true,
+          "sha256": "6c89dcb39d8b69313896448e5bb0c3db2083b8071715704fcf61c1226fe2a3ae"
+        }
+      ]
+    },
+    "sod-compliance-check": {
+      "files": [
+        {
+          "path": "SKILL.md",
+          "executable": true,
+          "sha256": "4200f08ab9b2107b601aa57f542e1c651db91345068ea0ad2cf96073b61827a1"
+        },
+        {
+          "path": "references/sod-matrix.md",
+          "executable": true,
+          "sha256": "8bcd991a7abc5567ed8e97ce25e3dd5b5265c5ad89c69561745a700e20b2accf"
+        },
+        {
+          "path": "references/sod-policy.md",
+          "executable": true,
+          "sha256": "a19a1fbeca9fbe4bf9e3ada5ba450960fcad35904dabb70e60f56f26a36a6737"
+        },
+        {
+          "path": "scripts/README.md",
+          "executable": true,
+          "sha256": "99f5e262176b7f2dba5d7e0e2de282926697993dc103f5d401675c61862811fd"
+        },
+        {
+          "path": "scripts/sod_check.py",
+          "executable": true,
+          "sha256": "631412868c1b099332746647b1b8e9238f7e43ba9539918f1a955b0cae739423"
+        },
+        {
+          "path": "templates/sod-compliance-report.md",
+          "executable": true,
+          "sha256": "f4a11a79f096324db73339b1cd2c572c90a0ae0da121a6f54c765ac04bdfac29"
+        }
+      ]
+    }
+  }
+}

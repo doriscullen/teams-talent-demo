@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "req-2026-004-v1",
+  "businessId": "REQ-2026-004",
+  "projectId": "carddemo",
+  "artifactId": "a-req-2026-004",
+  "version": 1,
+  "exactTitle": "交易争议在线申请与处理",
+  "sourceSha256": "341b329ed87b60ccc4a241423a5f76c0243e45f5e9737269e095a72b5cec1484",
+  "origin": "scenario-fixture",
+  "sourceRequirement": {
+    "archive": "requirements.zip",
+    "file": "REQ-2026-004-dispute.md",
+    "sha256": "341b329ed87b60ccc4a241423a5f76c0243e45f5e9737269e095a72b5cec1484",
+    "version": "v1.0",
+    "immutable": true
+  },
+  "testProfile": {
+    "version": "test-profile-v1",
+    "path": "four-requirements/REQ-2026-004/test-profile.md",
+    "sha256": "6a399929a5b2ae127a9af1b6bfc4492ba0f0924b45634745354f05f9f05db295",
+    "authority": "用户2026-10-28要求需求包端到端验证；测试实现口径由当前协调会话依据规则优先次序整理"
+  },
+  "sourceFiles": [
+    {
+      "path": "workspace/carddemo-java-1025/pom.xml",
+      "commit": "5eeddd63184eb17876bd09d89ea45082644b56db",
+      "sha256": "5e0cdae5e8c70df14ef4b1680eccccf961b36d349700cd257e29b0c784b3a37d"
+    },
+    {
+      "path": "workspace/carddemo-java-1025/docs/design/adr/ADR-007-authentication-scope.md",
+      "commit": "5eeddd63184eb17876bd09d89ea45082644b56db",
+      "sha256": "d779937a5d0f38ade8128f433a227501fed67eaa7dabf4933226157868a72586"
+    }
+  ],
+  "knowledgeFiles": [
+    {
+      "path": "four-requirements/REQ-2026-004/原始需求.md",
+      "sha256": "341b329ed87b60ccc4a241423a5f76c0243e45f5e9737269e095a72b5cec1484"
+    },
+    {
+      "path": "four-requirements/REQ-2026-004/业务规则与范围.md",
+      "sha256": "993cbb121f7d220b9ad9bebabfa568fea7f234f8183ed6a6f48dd6ac697c4d3c"
+    },
+    {
+      "path": "four-requirements/REQ-2026-004/待确认与差异.md",
+      "sha256": "08c18172cf26a0ed95689ab87848c89eabe37f6145c0f402fda4e74b926a35fe"
+    },
+    {
+      "path": "four-requirements/REQ-2026-004/基线与实现约束.md",
+      "sha256": "2b308f57f234bd5fb2c40c7cf0940c988ae1b4b1c655f99bd2f7b804d41cc261"
+    },
+    {
+      "path": "four-requirements/REQ-2026-004/测试定义与验收.md",
+      "sha256": "0a6ebdba59c9b31b6dc45d9165742d9c749d6957ecadcb3513974e26ce97f444"
+    },
+    {
+      "path": "four-requirements/REQ-2026-004/test-profile.md",
+      "sha256": "6a399929a5b2ae127a9af1b6bfc4492ba0f0924b45634745354f05f9f05db295"
+    }
+  ],
+  "skillPackages": [
+    {
+      "id": "ba-requirement-analysis",
+      "version": "1.0.0",
+      "sha256": "75075279f6d8cb8205f14469f04f574c7d58f4acaef31e9fecafbf76e96be17d",
+      "contentSha256": "015dacbfe6421cff210cbf8093f2ea55bb802a97de611ebc271379f117240571"
+    },
+    {
+      "id": "ba-acceptance-criteria",
+      "version": "1.0.0",
+      "sha256": "8082087ea53200296623adc96d8aa013d4672c8e8975e6df12d3e1bfd1d1cf03",
+      "contentSha256": "f70a1e6209873d4181a0a7af81a729fd6155012a468dd59ab4dd508b7dd3c6cd"
+    },
+    {
+      "id": "bank-domain-payments",
+      "version": "2.0.0",
+      "sha256": "78284b202a88c14cb8da11a6e825f373f7d9f84bc730f719c486dd70e9995727",
+      "contentSha256": "c20c598707aea7b56c795f23662f5cdf47cb01d88ec01545c344a886a7c579ef"
+    },
+    {
+      "id": "arch-solution-design",
+      "version": "1.0.0",
+      "sha256": "4e8a7343030a1132ea0a26e6ed2ba39806b8407b6a8c39fc4c94892fea10f013",
+      "contentSha256": "98c9e2e25e435eaf8968713f206fc65b4dc53a9c669b4189f3b6864706c03c25"
+    },
+    {
+      "id": "dev-backend-service",
+      "version": "1.0.0",
+      "sha256": "5c47417d64147d17cc69688a5980fdbdfcad74d2ea179c2a39d1ccb8d8d5a246",
+      "contentSha256": "3bb2a87b0a70257ca24e72959f04f62b93df22d9f7433f4ec570581ad0df3d9c"
+    },
+    {
+      "id": "dev-api-integration",
+      "version": "1.0.0",
+      "sha256": "7db7433a219a6fa3a6026e6b0e2d2d0575a23b01645b6c0942eaf088c9de1886",
+      "contentSha256": "a9bbc4328364a8541afc27a6c03bb049ac5b56771fc63dfad2f6eb020149186f"
+    },
+    {
+      "id": "dev-frontend-ui",
+      "version": "1.0.0",
+      "sha256": "568bbbee2a03150a76bb74b65b0fa7da57f3c8b007c3075d6d87bf15380b20c4",
+      "contentSha256": "320ce4d6edf32bfccf52c34270c02ff892e38e11540914f76b309d881c4ef419"
+    },
+    {
+      "id": "dev-unit-test",
+      "version": "1.0.0",
+      "sha256": "89aeecba3f6b77e7d35b16ae94c2b040263ec523dd4dbbc59b91ab5fbcf1ad24",
+      "contentSha256": "bd39c84706b597982c679d40744bd3bf08794bfc0993d29bb52198b7075273ea"
+    },
+    {
+      "id": "dev-bank-coding-standards",
+      "version": "1.0.0",
+      "sha256": "c1ecbfdf2f42f04aebd84dcde93ff05b0fb618a40df61d4434f355afbcf2fbf4",
+      "contentSha256": "545c8066f1fd98cc9d3cfdc4b5ad2edba8831c70b2305c0a0f85766485f865c3"
+    },
+    {
+      "id": "dev-code-reviewer",
+      "version": "1.0.0",
+      "sha256": "4a7be9b99629d224a6853d9af0aaa177908f2ddc47de2c08fd3c867772c28890",
+      "contentSha256": "146c22f9465777f6737633ae388833174d2967d37a56b60a414d771769a987ad"
+    },
+    {
+      "id": "qa-integration-test",
+      "version": "1.0.0",
+      "sha256": "b37aada52a3a905c23d286d1ebab28160c810bf00e72ce7a281fc682e223402c",
+      "contentSha256": "4e8a6017d3af0a15935f65921d71610b9de3aecec8862745eea42ea33d311386"
+    },
+    {
+      "id": "sec-scan-review",
+      "version": "1.0.0",
+      "sha256": "0e10a54c173cb115cafc11ef858a4deb49a5fa804fc65e7c3c699514bca48b36",
+      "contentSha256": "73943dc70bb95fb3545f145aa54c2037ce13dc792645e0c78e277c7c480f54ae"
+    },
+    {
+      "id": "qa-uat-support",
+      "version": "1.0.0",
+      "sha256": "19852f9b24a9068a83216561c8c4e0102bf6bebd709018e46a8396f0eaf52978",
+      "contentSha256": "dd9f686f55a899ad670eddd69e72a6ce4d35605974b9caf4659d7e8b301eafee"
+    }
+  ]
+}

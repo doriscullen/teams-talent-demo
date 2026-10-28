@@ -4,9 +4,11 @@
 // document source, and Talents' own metadata about Teams sources (document versions, commits, PRs).
 import { minerFiles } from './content.ts';
 import { platinumCashbackPageArtifact } from './platinum-cashback-page.ts';
+import { fourRequirementArtifacts } from './four-requirements.ts';
 import type { TalentsState } from './model.ts';
 
-/** Bump when the seed changes shape or content; a stored state from another seed version is replaced. */
+/** Bump only for an explicit incompatible seed migration: another version replaces stored state.
+ * Additive demo sources belong to fresh initialization/reset and must not reset existing user data. */
 export const SEED_VERSION = 8;
 
 export const PROJECT_ID = 'carddemo';
@@ -103,6 +105,8 @@ export function seedState(): TalentsState {
     // basis: the source state the artifact was built from (a document version, or a commit for code).
     artifacts: [
       platinumCashbackPageArtifact(),
+      ...fourRequirementArtifacts(1),
+      ...fourRequirementArtifacts(2),
       { id: 'a-cg-java', cap: 'codegraph', name: 'carddemo-java-1025 CodeGraph', desc: '查询 carddemo-java-1025 中类、方法的定义与调用关系。', sources: [REPO_ID], kind: 'index',
         stats: [['文件', '1,284'], ['节点', '41,206'], ['关系', '152,883']], mcpName: 'codegraph',
         published: { version: 3, at: '2026-10-26 02:05', note: '同步代码变化：3 个新提交', delivery: 'cloud', project: PROJECT_ID, basis: { commit: '4e1b7c2' }, auto: true }, draft: null },

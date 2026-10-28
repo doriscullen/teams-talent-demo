@@ -1,4 +1,4 @@
-export interface TaskKnowledgeAsset { id: string; title: string; version: string; detail: string; origin: 'teams-task' | 'talents-shared' | 'teams-node-preset' | 'plugin-mock'; artifactId?:string; contentSha256?:string; sourceRecordId?:string; sourceProjectId?:string; sourceProjectName?:string; pluginId?:string; kind?:string; summary?:string; references?:Array<{collection:string;path:string;label:string}>; relatedRequirementIds?:string[] }
+export interface TaskKnowledgeAsset { id: string; title: string; version: string; detail: string; origin: 'teams-task' | 'talents-shared' | 'teams-node-preset' | 'plugin-mock'; artifactId?:string; contentSha256?:string; sourceRecordId?:string; sourceProjectId?:string; sourceProjectName?:string; pluginId?:string; kind?:string; summary?:string; references?:Array<{collection:string;path:string;label:string;absolutePath?:string;sha256?:string;version?:string}>; relatedRequirementIds?:string[] }
 export interface TalentTaskInputs {
   projectId: string; taskId: string; generation: string; origin: string;
   requirement: { id: string; title: string; description: string };

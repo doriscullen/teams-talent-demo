@@ -3,7 +3,7 @@ import { DomainError } from '../src/domain.js';
 import type { RequirementNode } from '../src/delivery-requirements.js';
 import type { PublishedArtifact } from '../../shared/contracts.js';
 import { platinumCashbackPage, platinumCashbackPageNodes } from '../../shared/platinum-cashback-page.js';
-export type PublishedInputReader=(artifactId:string,version:number,path:string)=>Promise<{content:string}>;
+export type PublishedInputReader=(artifactId:string,version:number,path:string)=>Promise<{content:string;absolutePath?:string}>;
 /** Full texts come only from the exact published artifact/version; no embedded document fallback. */
 export async function platinumPageKnowledge(published:PublishedArtifact[],node:RequirementNode,read?:PublishedInputReader){
  const artifact=published.find(item=>item.id===platinumCashbackPage.artifactId&&item.projectId===platinumCashbackPage.projectId);

@@ -11,7 +11,12 @@ test('exports only published artifacts, at their published version', () => {
   const state = seedState();
   state.artifacts.push({ id: 'a-draft', cap: 'traj', name: '草稿', desc: '', sources: ['s-sessions'], kind: 'files', files: ['trajectory/platinum/改进建议.md'], published: null, draft: { created: '2026-10-27 09:00', revisions: [] } });
   const { knowledge } = buildExport(state);
-  assert.deepEqual(knowledge.artifacts.map(a => [a.id, a.version]), [['a-platinum-cashback-page', 1], ['a-cg-java', 3], ['a-docidx', 2], ['a-biz', 1], ['a-std', 1], ['a-miner', 2]]);
+  assert.deepEqual(knowledge.artifacts.map(a => [a.id, a.version]), [
+    ['a-platinum-cashback-page', 1],
+    ['a-req-2026-001', 1], ['a-req-2026-002', 1], ['a-req-2026-003', 1], ['a-req-2026-004', 1],
+    ['a-req-2026-001-v2', 2], ['a-req-2026-002-v2', 2], ['a-req-2026-003-v2', 2], ['a-req-2026-004-v2', 2],
+    ['a-cg-java', 3], ['a-docidx', 2], ['a-biz', 1], ['a-std', 1], ['a-miner', 2],
+  ]);
   assert.ok(knowledge.artifacts.every(a => a.projectId === 'carddemo'));
   const biz = knowledge.artifacts.find(a => a.id === 'a-biz')!;
   assert.equal(biz.capabilityName, '业务知识提取');

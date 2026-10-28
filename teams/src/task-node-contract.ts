@@ -147,6 +147,6 @@ export function applyTalentNodeInputs(inputs:TaskNodeItem[],value?:TalentNodeInp
 }
 
 /** Enterprise test definitions are independent of Talent knowledge and are never execution results. */
-export function enterpriseTestCaseReferences(data:Presentation,task:{projectId:string;id:string;title:string}):TaskNodeReference[]{
+export function enterpriseTestCaseReferences(data:Presentation,task:{projectId:string;id:string;title:string;description?:string}):TaskNodeReference[]{
  return taskTestCases(data,task).map(item=>({id:item.id,title:item.sourceRecordId+' · '+item.title,kind:'record',description:item.detail,version:item.version??null,source:'preset',sourceLabel:'企业测试资产插件 · 用例定义（未执行）',testCase:{id:item.sourceRecordId,expected:item.testCase!.expected,pluginId:'test-assets'},value:JSON.stringify({pluginId:item.pluginId,caseId:item.sourceRecordId,version:item.version,expected:item.testCase!.expected,sourceProjectId:item.sourceProjectId,taskId:task.id})}));
 }
