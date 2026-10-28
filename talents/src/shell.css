@@ -26,3 +26,5 @@
 /* Match the Teams navigation size, preserving the upstream compact mobile sidebar. */
 .framework-root .framework-sidebar{--ui-font-size-navigation:14px;--ui-font-size-eyebrow:13px;--ui-shell-nav-row:38px}
 .framework-root .framework-sidebar nav .nav-group{line-height:1.5}
+/* Same as the Teams shell (teams/src/shell-navigation.css): the account name stays on one line. */
+.framework-sidebar .sidebar-profile-row .nav-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

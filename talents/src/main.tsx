@@ -26,7 +26,7 @@ const content: Record<string, () => ReactNode> = {
 
 function Shell({ mode, onToggleTheme }: { mode: UiThemeMode; onToggleTheme(): void }) {
   const { state: st, teams, route, role, go, reset, toast, teamsLink } = useTalents();
-  const [width, setWidth] = useState(220);
+  const [width, setWidth] = useState(200); // the Teams sidebar default
   useEffect(() => { if (teams.from === 'none') toast('还没有读取到 iCode Teams 的数据，请先启动 Teams'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const person = (r: Role) => member(st, r === 'admin' ? st.team.admin : st.team.me)?.name ?? '未读取到 Teams 成员';
   const page = route.page, Page = content[page.id];
