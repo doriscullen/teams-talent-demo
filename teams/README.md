@@ -22,6 +22,8 @@ React/antd 前端加 Node 服务。Teams 持有交付状态，并把成员、项
 
 见 [快速启动](docs/quick-start.md)、[页面地图](docs/page-map.md) 和 [设计说明](docs/demo-design.md)。
 
+实际 CardDemo 开发先按 [初始化与交付检查](docs/carddemo-development.md) 核对 JDK 21/Maven 和 iCode，建立 `develop` 基线与任务 worktree。指南包含 CLI/TUI 入口、真实测试工具及报告要求；平台 `main`、业务任务目录和原有运行会话各自保留，未提交旧代码不会自动带入新需求。
+
 Credit Card 项目（内部标识 `carddemo`）的 MKT-001 与新增交付需求共用同一四节点记录和 CLI 状态机制。节点下按输入、结果、执行过程展示，结果包含交付物与完成标准；上游产物引用和代码版本由页面及 CLI 共用，任务资料常驻；旧开发/检查演练按钮已停用。Teams CLI/Skill 保留项目、任务、节点和 run/session 关联；回传成果不代替 Owner 验收。详细契约见 [协作 Skill](skills/teams-demo-collaboration/SKILL.md)。
 
 Teams 按项目、任务和节点筛选 Talents 已发布知识与登记 Skill，页面与 CLI 读取同一结果；Skill 正文、版本和散列来自真实登记包。筛选目前使用场景预置，不调用模型。未配置范围显示空项，已采用节点保留固定版本，旧任务只提取相关历史输入，不补写采用记录。项目内任务分为“我的任务”和“其他任务”，双方均可浏览；仅交付人可启动 iCode、采用输入和回传进度，Owner 可承担自己的任务并保留人工验收权限。

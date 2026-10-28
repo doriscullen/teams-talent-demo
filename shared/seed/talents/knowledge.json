@@ -44,6 +44,414 @@
       ]
     },
     {
+      "id": "a-req-2026-001",
+      "projectId": "carddemo",
+      "name": "REQ-2026-001 · 信用卡账单/消费分期节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 1,
+      "publishedAt": "2026-10-28 01:33",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-001/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-002",
+      "projectId": "carddemo",
+      "name": "REQ-2026-002 · 信用卡挂失与补卡节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 1,
+      "publishedAt": "2026-10-28 01:33",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-002/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-003",
+      "projectId": "carddemo",
+      "name": "REQ-2026-003 · 信用卡额度调整申请与审批节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 1,
+      "publishedAt": "2026-10-28 01:33",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-003/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-004",
+      "projectId": "carddemo",
+      "name": "REQ-2026-004 · 交易争议在线申请与处理节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 1,
+      "publishedAt": "2026-10-28 01:33",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-004/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-001-v2",
+      "projectId": "carddemo",
+      "name": "REQ-2026-001 · 信用卡账单/消费分期节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 2,
+      "publishedAt": "2026-10-28 02:14",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-001/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/v2/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/v2/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/v2/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/v2/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/v2/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-001/v2/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-002-v2",
+      "projectId": "carddemo",
+      "name": "REQ-2026-002 · 信用卡挂失与补卡节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 2,
+      "publishedAt": "2026-10-28 02:14",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-002/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/v2/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/v2/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/v2/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/v2/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/v2/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-002/v2/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-003-v2",
+      "projectId": "carddemo",
+      "name": "REQ-2026-003 · 信用卡额度调整申请与审批节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 2,
+      "publishedAt": "2026-10-28 02:14",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-003/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/v2/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/v2/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/v2/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/v2/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/v2/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-003/v2/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
+      "id": "a-req-2026-004-v2",
+      "projectId": "carddemo",
+      "name": "REQ-2026-004 · 交易争议在线申请与处理节点资料",
+      "description": "完整原始需求、规则、差异清单、基线事实与待执行测试定义。",
+      "capability": "doc-extract",
+      "capabilityName": "业务知识提取",
+      "category": "doc",
+      "kind": "files",
+      "version": 2,
+      "publishedAt": "2026-10-28 02:14",
+      "note": "登记用户提供的需求与测试资料；原文模拟属性及待确认事项保留。",
+      "delivery": "local",
+      "files": [
+        {
+          "path": "four-requirements/REQ-2026-004/原始需求.md",
+          "title": "原始需求",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/v2/业务规则与范围.md",
+          "title": "业务规则与范围",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/v2/待确认与差异.md",
+          "title": "待确认与差异",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/v2/基线与实现约束.md",
+          "title": "基线与实现约束",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/v2/测试定义与验收.md",
+          "title": "测试定义与验收",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/v2/test-profile.md",
+          "title": "test-profile",
+          "type": "markdown"
+        },
+        {
+          "path": "four-requirements/REQ-2026-004/v2/provenance.json",
+          "title": "provenance.json",
+          "type": "json"
+        }
+      ]
+    },
+    {
       "id": "a-cg-java",
       "projectId": "carddemo",
       "name": "carddemo-java-1025 CodeGraph",

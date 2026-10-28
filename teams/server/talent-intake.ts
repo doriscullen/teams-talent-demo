@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { atomicJson } from './store.js';
 import { sharedDir, talentOrigin } from './config.js';
 import { projectKnowledge } from './shared-data.js';
+import { validateSessionDocumentCapacity } from './session-capacity.js';
 
 /** Resolve the recorded immutable package; never relabel current bytes as an old version. */
 export async function registeredTaskSkill(id:string,binding?:SkillBinding):Promise<TalentTaskInputs['skills'][number]>{
@@ -85,10 +86,10 @@ export function normalizeTaskSessions(value: unknown): TalentTaskSession[] {
 }
 function sessionDocuments(value: unknown, sessions: TalentTaskSession[]): NonNullable<TalentTaskSessionPayload['sessionDocuments']> {
   need(Array.isArray(value) && value.length <= sessions.length, '会话文档清单无效'); const ids = new Set<string>();
+  validateSessionDocumentCapacity(value);
   return value.map(item => {
     need(item && typeof item === 'object', '会话文档无效'); const sessionId = text(item.sessionId, '文档会话标识');
     need(sessions.some(session => session.sessionId === sessionId) && !ids.has(sessionId), '会话文档标识重复或不属于上报范围'); ids.add(sessionId);
-    need(typeof item.content === 'string' && Buffer.byteLength(item.content, 'utf8') > 0 && Buffer.byteLength(item.content, 'utf8') <= 8 * 1024 * 1024, '会话文档为空或超过 8 MiB');
     const sha256 = digest(item.sha256, '会话文档摘要'); need(createHash('sha256').update(item.content, 'utf8').digest('hex') === sha256, '会话文档内容与摘要不一致');
     let document: unknown; try { document = JSON.parse(item.content); } catch { throw new DomainError('会话文档不是合法 JSON', 400); }
     need(document && typeof document === 'object' && !Array.isArray(document), '会话文档必须是 JSON 对象');

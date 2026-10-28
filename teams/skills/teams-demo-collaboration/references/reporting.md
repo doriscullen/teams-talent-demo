@@ -4,7 +4,11 @@
 
 `progress add`：phase 为 started / progress / blocked；summary 写实际进展；阻塞时必须有 blocker；evidence 是引用数组，可为空。解除阻塞时回传 progress 并说明依据，不按计时高频刷状态。
 
+开始回执必须先于实际业务编辑和测试：读当前依据 → `inputs adopt` 成功 → 用返回的新 revision 写 `progress add` / started 成功 → 开始业务工作。CLI 的 scope/context/request/receipt 临时文件不属于业务产物，可先写；PRD、设计、源代码与测试不是临时请求文件。新 run/节点重新取当前身份和采用依据，不能用旧成功回执掩盖本轮未采用；失败或超时按幂等规则核对，不能在工作结束后补一条 started 伪造时序。
+
 `result submit`：summary、evidence（至少一条）、completedCriteria。artifact 与 completedCriteria ID 从当前 `context.nodeContract` 读取，不凭记忆套别的节点合同。
+
+`artifact` 只标本次实际交付物，同一提交中每种 artifact 仅一条（多个文件用一份交付清单引用）。原始需求、试验口径和其它输入依据可作为普通 evidence，但不填 artifact；例如原始需求不能再标为 `prd`，避免覆盖本次编写的 PRD。
 
 ```json
 {
@@ -48,3 +52,13 @@ notRunScopes: 尚未运行的必要范围名称数组
 验证结果同时提供 checks：每项 `{artifact,status,source,summary}`。artifact 与本次报告对应，status 为 passed / failed，source 为 actual / preset 且与对应 evidence 一致。可预置检查必须标明其范围，不称真实命令或远端扫描。失败可提交为未完成记录，但不能声明“本轮通过”标准；通过必须满足当前 nodeContract 的全部必需报告、标准及同一代码版本。Owner 退回/重新开发后需本轮新检查，不能重用旧通过结论。
 
 测试用例定义来自企业测试资产插件的节点输入，保留用例 ID、版本和预期；Talents 知识与质量 Skill 不替代用例或执行报告。数据收集不在这里手动触发，CLI 也不能替代 Owner 验收。
+
+## 提交与 PR 边界
+
+仅在开发者已明确开始 develop、当前需求实现完成且必要范围单测实际通过时执行。CLI 显式工作指令与 TUI 内开发者指令遵循同一节点门禁；初始化的只读轮结束不等于 PRD 已确认，也不授权跳过 prepare.confirmed。
+
+先核对启动材料中的工作树、当前任务分支、origin 和允许的 CardDemo 子目录。必须与本任务绑定一致；分支不能是 main、master 或 develop。复用本任务已有分支/PR，PR base 固定 develop。没有已核验任务绑定、真实 remote/权限不可用、工作区混合改动无法区分时，以 progress blocked 回报，不创建替代 PR 或假链接。
+
+查看 Git 工作区和暂存区差异，只暂存本需求允许路径/变更块；禁止 git add .，禁止收录暂存区原有无关改动、其他任务、Teams/Talents 工程、历史会话或全局配置。提交前复核完整 staged diff 和必要测试所对应的代码版本；如果无法安全隔离，停下说明阻塞，不替别人还原文件。
+
+推送本任务分支并创建或更新 PR，回传真实 PR URL、完整 commit SHA/codeVersion 和同版本测试证据。不得直接推 main/master/develop、合并 PR 或部署。PR 创建成功也不等于 Owner 验收通过。仅打开 TUI、初始化/prepare 阶段不自动提交；已有运行会话的旧指令不因 Teams 文件更新而自动改变。

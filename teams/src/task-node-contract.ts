@@ -99,16 +99,22 @@ export function taskNodeView(state:DemoState,task:DeliveryRequirement,node:Requi
  const inputs=definition.inputRequirements.map(item=>toItem(item,mapping[item.id]??[]));
  applyTalentNodeInputs(inputs,nodeInputs);
  if(acquisition&&acquisition.status!=='ready'&&!task.nodeInputSnapshots?.[node])inputs.splice(0,inputs.length,{id:'requirement',label:'原始需求',status:'ready',references:[requirement]});
- const own=latest.filter(item=>item.sourceNode===node);
+ // Earlier verification reports stay in history, but cannot satisfy a new round.
+ const superseded=new Set((taskAutomation(state,{projectId:task.projectId,taskId:task.id})?.nodeKnowledgeHistory??[]).filter(round=>round.nodeId===node).flatMap(round=>round.resultEventIds));
+ const currentResults=(state.workspace.collaboration?.events??[]).filter(event=>event.projectId===task.projectId&&event.taskId===task.id&&event.nodeId===node&&event.phase==='result'&&!superseded.has(event.id));
+ const currentReferenceIds=new Set(currentResults.flatMap(event=>event.evidence.map((_,index)=>'artifact:'+event.id+':'+index)));
+ const own=latest.filter(item=>item.sourceNode===node&&currentReferenceIds.has(item.id));
  if(node==='accept'&&(task.stage==='accepted'||task.stage==='returned'))own.push({...ref('owner-decision:'+task.projectId+':'+task.id+':'+(task.acceptedAt??task.nodes.accept.updatedAt),task.stage==='accepted'?'Owner 验收通过':'Owner 退回',task.nodes.accept.summary,task.acceptedAt??task.nodes.accept.updatedAt,'Owner 任务确认记录'),artifact:'owner-decision',source:'owner',sourceNode:'accept'});
  if(node==='accept'&&task.stage==='accepted'&&latest.length)own.push({...ref('delivery-manifest:'+task.projectId+':'+task.id+':'+task.acceptedAt,'已登记交付清单',latest.map(item=>item.id).join('\n'),task.acceptedAt??null,'同一任务产物引用清单'),artifact:'delivery-manifest',source:'owner',sourceNode:'accept'});
- const event=[...(state.workspace.collaboration?.events??[])].reverse().find(event=>event.projectId===task.projectId&&event.taskId===task.id&&event.nodeId===node&&event.phase==='result');
+ const event=currentResults.at(-1);
  return {definition,inputs,deliverables:definition.deliverableRequirements.filter(item=>!item.optional||own.some(value=>value.artifact===item.artifact)).map(item=>toItem(item,own.filter(value=>value.artifact===item.artifact))),criteria:definition.completionCriteria.map(item=>({...item,status:node==='accept'&&(task.stage==='accepted'||task.stage==='returned')||event?.completedCriteria?.includes(item.id)?'reported':task.nodes[node].status==='complete'?'unregistered':'pending',evidenceIds:own.map(item=>item.id)})),artifacts};
 }
 
 /** Validate declared evidence, not the content of a remote report or Git provider. */
 export function nodeResultErrors(state:DemoState,task:DeliveryRequirement,node:RequirementNode,evidence:CollaborationEvidence[],completedCriteria:readonly string[],checks:unknown):string[]{
  const definition=taskNodeDefinitions[node],errors:string[]=[];
+ const declared=new Set<string>();
+ for(const item of evidence){if(!item.artifact)continue;if(declared.has(item.artifact))errors.push('同一成果提交的产物类型不可重复：'+item.artifact+'；多文件产物请提交一个清单引用，输入佐证不要标为交付物');declared.add(item.artifact);}
  const failed=node==='verify'&&Array.isArray(checks)&&checks.some(check=>check?.status==='failed');
  if(failed&&completedCriteria.includes('verify.current'))errors.push('存在失败检查，不能声明本轮全部检查通过');
  const legacyReview = task.nodeContractVersion==='delivery-node-v1';
@@ -141,6 +147,6 @@ export function applyTalentNodeInputs(inputs:TaskNodeItem[],value?:TalentNodeInp
 }
 
 /** Enterprise test definitions are independent of Talent knowledge and are never execution results. */
-export function enterpriseTestCaseReferences(data:Presentation,task:{projectId:string;id:string;title:string}):TaskNodeReference[]{
+export function enterpriseTestCaseReferences(data:Presentation,task:{projectId:string;id:string;title:string;description?:string}):TaskNodeReference[]{
  return taskTestCases(data,task).map(item=>({id:item.id,title:item.sourceRecordId+' · '+item.title,kind:'record',description:item.detail,version:item.version??null,source:'preset',sourceLabel:'企业测试资产插件 · 用例定义（未执行）',testCase:{id:item.sourceRecordId,expected:item.testCase!.expected,pluginId:'test-assets'},value:JSON.stringify({pluginId:item.pluginId,caseId:item.sourceRecordId,version:item.version,expected:item.testCase!.expected,sourceProjectId:item.sourceProjectId,taskId:task.id})}));
 }

@@ -1,3 +1,4 @@
+import { fourRequirementScenario } from '../../shared/four-requirement-scenarios.js';
 import { approvedRequirementSchedule } from './requirement-schedule.js';
 import { matchesPlatinumCashbackPage } from '../../shared/platinum-cashback-page.js';
 import type { Presentation } from './api.js';
@@ -295,7 +296,9 @@ export function createSourcePluginCatalog(data: SourcePluginData): SourcePluginC
 }
 
 /** Explicit project/task mapping; source candidates never become tests for unrelated tasks. */
-export function taskTestCases(data:SourcePluginData,task:{projectId:string;id:string;title:string}):readonly SourcePluginAsset[]{
+export function taskTestCases(data:SourcePluginData,task:{projectId:string;id:string;title:string;description?:string}):readonly SourcePluginAsset[]{
+ const four=fourRequirementScenario(task.projectId,task);
+ if(four)return four.cases.map(item=>asset(data,'test-assets','carddemo',{sourceRecordId:item.id,kind:'test-case',title:item.title,summary:item.given,version:four.casesVersion,testCase:{given:item.given,steps:item.steps,expected:item.expected},detail:`${four.businessId} ${item.sourceSection} 原始用例定义（未执行）\n前置：${item.given}\n步骤：${item.steps}\n原文预期：${item.expected}\n本次执行同时应用独立 test-profile-v${four.version}；原文冲突保留，按已登记试验口径核对，不将原文矛盾示例作为通过依据。`,relatedRequirementIds:[]}));
  if(matchesPlatinumCashbackPage(task.projectId,task)){
   const cases=[
    {id:'PLATINUM-PAGE-TC-01',title:'白金卡与非白金卡入口隔离',given:'PRD 已确认可核验的客户资格字段；缺字段时记录阻塞。',steps:'分别以明确白金卡和非白金卡资格打开卡片详情。',expected:'仅白金卡展示消费返现权益入口；非白金卡不展示。'},

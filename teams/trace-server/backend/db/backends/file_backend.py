@@ -248,6 +248,9 @@ class FileBackend(StorageBackend):
                 spans.append(ev)
             elif ev.get("event_type") == _EVENT_OBSERVATION and str(ev.get("trace_id")) == trace_id:
                 obs.append(ev)
+        # OTLP 重传/分批追加可能重复同一 span；详情和调用树使用同一份去重投影。
+        # id 是 span 身份，event_id 只标识事件，不能用行数计算环节数。
+        spans = self._unique_spans(spans)
         if trace is None:
             # 兜底：SDK 进程在根 run 结束前被强杀/丢批时，文件里可能没有
             # trace 汇总事件（只有 session/span/observation）。此时用文件内
@@ -256,7 +259,34 @@ class FileBackend(StorageBackend):
             trace = self._synthesize_trace(events, spans, trace_id)
         if trace is None:
             return None
+        trace = dict(trace)
+        # 根 trace 行的计数只代表它所在的 OTLP 批次。详情已读完整文件，
+        # 以实际可识别的 span 计算；不累加批次摘要，也不推算 token 用量。
+        identified = all(span.get("id") for span in spans)
+        trace["span_count"] = len(spans) if identified else None
+        known_types = {"chain", "llm", "tool", "retriever", "agent", "span"}
+        trace["tool_count"] = (
+            sum(span.get("span_type") == "tool" for span in spans)
+            if identified and all(span.get("span_type") in known_types for span in spans)
+            else None
+        )
         return TraceData(trace=trace, spans=spans, observations=obs)
+
+    @staticmethod
+    def _unique_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """同一 span 保留最后一条记录；缺身份的原始记录保留但不猜唯一性。"""
+        result: list[dict[str, Any]] = []
+        positions: dict[str, int] = {}
+        for span in spans:
+            span_id = span.get("id")
+            if span_id:
+                key = str(span_id)
+                if key in positions:
+                    result[positions[key]] = span
+                    continue
+                positions[key] = len(result)
+            result.append(span)
+        return result
 
     async def export_trace_jsonl(
         self,
@@ -371,9 +401,9 @@ class FileBackend(StorageBackend):
             "input": None,
             "output": None,
             "duration_ms": duration_ms,
-            "total_tokens": 0,
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
+            "total_tokens": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
             "react_step_count": 0,
             "tool_count": tool_count,
             "span_count": len(spans),

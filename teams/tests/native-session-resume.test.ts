@@ -53,7 +53,7 @@ test('prepared TUI focuses a live exact terminal, then restores latest saved dia
   await put(output, 'terminal-receipt.json', { runId: resumedRun, ...scope, directory: preparation.session.directory, terminalKind: 'ghostty', terminal: 'Ghostty', terminalId: 'exact-surface-12345' });
   const starts: any[] = [], focuses: any[] = [];
   const transport: WorkTransport = { defaults: async () => ({ agent: 'code', agentLabel: 'Code', model: 'model', modelLabel: 'Model', terminal: { id: 'ghostty', name: 'Ghostty' } }), history: async () => ({ available: false, directory: '', title: '', active: null }), start: async input => { starts.push(input); return { terminal: 'Ghostty' }; }, focus: async input => { focuses.push(input); return { status: 'terminal-focused', note: 'focused' }; } };
-  const service = new ProjectWorkService(() => state, fixtures, dir, transport), target = { ...scope, tab: 'delivery', nodeId: 'prepare' }, stateBefore = JSON.stringify(state);
+  const service = new ProjectWorkService(() => state, fixtures, dir, transport, undefined, dir), target = { ...scope, tab: 'delivery', nodeId: 'prepare' }, stateBefore = JSON.stringify(state);
   try {
     const active = await service.plan('member', target);
     assert.equal(active.defaultAction, 'focus'); assert.equal(active.history?.active?.pid, child.pid);

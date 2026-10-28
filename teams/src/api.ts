@@ -63,7 +63,7 @@ export const native = <T = any>(role: Role, action: string, data: Record<string,
 /** skills: the latest version Talents wrote of each project skill, with its files' content. */
 export type TalentsSkillVersion = Omit<PublishedSkillVersion, 'files'> & { files: Array<PublishedSkillVersion['files'][number] & { content: string | null }> };
 export const getTalentsKnowledge = (projectId: string) => tracedJson<{ talentsOrigin: string; artifacts: PublishedArtifact[]; skills: TalentsSkillVersion[] }>('teams', '/api/talents/knowledge?project=' + encodeURIComponent(projectId));
-export const getTalentsFile = (artifact: PublishedArtifact, path: string) => tracedJson<PublishedFile & { content: string }>('teams', '/api/talents/file?' + new URLSearchParams({ artifact: artifact.id, version: String(artifact.version), path }));
+export const getTalentsFile = (artifact: Pick<PublishedArtifact, 'id' | 'version'>, path: string) => tracedJson<PublishedFile & { content: string }>('teams', '/api/talents/file?' + new URLSearchParams({ artifact: artifact.id, version: String(artifact.version), path }));
 
 export const getProjectWork = (role: Role, target: import('./project-work.js').ProjectWorkSelection) => tracedJson<import('./project-work.js').ProjectWorkPlan>('teams', '/api/project-work?' + new URLSearchParams({ role, ...target }).toString());
 export const bindProjectWork = (role: Role, target: import('./project-work.js').ProjectWorkSelection, directory: string) => native<import('./project-work.js').ProjectWorkPlan>(role, 'work-bind', { target, directory });
@@ -81,3 +81,5 @@ export const deliveryRequirementAction=(state:DemoState,role:Role,input:Record<s
 export const getTaskSessionStream = (role: Role, query: import('./task-session-stream.js').TaskSessionStreamQuery) => tracedJson<import('./task-session-stream.js').TaskSessionStreamResponse>('teams', '/api/task-session-stream?' + new URLSearchParams({ role, ...query }));
 
 export const getTaskNodeInputs=(role:Role,scope:{projectId:string;taskId:string;nodeId:import('./delivery-requirements.js').RequirementNode})=>tracedJson<import('./talent-node-inputs.js').TalentNodeInputs>('teams','/api/task-node-inputs?'+new URLSearchParams({role,...scope}));
+
+export const getTaskArtifactContent=(role:Role,query:import('./task-artifact-content.js').TaskArtifactQuery)=>tracedJson<import('./task-artifact-content.js').TaskArtifactContent>('teams','/api/task-artifact-content?'+new URLSearchParams({role,...query}));

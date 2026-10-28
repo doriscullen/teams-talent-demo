@@ -19,7 +19,8 @@
     "test:collaboration:e2e": "tsx tests/collaboration-cli.ts",
     "test:project-work:e2e": "tsx tests/project-work-browser.ts",
     "test:http": "node --import tsx tests/workflow-http.ts",
-    "seed:shared": "node --import tsx scripts/seed-shared.ts"
+    "seed:shared": "node --import tsx scripts/seed-shared.ts",
+    "work:icode": "node scripts/icode-work.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.4",

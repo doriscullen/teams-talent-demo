@@ -1,0 +1,51 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {mkdtemp,realpath,mkdir,writeFile,readFile,rm,lstat,access} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,dirname} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {initializeCarddemoWorkspace,initializeCarddemoTask,ensureCarddemoTaskWorkspace,readCarddemoWorkspace,readCarddemoTaskBinding,carddemoSubdirectory} from '../../scripts/lib/carddemo-workspace.mjs';
+import {taskWorkDirectory} from '../server/task-work-directory.js';
+const exec=promisify(execFile),git=async(repo:string,args:string[])=>(await exec('git',['-C',repo,...args],{encoding:'utf8'})).stdout.trim();
+async function put(path:string,data:unknown){await mkdir(dirname(path),{recursive:true});await writeFile(path,typeof data==='string'?data:JSON.stringify(data,null,2));}
+async function fixture(run:(f:Awaited<ReturnType<typeof setup>>)=>Promise<void>){const f=await setup();try{await run(f);}finally{await rm(f.temp,{recursive:true,force:true,maxRetries:3,retryDelay:50});}}
+async function setup(){
+ const temp=await realpath(await mkdtemp(join(tmpdir(),'CardDemo 工作区 '))),repo=join(temp,'平台 repo'),remote=join(temp,'origin repo.git');await mkdir(repo);await git(repo,['init','-b','main']);await exec('git',['init','--bare','-b','main',remote]);
+ await put(join(repo,carddemoSubdirectory,'pom.xml'),'<project/>');await put(join(repo,carddemoSubdirectory,'app.js'),'committed business');await put(join(repo,'.gitignore'),'.env\nteams/.local/\n');await put(join(repo,'teams','README.md'),'platform');await git(repo,['add','.']);await git(repo,['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','baseline']);await git(repo,['remote','add','origin',remote]);await git(repo,['push','origin','main']);const base=await git(repo,['rev-parse','origin/main']);const runtime=join(temp,'state');await mkdir(runtime);return{temp,repo,remote,base,runtime};
+}
+async function task(f:{runtime:string},id='REQ-'+randomUUID(),createdAt=new Date().toISOString()){const value={id,projectId:'carddemo',title:'fixture',createdAt,stage:'preparing',nodes:Object.fromEntries(['prepare','develop','verify','accept'].map(id=>[id,{status:'pending'}]))};await put(join(f.runtime,'state.json'),{schemaVersion:2,workspace:{deliveryRequirements:[value]}});return value;}
+const init=(f:{repo:string;base:string},apply=true)=>initializeCarddemoWorkspace({repo:f.repo,baseCommit:f.base,apply});
+test('preview changes nothing; exact develop sibling worktree excludes dirty business and secrets, repeat does not switch main',async()=>fixture(async f=>{
+ await put(join(f.repo,carddemoSubdirectory,'app.js'),'DIRTY USER CODE');await put(join(f.repo,'.env'),'SECRET');const before=await git(f.repo,['status','--porcelain']),plan=await init(f,false);await assert.rejects(access(plan.baseWorktreeRoot),{code:'ENOENT'});await assert.rejects(access(join(f.repo,'teams/.local/carddemo-workspace.json')),{code:'ENOENT'});
+ const result=await init(f);assert.equal(await git(f.repo,['branch','--show-current']),'main');assert.equal(await git(f.repo,['status','--porcelain']),before);assert.equal(await readFile(join(result.directory,'app.js'),'utf8'),'committed business');await assert.rejects(access(join(result.baseWorktreeRoot,'.env')),{code:'ENOENT'});assert.ok((await lstat(join(result.baseWorktreeRoot,'.git'))).isFile());const configBefore=await readFile(result.configurationFile);assert.equal((await init(f)).action,'reuse');assert.deepEqual(await readFile(result.configurationFile),configBefore);
+}));
+test('task initialization binds exact subdirectory/branch/base and is idempotent without overwriting task edits',async()=>fixture(async f=>{
+ await init(f);const current=await task(f),before=await readFile(join(f.runtime,'state.json')),options={repo:f.repo,runtime:f.runtime,projectId:'carddemo',taskId:current.id};const preview=await initializeCarddemoTask(options);assert.equal(preview.applied,false);await assert.rejects(access(preview.binding.worktreeRoot),{code:'ENOENT'});
+ const result=await initializeCarddemoTask({...options,apply:true});assert.equal(result.binding.baseCommit,f.base);assert.equal(result.binding.baseBranch,'develop');assert.match(result.binding.branch,/^codex\/carddemo-/);assert.equal(await taskWorkDirectory(f.runtime,current,f.repo),result.binding.directory);assert.deepEqual(await readFile(join(f.runtime,'state.json')),before);await put(join(result.binding.directory,'app.js'),'task dirty');const repeated=await initializeCarddemoTask({...options,apply:true});assert.equal(repeated.action,'reuse');assert.equal(await readFile(join(result.binding.directory,'app.js'),'utf8'),'task dirty');
+}));
+test('wrong project/original checkout/remote/branch/baseline bindings fail explicitly',async()=>fixture(async f=>{
+ await assert.rejects(initializeCarddemoWorkspace({repo:f.repo,baseCommit:f.base,expectedOrigin:'https://wrong.invalid/repo',apply:true}),/origin/);await assert.rejects(initializeCarddemoWorkspace({repo:f.repo,baseCommit:'a'.repeat(40),apply:true}));await assert.rejects(initializeCarddemoWorkspace({repo:f.repo,baseCommit:f.base,worktree:f.repo,apply:true}),/独立同级/);await init(f);const current=await task(f),options={repo:f.repo,runtime:f.runtime,projectId:'carddemo',taskId:current.id};await assert.rejects(initializeCarddemoTask({...options,projectId:'teams',apply:true}),/仅初始化/);
+ const made=await initializeCarddemoTask({...options,apply:true});await git(made.binding.worktreeRoot,['switch','-c','wrong-branch']);await assert.rejects(readCarddemoTaskBinding(f.repo,f.runtime,current),/分支/);await git(made.binding.worktreeRoot,['switch',made.binding.branch]);await git(f.repo,['remote','set-url','origin','https://wrong.invalid/repo']);await assert.rejects(readCarddemoTaskBinding(f.repo,f.runtime,current),/身份/);
+}));
+test('existing conflicting directories and develop branches are never replaced',async()=>fixture(async f=>{
+ const plan=await init(f,false);await mkdir(plan.baseWorktreeRoot);await put(join(plan.baseWorktreeRoot,'keep.txt'),'keep');await assert.rejects(init(f),/目标目录已存在/);assert.equal(await readFile(join(plan.baseWorktreeRoot,'keep.txt'),'utf8'),'keep');await rm(plan.baseWorktreeRoot,{recursive:true});await put(join(f.repo,'later.txt'),'later');await git(f.repo,['add','later.txt']);await git(f.repo,['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','later']);await git(f.repo,['branch','develop']);await assert.rejects(init(f),/分支与精确基线冲突/);
+}));
+test('enabled configuration requires explicit task binding; new confirmed preparation auto-ensures exactly one worktree',async()=>fixture(async f=>{
+ const initialized=await init(f),current=await task(f,undefined,new Date(Date.parse(initialized.enabledAt)+1000).toISOString());await assert.rejects(taskWorkDirectory(f.runtime,current,f.repo),/尚未绑定/);const preparationId=randomUUID(),state=JSON.parse(await readFile(join(f.runtime,'state.json'),'utf8'));state.workspace.taskAutomation=[{projectId:'carddemo',taskId:current.id,preparation:{id:preparationId,status:'preparing-session'}}];await put(join(f.runtime,'state.json'),state);const args={repo:f.repo,runtime:f.runtime,projectId:'carddemo',taskId:current.id,preparationId};
+ const [one,two]=await Promise.all([ensureCarddemoTaskWorkspace(args),ensureCarddemoTaskWorkspace(args)]);assert.equal(one!.directory,two!.directory);assert.equal(JSON.parse(await readFile(join(f.runtime,'project-task-directory-bindings.json'),'utf8')).bindings.length,1);assert.equal((await readCarddemoWorkspace(f.repo))!.enabledAt,initialized.enabledAt);
+}));
+test('pre-existing or active tasks are never silently moved by automatic preparation',async()=>fixture(async f=>{
+ await init(f);const current=await task(f,undefined,'2020-01-01T00:00:00Z'),preparationId=randomUUID();await assert.rejects(ensureCarddemoTaskWorkspace({repo:f.repo,runtime:f.runtime,projectId:'carddemo',taskId:current.id,preparationId}),/启用前/);const state=JSON.parse(await readFile(join(f.runtime,'state.json'),'utf8'));state.workspace.taskAutomation=[{projectId:'carddemo',taskId:current.id,preparation:{id:preparationId,status:'ready',session:{sessionId:'preserve'}}}];await put(join(f.runtime,'state.json'),state);await assert.rejects(initializeCarddemoTask({repo:f.repo,runtime:f.runtime,projectId:'carddemo',taskId:current.id,apply:true}),/已有准备会话/);await assert.rejects(access(join(f.runtime,'project-task-directory-bindings.json')),{code:'ENOENT'});
+}));
+
+test('bound tasks without a historical workDirectory export exact native session bytes; absent/corrupt bindings fail explicitly',async()=>fixture(async f=>{
+ const {taskReportSessionDocuments}=await import('../server/task-automation.js');await init(f);const current=await task(f),scope={projectId:'carddemo',taskId:current.id},runId=randomUUID(),sessionId=randomUUID(),capture={id:randomUUID(),acceptedAt:new Date().toISOString()};
+ const session={tool:'icode' as const,sessionId,nodeIds:['develop','verify'],runIds:[runId],sources:['fixture-native-protocol'],firstAt:capture.acceptedAt,lastAt:capture.acceptedAt};
+ await assert.rejects(taskReportSessionDocuments(f.runtime,scope,current as any,[session],capture,f.repo),/缺少已验证/);
+ const bound=await initializeCarddemoTask({repo:f.repo,runtime:f.runtime,...scope,apply:true}),runRoot=join(f.runtime,'work-contexts',runId+'.native'),sessionRoot=join(runRoot,'session-root'),content=JSON.stringify({meta:{session_id:sessionId},state:{messages:[{content:'Protocol fixture, not a model run'}]}});
+ await put(join(sessionRoot,'sessions',sessionId.replaceAll('-','').slice(0,12),'session.json'),content);await put(join(runRoot,'native-session.json'),{...scope,runId,sessionId,sessionRoot,source:'icode-active-session-owner'});await put(join(runRoot,'result.json'),{runId,sessionId,status:'completed'});
+ const documents=await taskReportSessionDocuments(f.runtime,scope,current as any,[session],capture,f.repo);assert.equal(documents?.[0].content,content);assert.equal((current as any).workDirectory,undefined);
+ await git(bound.binding.worktreeRoot,['switch','-c','wrong-binding']);await assert.rejects(taskReportSessionDocuments(f.runtime,scope,current as any,[session],capture,f.repo),/分支/);
+}));

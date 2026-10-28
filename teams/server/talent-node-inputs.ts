@@ -10,6 +10,8 @@ import type {PublishedArtifact} from '../../shared/contracts.js';
 import {matchesPlatinumCashbackPage,platinumCashbackPage,platinumCashbackPageNodes} from '../../shared/platinum-cashback-page.js';
 import {platinumPageKnowledge,type PublishedInputReader} from './platinum-cashback-page.js';
 export interface NodeInputContext {state:DemoState;project:{id:string;name:string;generation:string}}
+import {fourRequirementScenario,fourRequirementNodes} from '../../shared/four-requirement-scenarios.js';
+import {fourRequirementKnowledge} from './four-requirement-inputs.js';
 import type {SkillBinding} from '../src/resource-sharing.js';
 
 export function checkedNode(value:string):RequirementNode{if(!['prepare','develop','verify','accept'].includes(value))throw new DomainError('任务输入节点不存在',404);return value as RequirementNode;}
@@ -19,8 +21,10 @@ export async function talentNodeInputs(ctx:NodeInputContext,data:Pick<Presentati
  if(!task&&!source)throw new DomainError('任务不存在或不属于所选项目',404);
  const frozen=task?.nodeInputSnapshots?.[nodeId];
  if(frozen){if(frozen.projectId!==projectId||frozen.taskId!==taskId||frozen.nodeId!==nodeId)throw new DomainError('节点采用输入范围不一致',409);return {...structuredClone(frozen),origin,selection:{...structuredClone(frozen.selection),basis:'adopted-node'}};}
+ const four=task?fourRequirementScenario(projectId,task):undefined;
+ if(task&&!four&&task.description.split('\n').some(line=>line.startsWith('试验口径版本：')||line.startsWith('试验口径 SHA256：')))throw new DomainError('需求试验口径标记与固定版本不匹配，未选择其它输入',409);
  const scenario=task&&matchesPlatinumCashbackPage(projectId,task)?platinumCashbackPageNodes[nodeId]:undefined;
- const knownPreset=nodePreset(projectId,taskId,nodeId),preset=scenario?{knowledge:[],skills:scenario.skills,skillSlot:scenario.skillSlot}:knownPreset??(task&&taskAutomation(ctx.state,{projectId,taskId})?.preparation?registeredTaskNodePreset(task,nodeId):undefined),requirement={id:taskId,title:task?.title??source!.title,description:task?.description??[source!.goal,'范围：'+source!.scope].join('\n')};
+ const knownPreset=nodePreset(projectId,taskId,nodeId),preset=four?{knowledge:[],skills:fourRequirementNodes[nodeId].skills,skillSlot:fourRequirementNodes[nodeId].skillSlot}:scenario?{knowledge:[],skills:scenario.skills,skillSlot:scenario.skillSlot}:knownPreset??(task&&taskAutomation(ctx.state,{projectId,taskId})?.preparation?registeredTaskNodePreset(task,nodeId):undefined),requirement={id:taskId,title:task?.title??source!.title,description:task?.description??[source!.goal,'范围：'+source!.scope].join('\n')};
  const base:TalentNodeInputs={projectId,taskId,nodeId,generation:ctx.project.generation,origin,requirement,knowledge:{status:'not-built',assets:[]},skills:[],selection:{version:nodePresetVersion,source:'teams-node-selection',status:preset?'configured':'not-configured',basis:'recommendation',note:preset?'Teams 按节点配置选取已发布知识与登记 Skill；未声明 Talents 已执行推荐或本次已采用。':'此任务与节点尚未配置相关输入。',missingSkillIds:[],knowledge:[],skills:[]}};
  if(!preset)return base;
  // Older task-wide snapshots are immutable. Select only matching recorded packages;
@@ -32,6 +36,14 @@ export async function talentNodeInputs(ctx:NodeInputContext,data:Pick<Presentati
   base.skills=structuredClone(historical.skills.filter(skill=>preset.skills.includes(skill.id)));
   base.selection.basis='historical-subset';base.selection.note='仅显示当前节点相关的历史采用内容；新建议未补写为当时采用。';base.selection.missingSkillIds=preset.skills.filter(id=>!base.skills.some(skill=>skill.id===id));
   base.selection.knowledge=base.knowledge.assets.map(asset=>({id:asset.id,slot:preset.knowledge[0]?.slot??'business-documents',nodeId,reason:'复核本需求历史采用的知识记录'}));
+ }else if(four){
+  const selected=fourRequirementNodes[nodeId],source=await fourRequirementKnowledge(four,published,nodeId,readPublishedFile);
+  base.selection.scenario={id:four.id,artifactId:four.artifactId,artifactVersion:four.version,matchedBy:'project-and-exact-title',origin:'scenario-fixture'};
+  if(!source){base.selection.status='not-configured';base.selection.note='对应业务需求的固定版本资料尚未发布，请登记后重试导入。';return base;}
+  base.selection.note='按业务需求编号、精确标题及原文摘要选择本节点资料。摘要用于导航；完整需求和试验口径须按引用路径读取并核对 SHA256。未声明已采用、执行或验收。';
+  base.knowledge={status:'ready',version:String(source.artifact.version),assets:source.documents.map(item=>({id:`talents-shared:${source.artifact.id}:v${source.artifact.version}:${item.file}`,title:item.title,version:String(source.artifact.version),detail:`${four.businessId} · ${four.title}\n${item.reason}。\n此处为资料索引；全文保存在引用文件中，读取后核对版本与 SHA256。完整原始需求 v1.0 保留，第5章规则及独立test-profile-v${four.version}用于本次验证，第12.3正式待确认继续有效。`,origin:'talents-shared',sourceRecordId:taskId,sourceProjectId:projectId,sourceProjectName:ctx.project.name,artifactId:source.artifact.id,contentSha256:item.sha256,references:[{collection:'talents-shared',path:item.path,label:item.title,...(item.absolutePath?{absolutePath:item.absolutePath}:{}),sha256:item.sha256,version:String(source.artifact.version)}]}))};
+  base.selection.knowledge=base.knowledge.assets.map((asset,index)=>({id:asset.id,slot:source.documents[index].slot,nodeId,reason:source.documents[index].reason}));
+  base.skills=await Promise.all(selected.skills.map(async id=>{const skill=await loadSkill(id,task?.skillBindings?.find(item=>item.id===id));source.assertSkill(skill);return skill;}));
  }else if(scenario){
   const source=await platinumPageKnowledge(published,nodeId,readPublishedFile);
   base.selection.scenario={id:platinumCashbackPage.id,artifactId:platinumCashbackPage.artifactId,artifactVersion:platinumCashbackPage.version,matchedBy:'project-and-exact-title',origin:'scenario-fixture'};

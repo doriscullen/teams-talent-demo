@@ -76,5 +76,5 @@ try {
 } finally {
   await browser?.close();
   const runningTeams=teamsServer;if(runningTeams&&runningTeams.exitCode===null)await new Promise<void>(resolve=>{runningTeams.once('exit',()=>resolve());runningTeams.kill('SIGTERM');});
-  stopTraceService();for(let n=0;n<50;n++){try{await fetch(origin+'/health');}catch{break;}await new Promise(resolve=>setTimeout(resolve,100));}await rm(temp,{recursive:true,force:true});
+  await stopTraceService();for(let n=0;n<50;n++){try{await fetch(origin+'/health');}catch{break;}await new Promise(resolve=>setTimeout(resolve,100));}await rm(temp,{recursive:true,force:true});
 }

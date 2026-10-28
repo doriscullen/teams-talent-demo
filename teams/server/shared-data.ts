@@ -9,13 +9,15 @@ import { sharedPaths, type PublishedArtifact, type PublishedSkillVersion, type S
 import teamSessions from '../fixtures/team-sessions.json' with { type: 'json' };
 
 /** Reads a shared file written by the other project, falling back to the committed seed copy. */
-async function readShared(path: string): Promise<Buffer | null> {
+async function readSharedLocated(path: string): Promise<{content:Buffer;absolutePath:string} | null> {
   for (const dir of [sharedDir, sharedSeedDir]) {
-    try { return await readFile(join(dir, path)); }
+    try { const absolutePath=join(dir,path);return {content:await readFile(absolutePath),absolutePath}; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
   return null;
 }
+
+async function readShared(path:string):Promise<Buffer|null>{return (await readSharedLocated(path))?.content??null;}
 
 const repositoryPath = (path: string) => 'workspace/' + path;
 /** Same "YYYY-MM-DD HH:mm" Beijing-time form as the session fixture. */
@@ -107,7 +109,7 @@ export async function readTalentsFile(artifactId: string, version: number, path:
   const artifact = (await readTalentsKnowledge()).artifacts.find(item => item.id === artifactId && item.version === version);
   const file = artifact?.files.find(item => item.path === path);
   if (!artifact || !file || isAbsolute(path) || normalize(path).startsWith('..')) throw new DomainError('Talents 产物文件不存在', 404);
-  const content = await readShared(sharedPaths.talentsFile(artifactId, version, path));
-  if (!content) throw new DomainError('Talents 产物文件尚未同步', 404);
-  return { ...file, content: content.toString('utf8') };
+  const source = await readSharedLocated(sharedPaths.talentsFile(artifactId, version, path));
+  if (!source) throw new DomainError('Talents 产物文件尚未同步', 404);
+  return { ...file, content: source.content.toString('utf8'), absolutePath: source.absolutePath };
 }

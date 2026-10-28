@@ -1,5 +1,6 @@
 import { projectSessionTurns } from './task-session-turns.js';
 import { nativeSessionRootMatches } from './native-session-location.js';
+import { MAX_NATIVE_SESSION_BYTES, MAX_NATIVE_TRAJECTORY_BYTES } from './session-capacity.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { open, readdir, realpath } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
@@ -25,7 +26,7 @@ async function readBounded(root: string, path: string, max: number): Promise<str
   const handle = await open(actual, 'r');
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > max) throw new DomainError('会话文件超过可读取范围', 413);
+    if (!stat.isFile() || stat.size > max) throw new DomainError(`会话文件超过可读取范围（${max / 1024 / 1024} MiB）`, 413);
     // Read only the measured prefix. An active JSONL writer may append meanwhile.
     const buffer = Buffer.alloc(stat.size); let read = 0;
     while (read < buffer.length) { const result = await handle.read(buffer, read, buffer.length - read, read); if (!result.bytesRead) break; read += result.bytesRead; }
@@ -136,12 +137,12 @@ export function createTaskSessionStream(runtime: string, options: { isAlive?: (p
       const sessionDir = join(owner.sessionRoot, 'sessions', selected.id.replaceAll('-', '').slice(0, 12));
       // Native iCode persists active checkpoints separately from settled turns.
       // Read both trusted files and select by native metadata; never hide a corrupt candidate.
-      const primary = await readJson(root!, join(sessionDir, 'session.json'), 8 * 1024 * 1024);
-      const recovery = await readJson(root!, join(sessionDir, 'session.recovery.json'), 8 * 1024 * 1024);
+      const primary = await readJson(root!, join(sessionDir, 'session.json'), MAX_NATIVE_SESSION_BYTES);
+      const recovery = await readJson(root!, join(sessionDir, 'session.recovery.json'), MAX_NATIVE_SESSION_BYTES);
       for (const candidate of [primary, recovery]) if (candidate && (candidate.meta?.session_id !== selected.id || !Array.isArray(candidate.state?.messages))) throw new DomainError('原生会话正文身份或结构不匹配', 409);
       if (recovery && (!timestamp(recovery.meta.updated_at) || primary && !timestamp(primary.meta.updated_at))) throw new DomainError('原生会话持久化时间无效，未猜测应读取的版本', 409);
       const document = recovery && (!primary || Date.parse(recovery.meta.updated_at) > Date.parse(primary.meta.updated_at)) ? recovery : primary;
-      const trajectory = await readBounded(root!, join(sessionDir, 'trajectory', 'events.jsonl'), 16 * 1024 * 1024);
+      const trajectory = await readBounded(root!, join(sessionDir, 'trajectory', 'events.jsonl'), MAX_NATIVE_TRAJECTORY_BYTES);
       const rows: Json[] = [];
       if (trajectory !== null) {
         const lines = trajectory.split('\n'), terminated = lines.at(-1) === '';

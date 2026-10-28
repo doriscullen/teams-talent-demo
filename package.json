@@ -7,6 +7,7 @@
     "dev": "node scripts/demo.mjs dev --open",
     "start": "node scripts/demo.mjs start --open",
     "stop": "node scripts/demo.mjs stop",
-    "test": "npm --prefix teams test && npm --prefix teams run test:http && npm --prefix talents test"
+    "test": "npm --prefix teams test && npm --prefix teams run test:http && npm --prefix talents test",
+    "carddemo:workspace": "node scripts/carddemo-workspace.mjs"
   }
 }

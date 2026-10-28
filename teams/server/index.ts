@@ -1,3 +1,5 @@
+import { readTaskArtifactContent } from './task-artifact-content.js';
+import { acquireTaskMaintenance } from './task-maintenance.js';
 import { projectModelContext } from './model-context.js';
 import { readTalentNodeInputs } from './talent-node-client.js';
 import { checkedNode } from './talent-node-inputs.js';
@@ -31,6 +33,7 @@ import { transition } from '../src/domain.js';
 import { isTraceApi, proxyTrace, startTraceService, stopTraceService } from './trace-service.js';
 import { ProjectWorkService } from './project-work.js';
 import { collaborationContext, collaborationOperation, collaborationWrite } from './collaboration-service.js';
+const releaseTaskMaintenance=await acquireTaskMaintenance(runtimeDir,'service');
 const store = new Store(); await store.init();
 const token = randomBytes(24).toString('hex');
 const fixtures = await readFixtures();
@@ -80,6 +83,11 @@ const server = createServer(async (request, response) => {
       if(projectId!=='teams'&&!projectMembers(store.state,projectId).some(member=>member.id===role&&member.status==='active'))throw new DomainError('无权读取此项目',403);
       json(200,await readTalentNodeInputs(store.state,fixtures,{projectId,taskId,nodeId:checkedNode(url.searchParams.get('nodeId')??'')}));return;
     }
+    if (request.method === 'GET' && path === '/api/task-artifact-content') {
+      const {role,...query}=Object.fromEntries(url.searchParams);
+      if(role!=='owner'&&role!=='member')throw new DomainError('请选择角色',400);
+      json(200,await readTaskArtifactContent(store.state,role,query as unknown as import('../src/task-artifact-content.js').TaskArtifactQuery,{runtime:runtimeDir,teamsRoot:root}));return;
+    }
     if (request.method === 'GET' && path === '/api/task-session-stream') {
       const {role,...query}=Object.fromEntries(url.searchParams);
       if(role!=='owner'&&role!=='member')throw new DomainError('请选择角色',400);
@@ -88,9 +96,14 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && path === '/api/talents/knowledge') { const project = url.searchParams.get('project') ?? 'carddemo'; json(200, { talentsOrigin: talentOrigin, artifacts: await projectKnowledge(project), skills: await projectSkillVersions(project) }); return; }
     if (request.method === 'GET' && path === '/api/talents/file') { json(200, await readTalentsFile(url.searchParams.get('artifact') ?? '', Number(url.searchParams.get('version')), url.searchParams.get('path') ?? '')); return; }
     if (request.method === 'GET' && path === '/api/project-work') {
-      const { role, ...target } = Object.fromEntries(url.searchParams);
+      const { role, mode = 'tui', ...target } = Object.fromEntries(url.searchParams);
       if (role !== 'owner' && role !== 'member') throw new DomainError('请选择角色', 400);
-      json(200, await work.plan(role, target as any)); return;
+      json(200, await work.plan(role, target as any, role, mode as any)); return;
+    }
+    if (request.method === 'GET' && path === '/api/native/work-status') {
+      const { role, requestId, ...target } = Object.fromEntries(url.searchParams);
+      if (role !== 'owner' && role !== 'member') throw new DomainError('请选择角色',400);
+      json(200,await work.status(role,target as any,requestId));return;
     }
     if (request.method === 'GET' && path === '/api/collaboration/context') {
       const role=url.searchParams.get('role')??'member',projectId=url.searchParams.get('projectId')??'';
@@ -173,7 +186,7 @@ const server = createServer(async (request, response) => {
       if (path === '/api/native/skill-apply') { if(process.env.DEMO_NATIVE_DISABLED==='1')throw new DomainError('此验证实例未开放原生用户目录写入',403); json(200,await skillApplications.apply(body.role,{projectId:body.projectId,resourceId:body.resourceId,version:body.version,sha256:body.sha256,requestId:body.requestId,planToken:body.planToken}));return; }
       if (path === '/api/native/terminal') { json(200, await terminalPreferences.select(body.terminal)); return; }
       if (path === '/api/native/work-bind') { json(200, await work.bind(body.role, body.target, body.directory)); return; }
-      if (path === '/api/native/work-start') { json(200, await work.start(body.role, { requestId: body.requestId, target: body.target, action: body.action, planToken: body.planToken })); return; }
+      if (path === '/api/native/work-start') { json(200, await work.start(body.role, { requestId: body.requestId, target: body.target, action: body.action, planToken: body.planToken, ...(body.mode!==undefined?{mode:body.mode}:{}), ...(body.instruction!==undefined?{instruction:body.instruction}:{}) })); return; }
       if (path === '/api/native/context') { json(200, await writeContext(store.state)); return; }
       if(path==='/api/native/foundation'){json(200,await foundationSkill());return;}
       if (path === '/api/native/launch') {
@@ -191,15 +204,18 @@ const server = createServer(async (request, response) => {
     json(status, { error: error instanceof Error ? error.message : '请求失败' });
   }
 });
-server.on('error', error => { console.error(error.message); process.exitCode = 1; stopTraceService(); });
+server.on('error', error => { console.error(error.message); shutdown(1); });
+let traceStarting:Promise<void>|null=null;
 server.listen(port, '127.0.0.1', async () => {
   await mkdir(runtimeDir, { recursive: true });
   taskPreparationService.resumeQueued();
   console.log('Teams: ' + origin + '/teams');
   console.log('Talents: ' + talentOrigin + '/talents（独立启动）');
-  if(process.env.DEMO_NATIVE_DISABLED!=='1')startTraceService().then(
+  if(process.env.DEMO_NATIVE_DISABLED!=='1')traceStarting=startTraceService().then(
     () => console.log('Trace 查询服务: /trace-monitor/'),
     error => console.error('Trace 查询服务未启动：' + (error instanceof Error ? error.message : String(error))),
   );
 });
-for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => { stopTraceService(); server.close(() => process.exit(0)); });
+let stopping=false;
+async function shutdown(code:number){if(stopping)return;stopping=true;try{await new Promise<void>(resolve=>server.close(()=>resolve()));await exporting;await traceStarting;await stopTraceService();await releaseTaskMaintenance();process.exit(code);}catch(error){console.error(error);process.exit(1);}}
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => {void shutdown(0);});
